@@ -1,0 +1,58 @@
+using System;
+
+namespace FreeWorldMultiplayer
+{
+    /// <summary>A Steam host also exposes TCP; clients explicitly select one connection method.</summary>
+    public sealed class RoomTransport : ITransport, ITransportDrain
+    {
+        private TcpTransport tcp;
+        private SteamTransport steam;
+        private bool host;
+        private bool clientSteam;
+        public string Name { get { return steam != null && tcp != null ? "TCP + Steam" : steam != null ? "Steam" : "TCP/IP"; } }
+        public string LocalPeerId { get { return host ? "host" : clientSteam ? steam.LocalPeerId : tcp.LocalPeerId; } }
+        public bool IsRunning { get { return (tcp != null && tcp.IsRunning) || (steam != null && steam.IsRunning); } }
+        public string RoomId { get { return steam == null ? "" : steam.RoomId; } }
+        public void StartHost(TransportOptions options)
+        {
+            host = true;
+            try
+            {
+                tcp = new TcpTransport(); tcp.StartHost(options);
+                if (options.UseSteam) { steam = new SteamTransport(); steam.StartHost(options); }
+            }
+            catch { Dispose(); throw; }
+        }
+        public void Connect(TransportOptions options)
+        {
+            host = false; clientSteam = options.UseSteam;
+            try
+            {
+                if (clientSteam) { steam = new SteamTransport(); steam.Connect(options); }
+                else { tcp = new TcpTransport(); tcp.Connect(options); }
+            }
+            catch { Dispose(); throw; }
+        }
+        public void Send(string peerId, byte[] data)
+        {
+            if ((host && peerId.StartsWith("steam:", StringComparison.Ordinal)) || (!host && clientSteam)) steam.Send(peerId, data);
+            else tcp.Send(peerId, data);
+        }
+        public void Disconnect(string peerId, string reason)
+        {
+            if ((host && peerId.StartsWith("steam:", StringComparison.Ordinal)) || (!host && clientSteam)) { if (steam != null) steam.Disconnect(peerId, reason); }
+            else if (tcp != null) tcp.Disconnect(peerId, reason);
+        }
+        public bool TryDequeue(out TransportEvent item)
+        {
+            // Pump Steam even under sustained TCP traffic.
+            if (steam != null && steam.TryDequeue(out item)) return true;
+            if (tcp != null && tcp.TryDequeue(out item)) return true;
+            item = null; return false;
+        }
+        public void InviteFriends() { if (steam == null) throw new InvalidOperationException("此房间未启用 Steam。"); steam.InviteFriends(); }
+        public void BeginDrain() { if (tcp != null) tcp.BeginDrain(); if (steam != null) steam.BeginDrain(); }
+        public bool IsDrained { get { return (tcp == null || tcp.IsDrained) && (steam == null || steam.IsDrained); } }
+        public void Dispose() { if (steam != null) { steam.Dispose(); steam = null; } if (tcp != null) { tcp.Dispose(); tcp = null; } }
+    }
+}

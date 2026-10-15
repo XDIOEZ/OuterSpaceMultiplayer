@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650">
+  <defs>
+    <style>text{font-family:'Microsoft YaHei','Noto Sans CJK SC',sans-serif;fill:#dbe5ec}.title{font-size:28px;font-weight:700}.head{font-size:20px;font-weight:700}.body{font-size:16px}.small{font-size:14px;fill:#9db0be}.box{fill:#172b3a;stroke:#456174;stroke-width:1.5}.line{fill:none;stroke:#76b5da;stroke-width:2;marker-end:url(#arrow)}</style>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#76b5da"/></marker>
+  </defs>
+  <rect width="1200" height="650" fill="#0d1c27"/>
+  <text x="44" y="54" class="title">联机 MOD V1 · 并行开发与主控整合</text>
+  <text x="44" y="84" class="small">2026-10-15｜独立 MOD 开发｜P3 源码与设置只读，安装仅限本 MOD 目录｜用户执行游戏验收</text>
+  <rect x="44" y="119" width="1112" height="69" rx="10" class="box"/>
+  <text x="67" y="147" class="head">已确认的完整 V1</text>
+  <text x="67" y="174" class="body">独立资产与存档 · 同图唯一模拟 · 玩家关系与协作 · 10 分钟袭击 / 一次单仓撤离 / 60 分钟冷却</text>
+  <path d="M600 188 V215 H215 V239 M600 215 V239 M600 215 H985 V239" class="line"/>
+  <rect x="44" y="240" width="342" height="151" rx="10" class="box"/>
+  <text x="67" y="272" class="head">会话与保存代理</text>
+  <text x="67" y="304" class="body">身份 / UID / 地图任期 / 命令路由</text>
+  <text x="67" y="333" class="body">事务 / 冷却 / 同代保存 / 断线恢复</text>
+  <text x="67" y="369" class="small">src/Core + src/Session</text>
+  <rect x="429" y="240" width="342" height="151" rx="10" class="box"/>
+  <text x="452" y="272" class="head">原生游戏适配代理</text>
+  <text x="452" y="304" class="body">实际玩家数据 / 地表 / 战斗 / 运输</text>
+  <text x="452" y="333" class="body">权限 / 伤亡保护 / 实时实体与场景</text>
+  <text x="452" y="369" class="small">src/Game</text>
+  <rect x="814" y="240" width="342" height="151" rx="10" class="box"/>
+  <text x="837" y="272" class="head">连接、入口与银河代理</text>
+  <text x="837" y="304" class="body">TCP / Steam / 原生 UI / 独立启动</text>
+  <text x="837" y="333" class="body">舰队互见 / 离线冻结 / 构建脚本</text>
+  <text x="837" y="369" class="small">src/Transport + Entry + NativeGalaxy</text>
+  <path d="M215 391 V416 H600 V442 M600 391 V442 M985 391 V416 H600" class="line"/>
+  <rect x="240" y="444" width="720" height="76" rx="10" fill="#213c4d" stroke="#76b5da"/>
+  <text x="265" y="475" class="head">主控：统一契约 → 检查接入 → 发回修正 → 联编与打包</text>
+  <text x="265" y="503" class="body">P3 当前程序集 → 最终 MOD 包 → Project3/mods/FreeWorldMultiplayer</text>
+  <path d="M600 520 V550" class="line"/>
+  <rect x="240" y="552" width="720" height="63" rx="10" fill="#2e2e29" stroke="#a9a183"/>
+  <text x="265" y="579" class="head">用户验收：加载 MOD、双机连接、保存恢复和完整玩法</text>
+  <text x="265" y="603" class="small">编译与安装不等于运行验收；不代跑游戏，不修改本体代码、资源、设置或其他 MOD</text>
+</svg>

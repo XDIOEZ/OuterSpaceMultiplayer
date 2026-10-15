@@ -1,0 +1,10 @@
+artifacts/
+package/v_common/Assemblies/
+vendor/
+bin/
+obj/
+UserData/
+Saves/
+*.user
+*.suo
+

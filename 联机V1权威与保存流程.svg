@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1080" viewBox="0 0 1440 1080" role="img" aria-labelledby="title desc">
+  <title id="title">联机 V1 权威、模拟、保存与离线袭击规则</title>
+  <desc id="desc">仅新建联机世界，与单机存档隔离。每个玩家保有独立资产与进度，离线太空舰队原地冻结。房主唯一推进世界和银河业务并分配实体ID。客户端只模拟获授权地表，失联时同图玩家接管，否则普通图冻结、正式基地托管。联机世界与MOD元数据同代保存。正式基地和普通营地等占领地块都可袭击：限时十分钟，只撤离一次，最多一空投仓战利品，被袭地块冷却六十分钟。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#66b9d9"/></marker>
+    <style>
+      text {font-family:"Microsoft YaHei","Segoe UI",sans-serif;fill:#e9f0f5}
+      .title {font-size:33px;font-weight:700}
+      .subtitle {font-size:19px;fill:#a7b6c4}
+      .heading {font-size:25px;font-weight:700}
+      .body {font-size:20px}
+      .small {font-size:18px;fill:#b9c8d5}
+      .tag {font-size:17px;fill:#75d7f4;font-weight:700}
+      .card {fill:#172735;stroke:#354e62;stroke-width:2}
+      .line {fill:none;stroke:#66b9d9;stroke-width:3;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1440" height="1080" fill="#0c1721"/>
+  <text x="50" y="64" class="title">联机 V1：单机隔离、独立资产、统一世界时钟</text>
+  <text x="50" y="105" class="subtitle">2026-10-15 子智能体并行实现 · 主控整合构建 · 完整 V1 一次性交付 · 本图不代表运行验收通过</text>
+
+  <rect x="50" y="158" width="370" height="284" rx="14" class="card"/>
+  <text x="76" y="199" class="heading">玩家 A</text>
+  <text x="76" y="240" class="body">母舰、舰队、雇员、物资</text>
+  <text x="76" y="274" class="body">资金、科技、任务各自独立</text>
+  <text x="76" y="324" class="tag">只模拟获授权地表</text>
+  <text x="76" y="358" class="small">同图其他玩家发送操作</text>
+  <text x="76" y="389" class="small">仅新建联机世界，与单机档隔离</text>
+
+  <rect x="480" y="158" width="480" height="284" rx="14" fill="#16394a" stroke="#66b9d9" stroke-width="2"/>
+  <text x="507" y="199" class="heading">房主：世界与保存权威</text>
+  <text x="507" y="240" class="body">唯一世界时钟与银河业务</text>
+  <text x="507" y="274" class="body">玩家身份、地块归属、实体 ID</text>
+  <text x="507" y="308" class="body">分配模拟权，确认完整变更</text>
+  <text x="507" y="358" class="tag">房主本人同样保有独立玩家记录</text>
+  <text x="507" y="391" class="small">接收成功与持久保存成功明确区分</text>
+
+  <rect x="1020" y="158" width="370" height="284" rx="14" class="card"/>
+  <text x="1046" y="199" class="heading">玩家 B／C／更多</text>
+  <text x="1046" y="240" class="body">独立资产与个人进度</text>
+  <text x="1046" y="274" class="body">重连恢复同一玩家与雇员</text>
+  <text x="1046" y="324" class="tag">只模拟获授权地表</text>
+  <text x="1046" y="358" class="small">不重复推进世界，不自行分配 ID</text>
+  <text x="1046" y="389" class="small">离线舰队冻结，重连原地继续</text>
+  <path d="M420 293H478" class="line"/>
+  <path d="M1020 293H962" class="line"/>
+
+  <rect x="50" y="485" width="1340" height="148" rx="14" class="card"/>
+  <text x="76" y="526" class="heading">一张地图，只允许一个有效模拟任期</text>
+  <text x="76" y="566" class="body">模拟者离线 → 同图在线玩家接管 → 从房主完整检查点继续；旧任期回包作废</text>
+  <text x="76" y="604" class="small">无人承接：普通地块冻结，正式基地托管。战斗另行保留检查点与倒计时，不重复计算生产收益。</text>
+  <path d="M720 443V481" class="line"/>
+
+  <rect x="50" y="675" width="1340" height="155" rx="14" class="card"/>
+  <text x="76" y="716" class="heading">可靠保存：独立联机世界档与 MOD 元数据属于同一存档代次</text>
+  <text x="76" y="757" class="body">完整变更 → 成组应用 → 同代写入完成 → 切换提交指针 → 确认关键资产转移</text>
+  <text x="76" y="797" class="small">崩溃后整世界恢复最后完整代；普通进度可能回退。首次资产、运输、战果及撤离均按唯一编号去重。</text>
+  <path d="M720 634V671" class="line"/>
+
+  <rect x="50" y="875" width="1340" height="154" rx="14" fill="#352c27" stroke="#d5a06c" stroke-width="2"/>
+  <text x="76" y="917" class="heading">基地与营地均可袭击：10 分钟硬结束 · 只撤离一次 · 战利品最多一仓</text>
+  <text x="76" y="957" class="body">致死改为倒地；防守方上线接管后本场仍受保护。到时战利品留下，存活进攻者空手返回。</text>
+  <text x="76" y="997" class="small">被袭地块冷却 60 分钟，对所有进攻方生效。进攻与冷却按现实时间计算，房主暂停时停表，重连不重置。</text>
+  <text x="50" y="1060" class="small">现行规则以《联机方案 V1.md》为准；旧构想和旧流程图仅作历史参考。</text>
+</svg>

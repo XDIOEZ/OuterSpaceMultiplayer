@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="352" viewBox="0 0 900 352" role="img" aria-labelledby="title desc">
+  <title id="title">联机 MOD 玩法关系</title>
+  <desc id="desc">地表由 A 攻击 B，B 离线时 AI 防守，在线时各自控制自己的雇员。太空生成 A 与 B 的独立战场，C 可选择一方加入。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#7f95ac"/></marker>
+  </defs>
+  <rect width="900" height="352" rx="16" fill="#101b29"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+    <text x="28" y="38" fill="#eff5fa" font-size="21" font-weight="bold">联机 MOD · 两种战场</text>
+    <rect x="24" y="56" width="420" height="272" rx="12" fill="#192a3d"/>
+    <rect x="456" y="56" width="420" height="272" rx="12" fill="#192a3d"/>
+    <text x="44" y="90" fill="#78c9f5" font-size="18" font-weight="bold">地表攻防</text>
+    <rect x="44" y="110" width="116" height="48" rx="7" fill="#285575"/>
+    <text x="102" y="140" text-anchor="middle" fill="#fff" font-size="16">A 进攻</text>
+    <path d="M170 134H244" stroke="#7f95ac" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="258" y="110" width="164" height="48" rx="7" fill="#614d42"/>
+    <text x="340" y="140" text-anchor="middle" fill="#fff" font-size="16">B 的基地</text>
+    <text x="44" y="194" fill="#e0eaf3" font-size="16">B 离线 → AI 防守 → 上线看战报</text>
+    <text x="44" y="230" fill="#e0eaf3" font-size="16">B 在线 → A、B 各控自己的雇员</text>
+    <text x="44" y="287" fill="#b5c6d8" font-size="15">战斗结束 → 统一结算</text>
+    <text x="476" y="90" fill="#78c9f5" font-size="18" font-weight="bold">太空舰队战</text>
+    <rect x="490" y="110" width="354" height="48" rx="7" fill="#31465c"/>
+    <text x="667" y="140" text-anchor="middle" fill="#fff" font-size="16">A ⇄ B · 独立战场</text>
+    <path d="M667 208V169" stroke="#7f95ac" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="518" y="220" width="298" height="42" rx="7" fill="#285e57"/>
+    <text x="667" y="247" text-anchor="middle" fill="#fff" font-size="16">C 带舰队加入 · 支援 A 或 B</text>
+    <text x="476" y="300" fill="#b5c6d8" font-size="15">各控自己的舰船 → 统一结算</text>
+  </g>
+</svg>

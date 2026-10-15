@@ -1,0 +1,13 @@
+diff --git a/ProjectSettings/ProjectSettings.asset b/ProjectSettings/ProjectSettings.asset
+--- a/ProjectSettings/ProjectSettings.asset
++++ b/ProjectSettings/ProjectSettings.asset
+@@ -922,7 +922,7 @@
+     PS4: 1
+     PS5: 1
+     QNX: 1
+-    Standalone: 1
++    Standalone: 0
+     WebGL: 1
+     Windows Store Apps: 1
+     XboxOne: 1
+

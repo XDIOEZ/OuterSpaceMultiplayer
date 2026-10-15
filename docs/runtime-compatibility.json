@@ -1,0 +1,36 @@
+{
+  "InspectedAtUtc": "2026-10-15T03:39:07.8792837+00:00",
+  "MetadataOnly": true,
+  "GamePath": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Outer Space",
+  "HarmonyAssembly": "0Harmony",
+  "HarmonyVersion": "2.4.2.0",
+  "KnownDirectReferencesCompatible": false,
+  "MissingDirectReferences": [
+    "System.Reflection.AssemblyName::get_HashAlgorithm",
+    "System.Reflection.AssemblyName::get_ProcessorArchitecture",
+    "System.Reflection.Emit.MethodBuilder::SetImplementationFlags",
+    "System.Reflection.MethodBase::GetMethodBody",
+    "System.Reflection.MethodBody::get_ExceptionHandlingClauses",
+    "System.Reflection.MethodBody::get_LocalVariables",
+    "System.Reflection.MethodBody::GetILAsByteArray",
+    "System.RuntimeMethodHandle::GetFunctionPointer"
+  ],
+  "Fingerprints": [
+    {
+      "Path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Outer Space\\Outer Space_Data\\Managed\\mscorlib.dll",
+      "Length": 2750464,
+      "SHA256": "99E816405E240B8F68031159E02A974DC1670BEF87F5EE16B64434074795E334"
+    },
+    {
+      "Path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Outer Space\\Outer Space_Data\\Managed\\Assembly-CSharp.dll",
+      "Length": 13367296,
+      "SHA256": "B7BDDCAE34107D10296C72AB952ACA26E5058F1AD429C50B1DBE2C5CD2A120EF"
+    },
+    {
+      "Path": "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\3080070\\3803065949\\v_common\\Assemblies\\0Harmony.dll",
+      "Length": 2526208,
+      "SHA256": "6DF921459E3044AB8E49BEF788150C011C7B2F4FDFE72258EE5863892A98A81A"
+    }
+  ],
+  "Limitation": "Only the known direct references are inspected; a compatible result does not establish runtime MOD loading or multiplayer acceptance."
+}

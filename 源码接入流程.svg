@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="402" viewBox="0 0 960 402" role="img" aria-labelledby="title desc">
+  <title id="title">FreeWorldMultiplayer 源码接入方案</title>
+  <desc id="desc">计划在原导航入口增加桥接，把玩家操作交给 MOD 网络层，由房间主机复用原运动后端统一模拟，广播给舰队视觉。玩家通讯与交易复用 UGUI 控件并使用新会话。所有模块尚未实现。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#9bb4cc"/></marker></defs>
+  <rect width="960" height="402" rx="16" fill="#101b29"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+    <text x="25" y="36" font-size="21" font-weight="bold" fill="#eef5fb">源码接入：本体提供桥接，MOD 管理联机</text>
+    <rect x="25" y="64" width="176" height="94" rx="10" fill="#304a62"/>
+    <text x="113" y="94" text-anchor="middle" fill="#fff" font-size="17">原导航入口</text>
+    <text x="113" y="121" text-anchor="middle" fill="#c4d8e8" font-size="14">MoveTo_UIPos / Pos</text>
+    <text x="113" y="144" text-anchor="middle" fill="#9bbad2" font-size="13">联机时转交命令</text>
+    <path d="M208 110H245" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="260" y="64" width="178" height="94" rx="10" fill="#24544d"/>
+    <text x="349" y="96" text-anchor="middle" fill="#fff" font-size="17">MOD 网络层</text>
+    <text x="349" y="125" text-anchor="middle" fill="#c6e0d8" font-size="14">Steam 房间 / 操作消息</text>
+    <text x="349" y="146" text-anchor="middle" fill="#aaccc0" font-size="13">身份与版本</text>
+    <path d="M445 110H482" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="497" y="64" width="206" height="94" rx="10" fill="#304a62"/>
+    <text x="600" y="94" text-anchor="middle" fill="#fff" font-size="17">主机统一模拟</text>
+    <text x="600" y="121" text-anchor="middle" fill="#c4d8e8" font-size="14">复用原惯性运动后端</text>
+    <text x="600" y="144" text-anchor="middle" fill="#9bbad2" font-size="13">桥接舰队上下文与时钟</text>
+    <path d="M710 110H749" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="764" y="64" width="171" height="94" rx="10" fill="#24544d"/>
+    <text x="849" y="94" text-anchor="middle" fill="#fff" font-size="17">舰队展示</text>
+    <text x="849" y="121" text-anchor="middle" fill="#c6e0d8" font-size="14">GalaxyFleetVisual</text>
+    <text x="849" y="144" text-anchor="middle" fill="#aaccc0" font-size="13">快照 / 插值 / 名牌</text>
+    <text x="25" y="205" fill="#79c9f6" font-size="17" font-weight="bold">相遇交互：新玩家会话，复用现有控件</text>
+    <rect x="25" y="228" width="238" height="75" rx="10" fill="#304a62"/>
+    <text x="144" y="256" text-anchor="middle" fill="#fff" font-size="16">玩家通讯窗口</text>
+    <text x="144" y="282" text-anchor="middle" fill="#c4d8e8" font-size="14">信息区 / 消息行 / 操作选项</text>
+    <path d="M270 266H315" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="330" y="228" width="280" height="75" rx="10" fill="#24544d"/>
+    <text x="470" y="256" text-anchor="middle" fill="#fff" font-size="16">权威会话服务</text>
+    <text x="470" y="282" text-anchor="middle" fill="#c6e0d8" font-size="14">聊天 / 报价确认 / 攻击请求</text>
+    <path d="M617 266H662" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="677" y="228" width="258" height="75" rx="10" fill="#304a62"/>
+    <text x="806" y="256" text-anchor="middle" fill="#fff" font-size="16">交易或战场</text>
+    <text x="806" y="282" text-anchor="middle" fill="#c4d8e8" font-size="14">双仓控件 / 现有舰战组件</text>
+    <text x="25" y="346" fill="#c2d7e8" font-size="15">本体桥接：导航、房间时钟、权威步进、状态展示、事务与战场衔接</text>
+    <text x="25" y="376" fill="#96b0c5" font-size="14">计划方案，尚未实现；首版先完成两人互见、移动、相遇通讯的闭环。</text>
+  </g>
+</svg>

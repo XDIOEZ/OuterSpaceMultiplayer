@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="420" viewBox="0 0 940 420" role="img" aria-labelledby="title desc">
+  <title id="title">同星系联机与交互流程</title>
+  <desc id="desc">玩家 A 与 B 在主机提供的共享星系内移动，相遇后进入统一通讯窗口，可聊天、交换物资或发起攻击。攻击创建独立战场，C 可以选边支援。主机负责距离、归属、交易与战场状态。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#9bb4cc"/></marker></defs>
+  <rect width="940" height="420" rx="16" fill="#101b29"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+    <text x="26" y="37" fill="#edf5fc" font-size="22" font-weight="bold">同一星系：移动 → 相遇 → 交流与交互</text>
+    <rect x="26" y="64" width="290" height="236" rx="12" fill="#1b3044"/>
+    <text x="45" y="95" fill="#78c9f5" font-size="18" font-weight="bold">共享星系</text>
+    <circle cx="172" cy="181" r="32" fill="#cea159"/>
+    <ellipse cx="172" cy="181" rx="113" ry="69" fill="none" stroke="#516780" stroke-dasharray="5 6"/>
+    <path d="M73 160L97 151L91 174Z" fill="#75c5f4"/><path d="M248 212L269 229L242 232Z" fill="#b8a3f5"/>
+    <text x="56" y="140" fill="#dcebf7" font-size="15">A 舰队</text><text x="225" y="264" fill="#dcebf7" font-size="15">B 舰队</text>
+    <path d="M112 145Q173 116 221 147" fill="none" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M322 180H368" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="345" y="160" text-anchor="middle" fill="#b6cce0" font-size="13">相遇</text>
+    <rect x="383" y="106" width="222" height="146" rx="12" fill="#26544f"/>
+    <text x="494" y="143" text-anchor="middle" fill="#ecfff8" font-size="18" font-weight="bold">统一通讯窗口</text>
+    <text x="494" y="176" text-anchor="middle" fill="#d5eae5" font-size="15">舰队信息 / 玩家消息</text>
+    <text x="494" y="207" text-anchor="middle" fill="#d5eae5" font-size="15">操作选项 / 会话状态</text>
+    <text x="494" y="234" text-anchor="middle" fill="#b4d5cb" font-size="13">复用现有太空 UI 控件</text>
+    <path d="M613 180H641V109H666M641 180H666M641 180V251H666" fill="none" stroke="#9bb4cc" stroke-width="2" marker-end="url(#arrow)"/>
+    <g fill="#314963"><rect x="681" y="81" width="233" height="57" rx="8"/><rect x="681" y="151" width="233" height="57" rx="8"/></g>
+    <rect x="681" y="221" width="233" height="79" rx="8" fill="#65443c"/>
+    <g text-anchor="middle" fill="#f3f7fb" font-size="17"><text x="797" y="116">对话交流</text><text x="797" y="186">交换物资 · 双方确认</text><text x="797" y="251">发起攻击 → 独立战场</text></g>
+    <text x="797" y="278" text-anchor="middle" fill="#e9cebd" font-size="14">C 可以选边支援</text>
+    <rect x="26" y="328" width="888" height="63" rx="10" fill="#203345"/>
+    <text x="45" y="354" fill="#cddfee" font-size="16">房间主机：统一时间、舰队状态、距离校验、交易与战场切换</text>
+    <text x="45" y="379" fill="#9eb8cd" font-size="14">玩家：发送操作、接收快照、平滑显示；通讯期间星系继续运行</text>
+  </g>
+</svg>

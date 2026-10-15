@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="490" viewBox="0 0 980 490" role="img" aria-labelledby="title desc">
+  <title id="title">联机 MOD 建议框架</title>
+  <desc id="desc">A、B、C 玩家经过 Steam 房间和网络发送操作给唯一权威战场。权威战场复用地表或舰战模拟并发送状态。好友原型使用玩家主机，正式 PvP 使用服务器。独立持久化服务保存基地快照并一次性结算。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0 0L8 4L0 8Z" fill="#98b0c8"/></marker></defs>
+  <rect width="980" height="490" rx="16" fill="#101b29"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+    <text x="28" y="37" font-size="21" font-weight="bold" fill="#eff5fa">独立战场 · 一处模拟 · 多人操作</text>
+    <g fill="#285575"><rect x="28" y="65" width="172" height="54" rx="8"/><rect x="28" y="140" width="172" height="54" rx="8"/><rect x="28" y="215" width="172" height="54" rx="8"/></g>
+    <g text-anchor="middle" font-size="17" fill="#fff"><text x="114" y="99">A · 自己的单位</text><text x="114" y="174">B · 自己的单位</text><text x="114" y="249">C · 选边支援</text></g>
+    <path d="M205 92H234V167H257M205 167H257M205 242H234V167" fill="none" stroke="#98b0c8" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="271" y="96" width="166" height="144" rx="10" fill="#244553"/>
+    <g text-anchor="middle"><text x="354" y="133" fill="#e7f5fd" font-size="17" font-weight="bold">连接与房间</text><text x="354" y="169" fill="#cbdcea" font-size="15">Steam Lobby</text><text x="354" y="198" fill="#cbdcea" font-size="15">NetworkingSockets</text><text x="354" y="224" fill="#a7becf" font-size="13">身份 / 版本 / 阵营</text></g>
+    <path d="M446 151H521" stroke="#98b0c8" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="481" y="138" text-anchor="middle" fill="#dce8f2" font-size="13">操作指令</text>
+    <path d="M521 198H446" stroke="#98b0c8" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="481" y="223" text-anchor="middle" fill="#dce8f2" font-size="13">状态 / 事件</text>
+    <rect x="541" y="65" width="410" height="218" rx="12" fill="#223b51"/>
+    <text x="560" y="100" fill="#78c9f5" font-size="19" font-weight="bold">唯一权威战场</text>
+    <text x="560" y="134" fill="#e0eaf3" font-size="16">校验：只能指挥自己的雇员 / 舰船</text>
+    <rect x="560" y="154" width="175" height="48" rx="7" fill="#3e5670"/><rect x="755" y="154" width="175" height="48" rx="7" fill="#3e5670"/>
+    <g text-anchor="middle" fill="#fff" font-size="15"><text x="647" y="184">地表原模拟适配</text><text x="842" y="184">舰战原模拟适配</text></g>
+    <text x="560" y="234" fill="#dce8f2" font-size="15">好友原型：玩家主机运行</text>
+    <text x="560" y="261" fill="#dce8f2" font-size="15">正式 PvP：服务器运行</text>
+    <path d="M746 291V337" stroke="#98b0c8" stroke-width="2" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <text x="764" y="323" fill="#b9cde0" font-size="14">载入快照 / 提交结果</text>
+    <rect x="541" y="349" width="410" height="101" rx="12" fill="#28564d"/>
+    <text x="560" y="381" fill="#e9faf2" font-size="18" font-weight="bold">持久化服务 · 后续开发</text>
+    <text x="560" y="411" fill="#d0e7de" font-size="15">基地快照 / 资产锁 / 版本 / 战报</text>
+    <text x="560" y="436" fill="#d0e7de" font-size="15">按战场 ID 只结算一次</text>
+    <text x="28" y="327" fill="#78c9f5" font-size="17" font-weight="bold">客户端职责</text>
+    <text x="28" y="358" fill="#dce8f2" font-size="15">发操作 · 接收状态 · 插值展示</text>
+    <text x="28" y="387" fill="#b9cde0" font-size="15">AI / 伤害 / 死亡由权威端决定</text>
+    <text x="28" y="445" fill="#93a9bf" font-size="13">建议方案，尚未实现；Steam 中继负责数据传输。</text>
+  </g>
+</svg>
