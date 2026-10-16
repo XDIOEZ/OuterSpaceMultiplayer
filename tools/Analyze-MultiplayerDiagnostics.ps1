@@ -17,14 +17,27 @@ function New-DiagnosticsState {
         Profile = [Collections.Generic.List[object]]::new()
         GroundCounts = [Collections.Generic.List[object]]::new()
         InputFiles = [Collections.Generic.List[string]]::new()
+        ModVersions = @{}
+        AssemblyVersions = @{}
+        RoleMismatchedEntries = 0
     }
 }
 
-function Read-DiagnosticLines([object]$state, [string[]]$lines) {
+function Read-DiagnosticLines([object]$state, [string[]]$lines, [string]$sourceSide = 'unknown') {
     foreach ($line in $lines) {
+        if ($sourceSide -ne 'unknown') {
+            $header = [regex]::Match($line, '^\s*ModVersion:\s*(\S+)')
+            if ($header.Success) { $state.ModVersions[$sourceSide] = $header.Groups[1].Value; continue }
+            $header = [regex]::Match($line, '^\s*AssemblyVersion:\s*(\S+)')
+            if ($header.Success) { $state.AssemblyVersions[$sourceSide] = $header.Groups[1].Value; continue }
+        }
         $match = [regex]::Match($line,
             '\[FreeWorldMultiplayer\]\[fleet-command\]\s+stage=(\S+)\s+command=(\S+)\s+fleet=(-?\d+)\s+role=(host|guest)\s+outcome=(\S+)')
         if ($match.Success) {
+            if ($sourceSide -ne 'unknown' -and $match.Groups[4].Value -ne $sourceSide) {
+                $state.RoleMismatchedEntries++
+                continue
+            }
             $id = $match.Groups[2].Value
             if ($id -eq 'pending' -or $id.Length -gt 128) { continue }
             if (-not $state.Commands.ContainsKey($id)) {
@@ -34,6 +47,7 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines) {
             $state.Commands[$id].Add([pscustomobject]@{
                 Stage = $match.Groups[1].Value
                 Role = $match.Groups[4].Value
+                LogSide = $sourceSide
                 Outcome = $match.Groups[5].Value
             })
             continue
@@ -47,6 +61,7 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines) {
                     Milliseconds = [double]::Parse($match.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
                     Bytes = [long]$match.Groups[3].Value
                     Role = $match.Groups[4].Value
+                    LogSide = $sourceSide
                 })
             }
             continue
@@ -56,6 +71,7 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines) {
         if ($match.Success -and $state.Profile.Count -lt 10000) {
             $state.Profile.Add([pscustomobject]@{
                 Stage = $match.Groups[1].Value
+                LogSide = $sourceSide
                 WindowSeconds = [double]::Parse($match.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
                 Samples = [long]$match.Groups[3].Value
                 P50UpperMs = [double]::Parse($match.Groups[4].Value, [Globalization.CultureInfo]::InvariantCulture)
@@ -69,6 +85,7 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines) {
             '\[FreeWorldMultiplayer\]\[ground-counts\]\s+captures=(\d+)\s+entitiesScanned=(\d+)\s+entityChanges=(\d+)\s+fieldsScanned=(\d+)\s+tilesScanned=(\d+)\s+tileChanges=(\d+)\s+posesSampled=(\d+)\s+poseChanges=(\d+)')
         if ($match.Success -and $state.GroundCounts.Count -lt 10000) {
             $state.GroundCounts.Add([pscustomobject]@{
+                LogSide = $sourceSide
                 Captures = [long]$match.Groups[1].Value
                 EntitiesScanned = [long]$match.Groups[2].Value
                 EntityChanges = [long]$match.Groups[3].Value
@@ -78,6 +95,16 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines) {
                 PosesSampled = [long]$match.Groups[7].Value
                 PoseChanges = [long]$match.Groups[8].Value
             })
+        }
+    }
+}
+
+function Assert-PairedHeaders([object]$state) {
+    foreach ($name in @('ModVersions', 'AssemblyVersions')) {
+        $versions = $state[$name]
+        if ($versions.ContainsKey('host') -and $versions.ContainsKey('guest') -and
+            $versions['host'] -ne $versions['guest']) {
+            throw "Host/guest $name differ; these logs cannot be used as matching runtime evidence."
         }
     }
 }
@@ -123,11 +150,27 @@ function Summarize-Diagnostics([object]$state) {
     return [pscustomobject][ordered]@{
         Schema = 1
         InputLogNames = @($state.InputFiles)
+        PairEvidence = [pscustomobject]@{
+            HostModVersion = $state.ModVersions['host']
+            GuestModVersion = $state.ModVersions['guest']
+            HostAssemblyVersion = $state.AssemblyVersions['host']
+            GuestAssemblyVersion = $state.AssemblyVersions['guest']
+            RoleMismatchedEntries = $state.RoleMismatchedEntries
+            HasBothVersionHeaders = $state.ModVersions.ContainsKey('host') -and $state.ModVersions.ContainsKey('guest')
+            SourceRevisionVerified = $false
+            SameRoomSessionVerified = $false
+            Notice = 'Matching version headers do NOT establish identical source revisions or prove two logs came from the same room session.'
+        }
         FleetCommandsSeen = $commands.Count
         FleetCommands = $commands
         SlowOperationGroups = $slowGroups
         ProfileWindows = @($state.Profile)
         GroundCaptureWindows = @($state.GroundCounts)
+        MissingEvidence = @(
+            if ($commands.Count -eq 0) { 'No correlated fleet-command evidence: cannot diagnose movement.' }
+            if ($state.Profile.Count -eq 0) { 'No opt-in profile windows: cannot calculate a gameplay P95.' }
+            if ($state.GroundCounts.Count -eq 0) { 'No 2D ground-counts data: scan/change hot spots unverified.' }
+        )
         Interpretation = 'Slow-operation records include only throttled >=50 ms events; they cannot yield an overall P95. Profile values are histogram bucket upper bounds; ground counts distinguish scanned from changed entities, 2D poses and tiles, not network bytes. A command ACK is not proof of physical fleet motion.'
     }
 }
@@ -135,17 +178,24 @@ function Summarize-Diagnostics([object]$state) {
 if ($SelfTest) {
     $state = New-DiagnosticsState
     Read-DiagnosticLines $state @(
-        '[FreeWorldMultiplayer][fleet-command] stage=client.sent command=cmdABC fleet=123 role=guest outcome=queued',
+        'ModVersion: V1.19',
+        'AssemblyVersion: 1.19.0.0',
         '[FreeWorldMultiplayer][fleet-command] stage=host.received command=cmdABC fleet=123 role=host outcome=queued',
         '[FreeWorldMultiplayer][fleet-command] stage=host.native.begin command=cmdABC fleet=123 role=host outcome=begin',
         '[FreeWorldMultiplayer][fleet-command] stage=host.native.end command=cmdABC fleet=123 role=host outcome=accepted',
-        '[FreeWorldMultiplayer][fleet-command] stage=host.result command=cmdABC fleet=123 role=host outcome=accepted',
+        '[FreeWorldMultiplayer][fleet-command] stage=host.result command=cmdABC fleet=123 role=host outcome=accepted'
+    ) 'host'
+    Read-DiagnosticLines $state @(
+        'ModVersion: V1.19',
+        'AssemblyVersion: 1.19.0.0',
+        '[FreeWorldMultiplayer][fleet-command] stage=client.sent command=cmdABC fleet=123 role=guest outcome=queued',
         '[FreeWorldMultiplayer][fleet-command] stage=client.result command=cmdABC fleet=123 role=guest outcome=accepted',
         '[FreeWorldMultiplayer][slow-operation] stage=transport.handle ms=6943.3 bytes=20955155 map=-1 role=guest',
         '[FreeWorldMultiplayer][profile] stage=map.cache.apply windowSeconds=30.0 count=8 p50UpperMs=16.00 p95UpperMs=50.00 p99UpperMs=100.00 maxMs=81.25',
         '[FreeWorldMultiplayer][profile] stage=ground.capture.tiles windowSeconds=30.0 count=5 p50UpperMs=4.00 p95UpperMs=16.00 p99UpperMs=16.00 maxMs=14.5',
         '[FreeWorldMultiplayer][ground-counts] captures=5 entitiesScanned=500 entityChanges=2 fieldsScanned=100 tilesScanned=327680 tileChanges=3 posesSampled=40 poseChanges=7'
-    )
+    ) 'guest'
+    Assert-PairedHeaders $state
     $summary = Summarize-Diagnostics $state
     if ($summary.FleetCommandsSeen -ne 1 -or
         $summary.FleetCommands[0].Outcome -ne 'command-acknowledged-motion-not-measured' -or
@@ -154,9 +204,17 @@ if ($SelfTest) {
         $summary.ProfileWindows[1].Stage -ne 'ground.capture.tiles' -or
         $summary.GroundCaptureWindows.Count -ne 1 -or
         $summary.GroundCaptureWindows[0].TilesScanned -ne 327680 -or
-        $summary.GroundCaptureWindows[0].TileChanges -ne 3) {
+        $summary.GroundCaptureWindows[0].TileChanges -ne 3 -or
+        -not $summary.PairEvidence.HasBothVersionHeaders -or
+        $summary.PairEvidence.SourceRevisionVerified -or
+        $summary.ProfileWindows[0].LogSide -ne 'guest') {
         throw 'Multiplayer diagnostics analyzer self-test failed.'
     }
+    $state.ModVersions['guest'] = 'V1.18'
+    $rejected = $false
+    try { Assert-PairedHeaders $state }
+    catch { $rejected = $true }
+    if (-not $rejected) { throw 'Mismatched host/guest versions must be rejected.' }
     Write-Output 'PASS: fleet command stage correlation, slow-operation and profile parsing'
     return
 }
@@ -165,12 +223,22 @@ if (-not $HostLog -or -not $GuestLog) {
     throw 'Pass both -HostLog and -GuestLog from one multiplayer session, or use -SelfTest.'
 }
 $state = New-DiagnosticsState
-foreach ($path in @($HostLog, $GuestLog)) {
+$hostFull = [IO.Path]::GetFullPath($HostLog)
+$guestFull = [IO.Path]::GetFullPath($GuestLog)
+if ([string]::Equals($hostFull, $guestFull, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'HostLog and GuestLog must be different files. One log cannot prove paired evidence.'
+}
+foreach ($inputFile in @(
+    [pscustomobject]@{ Path = $hostFull; Side = 'host' },
+    [pscustomobject]@{ Path = $guestFull; Side = 'guest' }
+)) {
+    $path = $inputFile.Path
     $full = [IO.Path]::GetFullPath($path)
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "Missing log file: $full" }
     $state.InputFiles.Add([IO.Path]::GetFileName($full))
-    Read-DiagnosticLines $state @(Get-Content -LiteralPath $full -Encoding UTF8)
+    Read-DiagnosticLines $state @(Get-Content -LiteralPath $full -Encoding UTF8) $inputFile.Side
 }
+Assert-PairedHeaders $state
 $report = Summarize-Diagnostics $state
 if ($OutFile) {
     $output = [IO.Path]::GetFullPath($OutFile)
