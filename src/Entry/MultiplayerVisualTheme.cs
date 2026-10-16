@@ -485,6 +485,8 @@ namespace FreeWorldMultiplayer
                     focusedHint = invalid ? "Steam 房间号须为有效正整数" : "输入房主提供的 Steam 房间号";
                     invalidFocusedInput = invalid;
                 }
+                else if (focused && item.Field == playerRosterSearch)
+                    focusedHint = "按昵称筛选玩家 · 清除可恢复全部";
                 else if (focused) focusedHint = "Tab 下一个  ·  Shift+Tab 上一个";
             }
             return focusedHint;
