@@ -129,12 +129,25 @@ namespace FreeWorldMultiplayer
             // Reliable ordered delivery is required; accepting a skipped business revision would lose fields.
             if (appliedSharedRevision >= 0 && delta.Revision != appliedSharedRevision + 1) throw new InvalidOperationException("Shared world business delta is missing a revision.");
             var decoded = new List<Tuple<SharedValue, object, FieldInfo, object>>();
+            // Resolve galaxy/planet identities once per delta rather than scanning the
+            // entire world for every changed field. Lookup groups retain SingleOrDefault's
+            // duplicate-ID rejection for the requested identity.
+            ILookup<string, FWGalaxy> galaxiesById = null;
+            ILookup<string, FWStarInfo> planetsById = null;
             foreach (SharedValue change in delta.Values)
             {
                 object target; HashSet<string> allowed;
                 if (change.Scope == "world") { target = World; allowed = SharedRootFields; }
-                else if (change.Scope == "galaxy") { target = World.galaxyBlock.knownGalaxies.SingleOrDefault(g => g.id == change.Id); allowed = SharedGalaxyFields; }
-                else if (change.Scope == "planet") { target = World.galaxyBlock.knownGalaxies.SelectMany(g => g.stars).SingleOrDefault(s => s.starId == change.Id); allowed = SharedPlanetFields; }
+                else if (change.Scope == "galaxy")
+                {
+                    if (galaxiesById == null) galaxiesById = World.galaxyBlock.knownGalaxies.ToLookup(g => g.id);
+                    target = galaxiesById[change.Id].SingleOrDefault(); allowed = SharedGalaxyFields;
+                }
+                else if (change.Scope == "planet")
+                {
+                    if (planetsById == null) planetsById = World.galaxyBlock.knownGalaxies.SelectMany(g => g.stars).ToLookup(s => s.starId);
+                    target = planetsById[change.Id].SingleOrDefault(); allowed = SharedPlanetFields;
+                }
                 else throw new InvalidOperationException("Unknown shared world business scope.");
                 if (target == null || !allowed.Contains(change.Field)) throw new InvalidOperationException("Shared world delta references a non-whitelisted field.");
                 FieldInfo field = NativeWire.Field(target.GetType(), change.Field);
