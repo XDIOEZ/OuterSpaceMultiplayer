@@ -252,16 +252,34 @@ namespace FreeWorldMultiplayer
         {
             if (connectionBadge == null || Runtime == null) return;
             bool connected = Connected;
+            RefreshConnectionBanner(connected);
+            RefreshFeedbackPresentation();
+            string roomId = Runtime.Transport == null ? null : Runtime.Transport.RoomId;
+            RefreshRoomIdActions(connected, roomId);
+            RestrictSteamControlsInDirectLaunch();
+
+            // Page-specific refreshers retain the original ordering: permission
+            // gates first, then labels/focus hints and finally selected controls.
+            RefreshRoomDisclosure(connected, roomId);
+            RefreshSubmitAvailability();
+            RefreshRelationVisual();
+            RefreshPlayerRoster();
+            RefreshButtonAvailability();
+            RefreshNavigationGuidance();
+            RefreshRowHighlights();
+            RefreshClockControlVisuals(connected);
+        }
+
+        private void RefreshConnectionBanner(bool connected)
+        {
             SetTextIfChanged(connectionBadgeText, connected ? (Runtime.Session.IsHost ? "已连接  ·  房主" : "已连接  ·  客人")
                 : Busy ? "正在连接 / 退出" : "离线  ·  尚未加入");
             SetColorIfChanged(connectionBadgeDot, connected ? PositiveColor : Busy ? AccentColor : MutedColor);
             SetColorIfChanged(connectionBadgeText, connected ? BodyColor : MutedColor);
-            string location = page == Page.Create
-                ? (continueWorldForm != null && continueWorldForm.activeSelf ? "创建 / 继续世界" : "创建 / 新世界")
-                : page == Page.Join ? "加入 / 连接方式"
-                : page == Page.Room ? "房间 / 世界控制"
-                : page == Page.World ? "房间 / 玩家关系" : "设置 / 默认选项";
+        }
 
+        private void RefreshFeedbackPresentation()
+        {
             string message = status.text ?? String.Empty;
             bool warning = message.IndexOf("失败", StringComparison.Ordinal) >= 0
                 || message.IndexOf("错误", StringComparison.Ordinal) >= 0
@@ -292,8 +310,10 @@ namespace FreeWorldMultiplayer
                     ? "已复制" : "复制提示");
                 SetColorIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable ? BodyColor : DisabledColor);
             }
+        }
 
-            string roomId = Runtime.Transport == null ? null : Runtime.Transport.RoomId;
+        private void RefreshRoomIdActions(bool connected, string roomId)
+        {
             if (copyRoomButton != null)
             {
                 bool hasRoomId = !String.IsNullOrWhiteSpace(roomId);
@@ -307,7 +327,10 @@ namespace FreeWorldMultiplayer
                 SetTextIfChanged(copyRoomCaption, roomId == copiedRoomId
                     && Time.unscaledTimeAsDouble < copiedRoomUntil ? "已复制房间号" : "复制 Steam 房间号");
             }
+        }
 
+        private void RestrictSteamControlsInDirectLaunch()
+        {
             // Direct launch cannot use Steam; make that clear before the click.
             if (Runtime.DirectLaunch)
             {
@@ -319,12 +342,15 @@ namespace FreeWorldMultiplayer
                 foreach (Button button in sessionButtons)
                     if (button != null && button.name == "FWM.Invite") button.interactable = false;
             }
+        }
 
-            RefreshRoomDisclosure(connected, roomId);
-            RefreshSubmitAvailability();
-            RefreshRelationVisual();
-            RefreshPlayerRoster();
-            RefreshButtonAvailability();
+        private void RefreshNavigationGuidance()
+        {
+            string location = page == Page.Create
+                ? (continueWorldForm != null && continueWorldForm.activeSelf ? "创建 / 继续世界" : "创建 / 新世界")
+                : page == Page.Join ? "加入 / 连接方式"
+                : page == Page.Room ? "房间 / 世界控制"
+                : page == Page.World ? "房间 / 玩家关系" : "设置 / 默认选项";
             bool invalidFocusedInput;
             string inputHint = RefreshInputBorders(out invalidFocusedInput);
             bool needsAttention;
@@ -333,8 +359,10 @@ namespace FreeWorldMultiplayer
             SetTextIfChanged(navigationHint, inputHint ?? listHint ?? formHint ?? location);
             SetColorIfChanged(navigationHint, invalidFocusedInput ||
                 (inputHint == null && listHint == null && needsAttention) ? WarningColor : MutedColor);
-            RefreshRowHighlights();
+        }
 
+        private void RefreshClockControlVisuals(bool connected)
+        {
             // Indicate the effective host clock setting, not just the buttons' last click.
             MultiplayerSession session = Runtime.Session;
             foreach (KeyValuePair<string, Button> entry in clockControls)

@@ -239,18 +239,7 @@ namespace FreeWorldMultiplayer
             WorldState world = session == null ? null : session.World;
             if (!Connected || Busy || world == null)
             {
-                if (playerRosterRows.Count != 0) ClearPlayerRoster();
-                playerRosterRelations.Clear();
-                playerRosterSessionId = null;
-                if (!Connected)
-                {
-                    playerRosterFilter = PlayerRosterFilter.All;
-                    playerRosterSearch.SetTextWithoutNotify(String.Empty);
-                    lastRosterSearch = String.Empty;
-                }
-                RefreshRosterFilterVisuals(false);
-                playerRosterEmpty.gameObject.SetActive(true);
-                SetTextIfChanged(playerRosterEmpty, Busy ? "连接状态处理中…" : "尚未连接联机世界。");
+                ShowUnavailableRoster();
                 return;
             }
 
@@ -263,14 +252,7 @@ namespace FreeWorldMultiplayer
             string query = playerRosterSearch.text.Trim();
             bool queryChanged = !String.Equals(query, lastRosterSearch, StringComparison.Ordinal);
             lastRosterSearch = query;
-            playerRosterRelations.Clear();
-            foreach (RelationshipRecord relation in world.Relationships)
-            {
-                if (relation.PlayerA == session.LocalPlayerId && !String.IsNullOrEmpty(relation.PlayerB))
-                    playerRosterRelations[relation.PlayerB] = relation;
-                else if (relation.PlayerB == session.LocalPlayerId && !String.IsNullOrEmpty(relation.PlayerA))
-                    playerRosterRelations[relation.PlayerA] = relation;
-            }
+            IndexRosterRelationships(world, session.LocalPlayerId);
             List<PlayerRecord> allPlayers = world.Players.Values
                 .Where(p => p.PlayerId != session.LocalPlayerId)
                 .OrderBy(p => p.Nickname ?? String.Empty, StringComparer.OrdinalIgnoreCase)
@@ -302,8 +284,45 @@ namespace FreeWorldMultiplayer
                 RebuildPlayerRoster(players, newSession || queryChanged);
             }
 
+            RefreshRosterSummary(allPlayers.Count, searchedPlayers.Count,
+                onlineCount, pendingCount, players, query);
+            RefreshRosterRows(players, session.LocalPlayerId);
+            RevealNewRosterSelection();
+        }
+
+        private void ShowUnavailableRoster()
+        {
+            if (playerRosterRows.Count != 0) ClearPlayerRoster();
+            playerRosterRelations.Clear();
+            playerRosterSessionId = null;
+            if (!Connected)
+            {
+                playerRosterFilter = PlayerRosterFilter.All;
+                playerRosterSearch.SetTextWithoutNotify(String.Empty);
+                lastRosterSearch = String.Empty;
+            }
+            RefreshRosterFilterVisuals(false);
+            playerRosterEmpty.gameObject.SetActive(true);
+            SetTextIfChanged(playerRosterEmpty, Busy ? "连接状态处理中…" : "尚未连接联机世界。");
+        }
+
+        private void IndexRosterRelationships(WorldState world, string localPlayerId)
+        {
+            playerRosterRelations.Clear();
+            foreach (RelationshipRecord relation in world.Relationships)
+            {
+                if (relation.PlayerA == localPlayerId && !String.IsNullOrEmpty(relation.PlayerB))
+                    playerRosterRelations[relation.PlayerB] = relation;
+                else if (relation.PlayerB == localPlayerId && !String.IsNullOrEmpty(relation.PlayerA))
+                    playerRosterRelations[relation.PlayerA] = relation;
+            }
+        }
+
+        private void RefreshRosterSummary(int totalCount, int searchCount, int onlineCount,
+            int pendingCount, List<PlayerRecord> players, string query)
+        {
             RefreshRosterFilterVisuals(true);
-            SetTextIfChanged(OfficialModUi.Caption(rosterAllFilter), "全部 " + searchedPlayers.Count);
+            SetTextIfChanged(OfficialModUi.Caption(rosterAllFilter), "全部 " + searchCount);
             SetTextIfChanged(OfficialModUi.Caption(rosterOnlineFilter), "在线 " + onlineCount);
             SetTextIfChanged(OfficialModUi.Caption(rosterConsentFilter), "待我同意 " + pendingCount);
             playerRosterEmpty.gameObject.SetActive(players.Count == 0);
@@ -316,15 +335,19 @@ namespace FreeWorldMultiplayer
             bool targetHidden = !String.IsNullOrEmpty(selectedPlayer)
                 && players.All(p => p.PlayerId != selectedPlayer);
             SetTextIfChanged(playerRosterHeading, targetHidden ? "目标不在结果中"
-                : "玩家 " + players.Count + "/" + allPlayers.Count);
+                : "玩家 " + players.Count + "/" + totalCount);
             SetColorIfChanged(playerRosterHeading, targetHidden ? AccentColor : MutedColor);
+        }
+
+        private void RefreshRosterRows(List<PlayerRecord> players, string localPlayerId)
+        {
             for (int i = 0; i < players.Count; i++)
             {
                 PlayerRecord player = players[i];
                 PlayerRosterRow row = playerRosterRows[i];
                 bool selected = row.PlayerId == selectedPlayer;
                 Color relationColor;
-                string relationship = PlayerRosterRelation(session.LocalPlayerId,
+                string relationship = PlayerRosterRelation(localPlayerId,
                     row.PlayerId, out relationColor);
                 SetTextIfChanged(row.Details, (player.Online ? "在线" : "离线") + "  ·  " + relationship);
                 SetColorIfChanged(row.Name, selected ? HeadingColor : player.Online ? BodyColor : MutedColor);
@@ -335,7 +358,10 @@ namespace FreeWorldMultiplayer
                 SetColorIfChanged(visual.Highlight, selected ? new Color32(214, 187, 125, 45)
                     : visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear);
             }
+        }
 
+        private void RevealNewRosterSelection()
+        {
             // Reveal a newly selected player once; do not fight mouse-wheel
             // scrolling while the selection remains unchanged.
             if (lastRosterSelection != selectedPlayer)
