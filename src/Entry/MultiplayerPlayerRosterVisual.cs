@@ -13,6 +13,8 @@ namespace FreeWorldMultiplayer
     // remain the sole way to change another player's relationship.
     public sealed partial class MultiplayerRoomDialog
     {
+        private enum PlayerRosterFilter { All, Online, NeedsMyConsent }
+
         private sealed class PlayerRosterRow
         {
             internal string PlayerId, DisplayName;
@@ -26,6 +28,8 @@ namespace FreeWorldMultiplayer
         private ScrollRect playerRosterScroll;
         private TMP_Text playerRosterEmpty, playerRosterHeading;
         private string playerRosterSessionId, lastRosterSelection;
+        private PlayerRosterFilter playerRosterFilter;
+        private Button rosterAllFilter, rosterOnlineFilter, rosterConsentFilter;
 
         private void InstallPlayerRoster()
         {
@@ -38,6 +42,50 @@ namespace FreeWorldMultiplayer
             MultiplayerUi.Top((RectTransform)playerRosterScroll.transform, 0, 459, 984, 101);
             playerRosterEmpty = Label(root, "PlayerRosterEmpty",
                 "暂无其他玩家。好友加入后会显示在这里。", 18, 22, 482, 910, 52);
+
+            rosterAllFilter = CreateRosterFilter(root, "All", "全部", PlayerRosterFilter.All);
+            rosterOnlineFilter = CreateRosterFilter(root, "Online", "仅在线", PlayerRosterFilter.Online);
+            rosterConsentFilter = CreateRosterFilter(root, "Consent", "待我同意", PlayerRosterFilter.NeedsMyConsent);
+        }
+
+        private Button CreateRosterFilter(Transform root, string name, string caption, PlayerRosterFilter mode)
+        {
+            Button result = MultiplayerUi.CloneButton(ButtonTemplate, root, "FWM.RosterFilter" + name,
+                caption, () => ChangeRosterFilter(mode));
+            OfficialModUi.Caption(result).fontSize = 16;
+            return result;
+        }
+
+        private void LayoutRosterFilters(float y)
+        {
+            if (rosterAllFilter == null) return;
+            MultiplayerUi.Top((RectTransform)rosterAllFilter.transform, 570, y, 116, 31);
+            MultiplayerUi.Top((RectTransform)rosterOnlineFilter.transform, 696, y, 124, 31);
+            MultiplayerUi.Top((RectTransform)rosterConsentFilter.transform, 830, y, 154, 31);
+        }
+
+        private void ChangeRosterFilter(PlayerRosterFilter mode)
+        {
+            if (playerRosterFilter == mode) return;
+            playerRosterFilter = mode;
+            RefreshPlayerRoster();
+        }
+
+        private void RefreshRosterFilterVisuals(bool usable)
+        {
+            if (rosterAllFilter == null) return;
+            UpdateRosterFilter(rosterAllFilter, PlayerRosterFilter.All, usable);
+            UpdateRosterFilter(rosterOnlineFilter, PlayerRosterFilter.Online, usable);
+            UpdateRosterFilter(rosterConsentFilter, PlayerRosterFilter.NeedsMyConsent, usable);
+        }
+
+        private void UpdateRosterFilter(Button button, PlayerRosterFilter mode, bool usable)
+        {
+            button.interactable = usable;
+            bool chosen = mode == playerRosterFilter;
+            SetSelectedVisual(button, chosen);
+            SetColorIfChanged(OfficialModUi.Caption(button),
+                usable ? chosen ? HeadingColor : BodyColor : DisabledColor);
         }
 
         private static string RosterName(PlayerRecord player)
@@ -74,6 +122,10 @@ namespace FreeWorldMultiplayer
                     focusedPlayerId = row.PlayerId;
                     break;
                 }
+            // The focused native button is about to be destroyed. It must not
+            // remain the EventSystem's selected object after a filter switch.
+            if (focusedPlayerId != null && EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(null);
             ClearPlayerRoster();
             foreach (PlayerRecord player in players)
             {
@@ -125,6 +177,22 @@ namespace FreeWorldMultiplayer
             return mine ? "已申请友好" : theirs ? "待我同意" : "中立";
         }
 
+        private bool MatchesRosterFilter(PlayerRecord player, string localPlayerId)
+        {
+            if (playerRosterFilter == PlayerRosterFilter.All) return true;
+            if (playerRosterFilter == PlayerRosterFilter.Online) return player.Online;
+            return MatchesRosterFilterPending(player, localPlayerId);
+        }
+
+        private bool MatchesRosterFilterPending(PlayerRecord player, string localPlayerId)
+        {
+            if (!playerRosterRelations.TryGetValue(player.PlayerId, out RelationshipRecord pair)
+                || pair.Relation != Relation.Neutral) return false;
+            bool mine = pair.PlayerA == localPlayerId ? pair.FriendlyConsentA : pair.FriendlyConsentB;
+            bool theirs = pair.PlayerA == localPlayerId ? pair.FriendlyConsentB : pair.FriendlyConsentA;
+            return theirs && !mine;
+        }
+
         private void RefreshPlayerRoster()
         {
             if (playerRosterScroll == null || page != Page.World || Runtime == null) return;
@@ -135,16 +203,31 @@ namespace FreeWorldMultiplayer
                 if (playerRosterRows.Count != 0) ClearPlayerRoster();
                 playerRosterRelations.Clear();
                 playerRosterSessionId = null;
+                if (!Connected) playerRosterFilter = PlayerRosterFilter.All;
+                RefreshRosterFilterVisuals(false);
                 playerRosterEmpty.gameObject.SetActive(true);
                 SetTextIfChanged(playerRosterEmpty, Busy ? "连接状态处理中…" : "尚未连接联机世界。");
                 return;
             }
 
-            List<PlayerRecord> players = world.Players.Values
+            bool newSession = playerRosterSessionId != session.SessionId;
+            if (newSession) playerRosterFilter = PlayerRosterFilter.All;
+            playerRosterRelations.Clear();
+            foreach (RelationshipRecord relation in world.Relationships)
+            {
+                if (relation.PlayerA == session.LocalPlayerId && !String.IsNullOrEmpty(relation.PlayerB))
+                    playerRosterRelations[relation.PlayerB] = relation;
+                else if (relation.PlayerB == session.LocalPlayerId && !String.IsNullOrEmpty(relation.PlayerA))
+                    playerRosterRelations[relation.PlayerA] = relation;
+            }
+            List<PlayerRecord> allPlayers = world.Players.Values
                 .Where(p => p.PlayerId != session.LocalPlayerId)
                 .OrderBy(p => p.Nickname ?? String.Empty, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(p => p.PlayerId, StringComparer.Ordinal).ToList();
-            bool newSession = playerRosterSessionId != session.SessionId;
+            int onlineCount = allPlayers.Count(p => p.Online);
+            int pendingCount = allPlayers.Count(p => MatchesRosterFilterPending(p, session.LocalPlayerId));
+            List<PlayerRecord> players = allPlayers.Where(p =>
+                MatchesRosterFilter(p, session.LocalPlayerId)).ToList();
             bool rebuild = newSession || players.Count != playerRosterRows.Count;
             if (!rebuild)
                 for (int i = 0; i < players.Count; i++)
@@ -158,18 +241,21 @@ namespace FreeWorldMultiplayer
                 RebuildPlayerRoster(players, newSession);
             }
 
-            playerRosterRelations.Clear();
-            foreach (RelationshipRecord relation in world.Relationships)
-            {
-                if (relation.PlayerA == session.LocalPlayerId && !String.IsNullOrEmpty(relation.PlayerB))
-                    playerRosterRelations[relation.PlayerB] = relation;
-                else if (relation.PlayerB == session.LocalPlayerId && !String.IsNullOrEmpty(relation.PlayerA))
-                    playerRosterRelations[relation.PlayerA] = relation;
-            }
+            RefreshRosterFilterVisuals(true);
+            SetTextIfChanged(OfficialModUi.Caption(rosterAllFilter), "全部 " + allPlayers.Count);
+            SetTextIfChanged(OfficialModUi.Caption(rosterOnlineFilter), "在线 " + onlineCount);
+            SetTextIfChanged(OfficialModUi.Caption(rosterConsentFilter), "待我同意 " + pendingCount);
             playerRosterEmpty.gameObject.SetActive(players.Count == 0);
             if (players.Count == 0)
-                SetTextIfChanged(playerRosterEmpty, "暂无其他玩家。好友加入后会显示在这里。");
-            SetTextIfChanged(playerRosterHeading, "世界玩家（" + players.Count + "）· 点击选择");
+                SetTextIfChanged(playerRosterEmpty,
+                    playerRosterFilter == PlayerRosterFilter.Online ? "当前没有其他在线玩家。"
+                    : playerRosterFilter == PlayerRosterFilter.NeedsMyConsent ? "没有需要你确认的友好申请。"
+                    : "暂无其他玩家。好友加入后会显示在这里。");
+            bool targetHidden = !String.IsNullOrEmpty(selectedPlayer)
+                && players.All(p => p.PlayerId != selectedPlayer);
+            SetTextIfChanged(playerRosterHeading, "世界玩家（" + players.Count + "/" + allPlayers.Count + "）"
+                + (targetHidden ? " · 当前目标不在筛选内" : ""));
+            SetColorIfChanged(playerRosterHeading, targetHidden ? AccentColor : MutedColor);
             for (int i = 0; i < players.Count; i++)
             {
                 PlayerRecord player = players[i];

@@ -88,6 +88,7 @@ namespace FreeWorldMultiplayer
             InstallRoomDisclosure();
             InstallRelationVisual();
             InstallPlayerRoster();
+            InstallRelationRulesDisclosure();
 
             // The connection banner belongs to the header, not the navigation row:
             // the latter contains the cancel-connection button when a session is busy.
