@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -25,6 +26,9 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<Button, Color> disabledCaptions = new Dictionary<Button, Color>();
         private readonly List<InputBorder> inputBorders = new List<InputBorder>();
         private Button lastVisibleSaveSelection, lastVisiblePresetSelection;
+        private Button copyFeedbackButton;
+        private TMP_Text copyFeedbackCaption;
+        private string copiedFeedback;
         private GameObject connectionBadge;
         private TMP_Text connectionBadgeText, navigationHint;
         private Image connectionBadgeDot, feedbackDot;
@@ -51,7 +55,12 @@ namespace FreeWorldMultiplayer
             MultiplayerUi.Top((RectTransform)feedbackSurface.transform, 28, 726, 984, 70);
             feedbackSurface.transform.SetSiblingIndex(status.transform.GetSiblingIndex());
             feedbackDot = MakeDot(feedbackSurface.transform, "FWM.FeedbackDot", 18, 20, 8);
-            MultiplayerUi.Top(status.rectTransform, 52, 739, 944, 50);
+            MultiplayerUi.Top(status.rectTransform, 52, 739, 780, 50);
+            copyFeedbackButton = MultiplayerUi.CloneButton(ButtonTemplate, transform, "FWM.CopyFeedback",
+                "复制提示", CopyFeedback);
+            MultiplayerUi.Top((RectTransform)copyFeedbackButton.transform, 852, 741, 144, 43);
+            copyFeedbackCaption = OfficialModUi.Caption(copyFeedbackButton);
+            copyFeedbackCaption.fontSize = 16;
 
             // The connection banner belongs to the header, not the navigation row:
             // the latter contains the cancel-connection button when a session is busy.
@@ -88,6 +97,20 @@ namespace FreeWorldMultiplayer
         private static void SetColorIfChanged(Graphic graphic, Color color)
         {
             if (graphic != null && graphic.color != color) graphic.color = color;
+        }
+
+        private void CopyFeedback()
+        {
+            if (status == null || String.IsNullOrWhiteSpace(status.text)) return;
+            try
+            {
+                // Only copy the short text already presented to the player,
+                // never session internals, credentials or raw exception traces.
+                GUIUtility.systemCopyBuffer = status.text;
+                copiedFeedback = status.text;
+                SetTextIfChanged(copyFeedbackCaption, "已复制");
+            }
+            catch (Exception error) { if (Runtime != null) Runtime.ReportUiFailure(error); }
         }
 
         private static Image MakeDot(Transform parent, string name, float x, float y, float size)
@@ -155,6 +178,13 @@ namespace FreeWorldMultiplayer
                 || message.IndexOf("已连接", StringComparison.Ordinal) >= 0);
             SetColorIfChanged(feedbackDot, warning ? WarningColor : positive ? PositiveColor : AccentColor);
             SetColorIfChanged(status, warning ? WarningColor : BodyColor);
+            if (copyFeedbackButton != null)
+            {
+                copyFeedbackButton.interactable = !String.IsNullOrWhiteSpace(message);
+                SetTextIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable && message == copiedFeedback
+                    ? "已复制" : "复制提示");
+                SetColorIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable ? BodyColor : DisabledColor);
+            }
 
             // Direct launch cannot use Steam; make that clear before the click.
             if (Runtime.DirectLaunch)
@@ -171,8 +201,12 @@ namespace FreeWorldMultiplayer
             RefreshButtonAvailability();
             bool invalidFocusedInput;
             string inputHint = RefreshInputBorders(out invalidFocusedInput);
-            SetTextIfChanged(navigationHint, inputHint ?? FocusedListHint() ?? location);
-            SetColorIfChanged(navigationHint, invalidFocusedInput ? WarningColor : MutedColor);
+            bool needsAttention;
+            string formHint = FormGuidance(out needsAttention);
+            string listHint = inputHint == null ? FocusedListHint() : null;
+            SetTextIfChanged(navigationHint, inputHint ?? listHint ?? formHint ?? location);
+            SetColorIfChanged(navigationHint, invalidFocusedInput ||
+                (inputHint == null && listHint == null && needsAttention) ? WarningColor : MutedColor);
             RefreshRowHighlights();
 
             // Indicate the effective host clock setting, not just the buttons' last click.
@@ -230,6 +264,55 @@ namespace FreeWorldMultiplayer
             }
         }
 
+        private static bool InvalidNumberField(TMP_InputField field)
+        {
+            if (field == null || !NumericRange(field.name, out int min, out int max, out string label))
+                return false;
+            return !Int32.TryParse(field.text, out int value) || value < min || value > max;
+        }
+
+        private static bool InvalidSteamRoom(TMP_InputField field)
+        {
+            if (field == null || String.IsNullOrWhiteSpace(field.text)) return false;
+            // Steam lobby IDs are UInt64, unlike port and player-count fields.
+            return !UInt64.TryParse(field.text.Trim(), NumberStyles.None,
+                CultureInfo.InvariantCulture, out ulong roomId) || roomId == 0;
+        }
+
+        private string FormGuidance(out bool needsAttention)
+        {
+            needsAttention = false;
+            if (Busy) return "连接状态处理中…";
+            if (page == Page.Create)
+            {
+                if (continueWorldForm != null && continueWorldForm.activeInHierarchy)
+                {
+                    if (loadButton != null && loadButton.interactable) return "已选中 · 可以继续";
+                    needsAttention = true;
+                    return saveRows.Count == 0 ? "暂无联机存档" : "请选择可继续的存档";
+                }
+                if (SelectedPreset() == null) { needsAttention = true; return "先选择自定义世界配置"; }
+                if (worldName == null || String.IsNullOrWhiteSpace(worldName.text))
+                { needsAttention = true; return "请输入世界名称"; }
+                if (InvalidNumberField(maxPlayers) || InvalidNumberField(maxBases)
+                    || InvalidNumberField(startingEmployees) || InvalidNumberField(port))
+                { needsAttention = true; return "请检查红框中的设置"; }
+                return "配置完成 · 可以创建";
+            }
+            if (page == Page.Join)
+            {
+                if (InvalidNumberField(joinPort))
+                { needsAttention = true; return Runtime.DirectLaunch ? "请检查 IP 端口" : "IP 端口无效（不影响 Steam）"; }
+                if (!Runtime.DirectLaunch && InvalidSteamRoom(room))
+                { needsAttention = true; return "Steam 房间号无效（不影响 IP）"; }
+            }
+            if (page == Page.Settings && (InvalidNumberField(settingsEmployees)
+                || InvalidNumberField(settingsPlayers) || InvalidNumberField(settingsMaxBases)
+                || InvalidNumberField(settingsPort)))
+            { needsAttention = true; return "请检查红框中的设置"; }
+            return null;
+        }
+
         private string RefreshInputBorders(out bool invalidFocusedInput)
         {
             invalidFocusedInput = false;
@@ -238,7 +321,9 @@ namespace FreeWorldMultiplayer
             {
                 if (item.Field == null || item.Outline == null || !item.Field.gameObject.activeInHierarchy) continue;
                 bool hasRange = NumericRange(item.Field.name, out int min, out int max, out string label);
-                bool invalid = hasRange && (!Int32.TryParse(item.Field.text, out int value) || value < min || value > max);
+                bool steamField = item.Field == room && !Runtime.DirectLaunch;
+                bool invalid = (hasRange && InvalidNumberField(item.Field))
+                    || (steamField && InvalidSteamRoom(item.Field));
                 bool focused = item.Field.interactable && item.Field.isFocused;
                 // Invalid values remain visibly invalid even while the field has focus.
                 Color32 color = !item.Field.interactable ? new Color32(90, 109, 111, 48)
@@ -249,6 +334,11 @@ namespace FreeWorldMultiplayer
                 if (focused && hasRange)
                 {
                     focusedHint = invalid ? label + "须为 " + min + "～" + max : label + "范围 " + min + "～" + max;
+                    invalidFocusedInput = invalid;
+                }
+                else if (focused && steamField)
+                {
+                    focusedHint = invalid ? "Steam 房间号须为有效正整数" : "输入房主提供的 Steam 房间号";
                     invalidFocusedInput = invalid;
                 }
                 else if (focused) focusedHint = "Tab 下一个  ·  Shift+Tab 上一个";
