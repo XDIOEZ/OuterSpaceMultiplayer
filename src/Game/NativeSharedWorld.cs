@@ -40,6 +40,11 @@ namespace FreeWorldMultiplayer
             "exchangeSpace", "galaxyWeather", "stellarEvents", "eventTags" });
         private static readonly HashSet<string> SharedPlanetFields = new HashSet<string>(new[] {
             "lastActiveTime", "planetFacilityList", "planetRailFacilityList", "homeForceId", "exchangeSpace" });
+        // The allowlists do not change during a room. Sort once instead of allocating a
+        // new OrderBy result for every planet on every shared-world capture tick.
+        private static readonly string[] OrderedRootFields = SharedRootFields.OrderBy(s => s, StringComparer.Ordinal).ToArray();
+        private static readonly string[] OrderedGalaxyFields = SharedGalaxyFields.OrderBy(s => s, StringComparer.Ordinal).ToArray();
+        private static readonly string[] OrderedPlanetFields = SharedPlanetFields.OrderBy(s => s, StringComparer.Ordinal).ToArray();
         private readonly Dictionary<string, string> sharedFieldBaselines = new Dictionary<string, string>();
         private readonly HashSet<long> introducedMapIds = new HashSet<long>();
         private readonly HashSet<string> sharedBaselineRecipients = new HashSet<string>();
@@ -66,13 +71,13 @@ namespace FreeWorldMultiplayer
             // A new/reconnected participant starts from the current canonical fields, not from
             // whichever partial change set happened to be cached for existing participants.
             var baseline = new SharedWorldDelta { Revision = delta.Revision };
-            CaptureSharedFields(baseline, "world", "", World, SharedRootFields, true);
+            CaptureSharedFields(baseline, "world", "", World, OrderedRootFields, true);
             foreach (FWGalaxy galaxy in World.galaxyBlock.knownGalaxies.Where(g => g.id != FWGameData.MOTHERSHIP_GALAXY_ID))
             {
-                CaptureSharedFields(baseline, "galaxy", galaxy.id, galaxy, SharedGalaxyFields, true);
+                CaptureSharedFields(baseline, "galaxy", galaxy.id, galaxy, OrderedGalaxyFields, true);
                 foreach (FWStarInfo star in galaxy.stars)
                 {
-                    CaptureSharedFields(baseline, "planet", star.starId, star, SharedPlanetFields, true);
+                    CaptureSharedFields(baseline, "planet", star.starId, star, OrderedPlanetFields, true);
                     foreach (FWStarMapInfo map in star.starMapList) if (map != null) baseline.Maps.Add(CaptureDirectoryItem(map, galaxy.id, star.starId));
                 }
             }
@@ -88,13 +93,13 @@ namespace FreeWorldMultiplayer
             if (cachedSharedDelta != null && UnityEngine.Time.unscaledTimeAsDouble < nextSharedCapture) return cachedSharedDelta;
             nextSharedCapture = UnityEngine.Time.unscaledTimeAsDouble + 1;
             var delta = new SharedWorldDelta { Revision = ++sharedRevision };
-            CaptureSharedFields(delta, "world", "", World, SharedRootFields);
+            CaptureSharedFields(delta, "world", "", World, OrderedRootFields);
             foreach (FWGalaxy galaxy in World.galaxyBlock.knownGalaxies.Where(g => g.id != FWGameData.MOTHERSHIP_GALAXY_ID))
             {
-                CaptureSharedFields(delta, "galaxy", galaxy.id, galaxy, SharedGalaxyFields);
+                CaptureSharedFields(delta, "galaxy", galaxy.id, galaxy, OrderedGalaxyFields);
                 foreach (FWStarInfo star in galaxy.stars)
                 {
-                    CaptureSharedFields(delta, "planet", star.starId, star, SharedPlanetFields);
+                    CaptureSharedFields(delta, "planet", star.starId, star, OrderedPlanetFields);
                     foreach (FWStarMapInfo map in star.starMapList)
                     {
                         if (map == null || !introducedMapIds.Add(map.starMapId)) continue;
@@ -104,9 +109,9 @@ namespace FreeWorldMultiplayer
             }
             cachedSharedDelta = delta; return delta;
         }
-        private void CaptureSharedFields(SharedWorldDelta delta, string scope, string id, object source, HashSet<string> fields, bool force = false)
+        private void CaptureSharedFields(SharedWorldDelta delta, string scope, string id, object source, string[] fields, bool force = false)
         {
-            foreach (string fieldName in fields.OrderBy(s => s, StringComparer.Ordinal))
+            foreach (string fieldName in fields)
             {
                 FieldInfo field = NativeWire.Field(source.GetType(), fieldName);
                 object value = field.GetValue(source);
