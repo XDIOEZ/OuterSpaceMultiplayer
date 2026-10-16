@@ -92,21 +92,49 @@ namespace FreeWorldMultiplayer
         private void RebindTransitArrivalsToFleet(string playerId)
         {
             FWGameData data = Players[playerId];
+            // Build transit-only UID lookups lazily. Previously each fleet occupant
+            // scanned the player's entire hero/animal list on every galaxy frame.
+            ILookup<long, FWHeroBean> transitHeroes = null;
+            ILookup<long, FWAnimalBean> transitAnimals = null;
+            HashSet<long> reboundHeroes = null;
+            HashSet<long> reboundAnimals = null;
             foreach (FWFleet fleet in OwnedFleets(playerId))
             {
                 List<FWHeroBean> heroes = fleet.getHeros();
-                for (int i = 0; i < heroes.Count; i++)
+                if (heroes.Count != 0 && data.heros.Count != 0)
                 {
-                    FWHeroBean transit = data.heros.SingleOrDefault(h => h.getUID() == heroes[i].getUID() && h.starMapId < 0 && h.fleetUid < 0);
-                    if (transit == null) continue;
-                    NativeWire.Copy(heroes[i], transit); heroes[i] = transit; data.heros.Remove(transit);
+                    if (transitHeroes == null)
+                    {
+                        transitHeroes = data.heros.Where(h => h.starMapId < 0 && h.fleetUid < 0).ToLookup(h => h.getUID());
+                        reboundHeroes = new HashSet<long>();
+                    }
+                    for (int i = 0; i < heroes.Count; i++)
+                    {
+                        long uid = heroes[i].getUID();
+                        if (reboundHeroes.Contains(uid)) continue;
+                        FWHeroBean transit = transitHeroes[uid].SingleOrDefault();
+                        if (transit == null) continue;
+                        NativeWire.Copy(heroes[i], transit); heroes[i] = transit; data.heros.Remove(transit);
+                        reboundHeroes.Add(uid); // A second fleet must not reuse a consumed arrival.
+                    }
                 }
                 List<FWAnimalBean> animals = fleet.getAnimals();
-                for (int i = 0; i < animals.Count; i++)
+                if (animals.Count != 0 && data.animals.Count != 0)
                 {
-                    FWAnimalBean transit = data.animals.SingleOrDefault(a => a.getUID() == animals[i].getUID() && a.starMapId < 0 && a.fleetUid < 0);
-                    if (transit == null) continue;
-                    NativeWire.Copy(animals[i], transit); animals[i] = transit; data.animals.Remove(transit);
+                    if (transitAnimals == null)
+                    {
+                        transitAnimals = data.animals.Where(a => a.starMapId < 0 && a.fleetUid < 0).ToLookup(a => a.getUID());
+                        reboundAnimals = new HashSet<long>();
+                    }
+                    for (int i = 0; i < animals.Count; i++)
+                    {
+                        long uid = animals[i].getUID();
+                        if (reboundAnimals.Contains(uid)) continue;
+                        FWAnimalBean transit = transitAnimals[uid].SingleOrDefault();
+                        if (transit == null) continue;
+                        NativeWire.Copy(animals[i], transit); animals[i] = transit; data.animals.Remove(transit);
+                        reboundAnimals.Add(uid);
+                    }
                 }
             }
         }
