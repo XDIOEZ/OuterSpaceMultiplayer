@@ -29,32 +29,36 @@ namespace FreeWorldMultiplayer
             lock (gate)
             {
                 reservedBytes -= item.Data.Length;
-                return Enqueue(item);
+                return EnqueueLocked(item);
             }
         }
 
         public bool Enqueue(TransportEvent item)
         {
-            lock (gate)
+            lock (gate) return EnqueueLocked(item);
+        }
+
+        // Called only with gate held. A reserved frame must not re-enter the same
+        // monitor just to pass through the ordinary queue admission checks.
+        private bool EnqueueLocked(TransportEvent item)
+        {
+            if (item.Kind == TransportEventKind.Disconnected || item.Kind == TransportEventKind.Error)
             {
-                if (item.Kind == TransportEventKind.Disconnected || item.Kind == TransportEventKind.Error)
+                // Preserve FIFO: successfully received final checkpoints precede a later FIN.
+                // Reserve control slots beyond the normal queue limit so overflow is never silent.
+                if (terminalCount < 256) { events.Enqueue(item); terminalCount++; }
+                else if (!terminalOverflow)
                 {
-                    // Preserve FIFO: successfully received final checkpoints precede a later FIN.
-                    // Reserve control slots beyond the normal queue limit so overflow is never silent.
-                    if (terminalCount < 256) { events.Enqueue(item); terminalCount++; }
-                    else if (!terminalOverflow)
-                    {
-                        terminalOverflow = true;
-                        events.Enqueue(new TransportEvent { Kind = TransportEventKind.Error, Error = "传输层终止事件过多，必须结束房间。" }); terminalCount++;
-                    }
-                    return true;
+                    terminalOverflow = true;
+                    events.Enqueue(new TransportEvent { Kind = TransportEventKind.Error, Error = "传输层终止事件过多，必须结束房间。" }); terminalCount++;
                 }
-                long length = item.Data == null ? 0 : item.Data.Length;
-                if (events.Count >= 4096 || length > MaxMessageBytes || queuedBytes + reservedBytes + length > MaxQueuedBytes) return false;
-                events.Enqueue(item);
-                queuedBytes += length;
                 return true;
             }
+            long length = item.Data == null ? 0 : item.Data.Length;
+            if (events.Count >= 4096 || length > MaxMessageBytes || queuedBytes + reservedBytes + length > MaxQueuedBytes) return false;
+            events.Enqueue(item);
+            queuedBytes += length;
+            return true;
         }
 
         public bool TryDequeue(out TransportEvent item)
