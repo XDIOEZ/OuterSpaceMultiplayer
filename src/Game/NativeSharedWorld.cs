@@ -45,6 +45,11 @@ namespace FreeWorldMultiplayer
         private static readonly string[] OrderedRootFields = SharedRootFields.OrderBy(s => s, StringComparer.Ordinal).ToArray();
         private static readonly string[] OrderedGalaxyFields = SharedGalaxyFields.OrderBy(s => s, StringComparer.Ordinal).ToArray();
         private static readonly string[] OrderedPlanetFields = SharedPlanetFields.OrderBy(s => s, StringComparer.Ordinal).ToArray();
+        // Resolve native field metadata once for each runtime type and allowlist.
+        // World capture reads the same planet fields on every star each sync tick.
+        private readonly Dictionary<Type, FieldInfo[]> rootFieldInfoCache = new Dictionary<Type, FieldInfo[]>();
+        private readonly Dictionary<Type, FieldInfo[]> galaxyFieldInfoCache = new Dictionary<Type, FieldInfo[]>();
+        private readonly Dictionary<Type, FieldInfo[]> planetFieldInfoCache = new Dictionary<Type, FieldInfo[]>();
         private readonly Dictionary<string, string> sharedFieldBaselines = new Dictionary<string, string>();
         private readonly HashSet<long> introducedMapIds = new HashSet<long>();
         private readonly HashSet<string> sharedBaselineRecipients = new HashSet<string>();
@@ -111,10 +116,20 @@ namespace FreeWorldMultiplayer
         }
         private void CaptureSharedFields(SharedWorldDelta delta, string scope, string id, object source, string[] fields, bool force = false)
         {
-            foreach (string fieldName in fields)
+            Dictionary<Type, FieldInfo[]> cache = scope == "world" ? rootFieldInfoCache
+                : scope == "galaxy" ? galaxyFieldInfoCache : planetFieldInfoCache;
+            Type type = source.GetType();
+            FieldInfo[] fieldInfos;
+            if (!cache.TryGetValue(type, out fieldInfos))
             {
-                FieldInfo field = NativeWire.Field(source.GetType(), fieldName);
-                object value = field.GetValue(source);
+                fieldInfos = new FieldInfo[fields.Length];
+                for (int i = 0; i < fields.Length; i++) fieldInfos[i] = NativeWire.Field(type, fields[i]);
+                cache.Add(type, fieldInfos);
+            }
+            for (int i = 0; i < fields.Length; i++)
+            {
+                string fieldName = fields[i];
+                object value = fieldInfos[i].GetValue(source);
                 if (scope == "galaxy" && fieldName == "galaxyFleetList")
                     value = ((List<FWBaseBean>)value).Where(b => !(b is FWFleet) || Context.OwnerOfEntity(((FWFleet)b).getUID()) == null).ToList();
                 string encoded = NativeWire.Pack(value), key = scope + ":" + id + ":" + fieldName, previous;
