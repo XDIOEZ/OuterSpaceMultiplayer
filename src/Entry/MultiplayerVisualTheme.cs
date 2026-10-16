@@ -53,6 +53,15 @@ namespace FreeWorldMultiplayer
 
         private void InstallVisualTheme()
         {
+            InstallFeedbackControls();
+            InstallRoomControls();
+            InstallConnectionIndicator();
+            InstallInputFeedback();
+            gameObject.AddComponent<MultiplayerInputTabNavigation>().Owner = this;
+        }
+
+        private void InstallFeedbackControls()
+        {
             // A quiet footer separates actionable errors and save feedback from page content.
             GameObject feedbackSurface = MultiplayerUi.Node("FWM.FeedbackSurface", transform);
             feedbackSurfaceImage = feedbackSurface.AddComponent<Image>();
@@ -75,7 +84,10 @@ namespace FreeWorldMultiplayer
             MultiplayerUi.Top((RectTransform)copyFeedbackButton.transform, 852, 741, 144, 43);
             copyFeedbackCaption = OfficialModUi.Caption(copyFeedbackButton);
             copyFeedbackCaption.fontSize = 16;
+        }
 
+        private void InstallRoomControls()
+        {
             // Steam guests and hosts can share the real lobby ID directly.
             // In IP-only rooms there is no Steam ID to copy or fabricate.
             MultiplayerUi.Top(roomStatus.rectTransform, 0, 0, 984, 76);
@@ -89,7 +101,10 @@ namespace FreeWorldMultiplayer
             InstallRelationVisual();
             InstallPlayerRoster();
             InstallRelationRulesDisclosure();
+        }
 
+        private void InstallConnectionIndicator()
+        {
             // The connection banner belongs to the header, not the navigation row:
             // the latter contains the cancel-connection button when a session is busy.
             connectionBadge = MultiplayerUi.Node("FWM.ConnectionBadge", transform);
@@ -102,7 +117,10 @@ namespace FreeWorldMultiplayer
             connectionBadgeText.color = MutedColor;
             navigationHint = Label(transform, "NavigationHint", "", 15, 512, 84, 276, 34);
             navigationHint.alignment = TextAlignmentOptions.MidlineRight;
+        }
 
+        private void InstallInputFeedback()
+        {
             // Focus and invalid-value feedback apply only to cloned MOD inputs.
             foreach (TMP_InputField field in GetComponentsInChildren<TMP_InputField>(true))
             {
@@ -124,7 +142,6 @@ namespace FreeWorldMultiplayer
                     case "FWM.SaveSettings": saveSettingsButton = button; break;
                 }
             }
-            gameObject.AddComponent<MultiplayerInputTabNavigation>().Owner = this;
         }
 
         private static void SetTextIfChanged(TMP_Text label, string value)
