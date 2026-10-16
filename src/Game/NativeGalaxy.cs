@@ -126,6 +126,7 @@ namespace FreeWorldMultiplayer
                             if (handled) nativeMotionHandled.Add(fleet.getUID()); else nativeMotionHandled.Remove(fleet.getUID());
                             AirShipMoveBeanBase motion = view.getMoveBean();
                             if (motion != null) motion.logic();
+                            TickHostFleetMotionEvidence(view);
                         }
                     }
                 RefreshFleetVisibility();
@@ -262,12 +263,18 @@ namespace FreeWorldMultiplayer
                         {
                             GalaxyStar galaxy = GalaxyMapData.getInstance().getGalaxyStar(order.GalaxyId);
                             if (galaxy == null) throw new InvalidOperationException("Navigation target galaxy does not exist.");
+                            Vector3 originalPosition;
+                            string originalGalaxy;
+                            bool observeMotion = TryBeginFleetMotionEvidence(view, out originalPosition, out originalGalaxy);
                             FWGoalPos goal = String.IsNullOrEmpty(order.GoalJson) ? null : NativeWire.Unpack<FWGoalPos>(order.GoalJson);
                             bool accepted = order.Operation == "MoveUi"
                                 ? view.MoveTo_UIPos(galaxy, new Vector3(order.X, order.Y, 0), finish, order.LocalLogic)
                                 : view.MoveTo_Pos(galaxy, new Vector2(order.X, order.Y), finish, order.VoyageType, order.LocalLogic, goal,
                                     order.SuppressToast, order.AllowRestartDirectionChange, order.PreserveFollowingTarget);
                             if (!accepted) throw new InvalidOperationException("Original fleet rules rejected this voyage; no local client voyage was created.");
+                            if (observeMotion) ArmFleetMotionEvidence(command, originalPosition, originalGalaxy);
+                            else if (hostMotionEvidenceEnabled)
+                                FleetCommandTrace.Emit("host.motion", command.CommandId, command.EntityId, true, "observer-unavailable");
                         }
                         else if (order.Operation == "Stop") { view.FinishMove(); finish(true); }
                         else if (order.Operation == "CancelFollow") { view.cancelFollowingTargetMovement(); finish(true); }
@@ -293,6 +300,8 @@ namespace FreeWorldMultiplayer
                             GalaxyServicesLogic.Instance.servicesLogic_Fleet.FleetThroughStargate(view, target, null); finish(true);
                         }
                         else throw new InvalidOperationException("Unknown fleet navigation operation.");
+                        if (hostMotionEvidenceEnabled && order.Operation != "Move" && order.Operation != "MoveUi")
+                            ReportFleetMotionEvidence(hostMotionEvidence.Cancel(command.EntityId, "superseded-by-control"));
                     }
                     finally { Executing = previous; }
                 }
@@ -315,6 +324,7 @@ namespace FreeWorldMultiplayer
         }
         internal void DisposeGalaxy()
         {
+            ClearHostFleetMotionEvidence();
             foreach (AirShipLocalData cache in nativeGalaxyCaches.Values) cache.LogOut();
             nativeGalaxyCaches.Clear(); extraFleetViews.Clear(); fleetCallbacks.Clear(); completedFleetCommands.Clear();
         }

@@ -80,6 +80,7 @@ internal static class Program
             Queue();
             GroundCaptureChecks.Run(Check);
             RuntimeRevisionChecks.Run(Check);
+            FleetMotionChecks.Run(Check);
             MapCodecChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;

@@ -143,7 +143,14 @@ function Summarize-Diagnostics([object]$state) {
             $diagnosis = 'host-result-but-client-receipt-not-observed'
         }
         elseif ('host.result' -in $hostStages -and 'client.result' -in $guest) {
-            $diagnosis = 'command-acknowledged-motion-not-measured'
+            $motion = @($events | Where-Object { $_.Role -eq 'host' -and $_.Stage -eq 'host.motion' })
+            if (@($motion | Where-Object { $_.Outcome -eq 'position-changed' }).Count -gt 0) {
+                $diagnosis = 'command-acknowledged-host-position-changed'
+            }
+            elseif (@($motion | Where-Object { $_.Outcome -eq 'unchanged-after-120-host-ticks' }).Count -gt 0) {
+                $diagnosis = 'command-acknowledged-no-position-change-in-120-host-ticks'
+            }
+            else { $diagnosis = 'command-acknowledged-motion-not-measured' }
         }
         [pscustomobject]@{
             CommandId = $commandId
@@ -203,7 +210,13 @@ if ($SelfTest) {
         '[FreeWorldMultiplayer][fleet-command] stage=host.received command=cmdABC fleet=123 role=host outcome=queued',
         '[FreeWorldMultiplayer][fleet-command] stage=host.native.begin command=cmdABC fleet=123 role=host outcome=begin',
         '[FreeWorldMultiplayer][fleet-command] stage=host.native.end command=cmdABC fleet=123 role=host outcome=accepted',
-        '[FreeWorldMultiplayer][fleet-command] stage=host.result command=cmdABC fleet=123 role=host outcome=accepted'
+        '[FreeWorldMultiplayer][fleet-command] stage=host.result command=cmdABC fleet=123 role=host outcome=accepted',
+        '[FreeWorldMultiplayer][fleet-command] stage=host.motion.armed command=cmdABC fleet=123 role=host outcome=awaiting-host-tick',
+        '[FreeWorldMultiplayer][fleet-command] stage=host.motion command=cmdABC fleet=123 role=host outcome=position-changed',
+        '[FreeWorldMultiplayer][fleet-command] stage=host.received command=cmdStill fleet=444 role=host outcome=queued',
+        '[FreeWorldMultiplayer][fleet-command] stage=host.native.end command=cmdStill fleet=444 role=host outcome=accepted',
+        '[FreeWorldMultiplayer][fleet-command] stage=host.result command=cmdStill fleet=444 role=host outcome=accepted',
+        '[FreeWorldMultiplayer][fleet-command] stage=host.motion command=cmdStill fleet=444 role=host outcome=unchanged-after-120-host-ticks'
     ) 'host'
     Read-DiagnosticLines $state @(
         'ModVersion: V1.19',
@@ -211,6 +224,8 @@ if ($SelfTest) {
         ('SourceRevision: ' + $testRevision),
         '[FreeWorldMultiplayer][fleet-command] stage=client.sent command=cmdABC fleet=123 role=guest outcome=queued',
         '[FreeWorldMultiplayer][fleet-command] stage=client.result command=cmdABC fleet=123 role=guest outcome=accepted',
+        '[FreeWorldMultiplayer][fleet-command] stage=client.sent command=cmdStill fleet=444 role=guest outcome=queued',
+        '[FreeWorldMultiplayer][fleet-command] stage=client.result command=cmdStill fleet=444 role=guest outcome=accepted',
         '[FreeWorldMultiplayer][slow-operation] stage=transport.handle ms=6943.3 bytes=20955155 map=-1 role=guest',
         '[FreeWorldMultiplayer][profile] stage=map.cache.apply windowSeconds=30.0 count=8 p50UpperMs=16.00 p95UpperMs=50.00 p99UpperMs=100.00 maxMs=81.25',
         '[FreeWorldMultiplayer][profile] stage=ground.capture.tiles windowSeconds=30.0 count=5 p50UpperMs=4.00 p95UpperMs=16.00 p99UpperMs=16.00 maxMs=14.5',
@@ -218,8 +233,11 @@ if ($SelfTest) {
     ) 'guest'
     Assert-PairedHeaders $state
     $summary = Summarize-Diagnostics $state
-    if ($summary.FleetCommandsSeen -ne 1 -or
-        $summary.FleetCommands[0].Outcome -ne 'command-acknowledged-motion-not-measured' -or
+    if ($summary.FleetCommandsSeen -ne 2 -or
+        @($summary.FleetCommands | Where-Object { $_.CommandId -eq 'cmdABC' -and
+            $_.Outcome -eq 'command-acknowledged-host-position-changed' }).Count -ne 1 -or
+        @($summary.FleetCommands | Where-Object { $_.CommandId -eq 'cmdStill' -and
+            $_.Outcome -eq 'command-acknowledged-no-position-change-in-120-host-ticks' }).Count -ne 1 -or
         $summary.SlowOperationGroups[0].MaxSlowMs -ne 6943.3 -or
         $summary.ProfileWindows[0].P95UpperMs -ne 50 -or
         $summary.ProfileWindows[1].Stage -ne 'ground.capture.tiles' -or
