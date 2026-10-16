@@ -87,6 +87,7 @@ namespace FreeWorldMultiplayer
             copyRoomButton.gameObject.SetActive(false);
             InstallRoomDisclosure();
             InstallRelationVisual();
+            InstallPlayerRoster();
 
             // The connection banner belongs to the header, not the navigation row:
             // the latter contains the cancel-connection button when a session is busy.
@@ -198,6 +199,9 @@ namespace FreeWorldMultiplayer
         private void SetSelectedVisual(Button button, bool selected)
         {
             if (button == null) return;
+            // Large scroll lists can contain dozens of unselected buttons.
+            // Create the decorative underline only after a row is selected.
+            if (!selected && !selectionLines.ContainsKey(button)) return;
             Image line;
             if (!selectionLines.TryGetValue(button, out line) || line == null)
             {
@@ -212,7 +216,7 @@ namespace FreeWorldMultiplayer
                 rect.offsetMax = new Vector2(-14, 4);
                 selectionLines[button] = line;
             }
-            line.enabled = selected;
+            if (line.enabled != selected) line.enabled = selected;
         }
 
         private void StyleActionButton(Button button, string name)
@@ -301,6 +305,7 @@ namespace FreeWorldMultiplayer
             RefreshRoomDisclosure(connected, roomId);
             RefreshSubmitAvailability();
             RefreshRelationVisual();
+            RefreshPlayerRoster();
             RefreshButtonAvailability();
             bool invalidFocusedInput;
             string inputHint = RefreshInputBorders(out invalidFocusedInput);
@@ -339,7 +344,8 @@ namespace FreeWorldMultiplayer
             foreach (KeyValuePair<Button, TMP_Text> entry in captions)
             {
                 Button button = entry.Key;
-                if (button == null || entry.Value == null || button.name == "FWM.CustomWorldPreset" || button.name == "FWM.SavedWorld") continue;
+                if (button == null || entry.Value == null || button.name == "FWM.CustomWorldPreset" ||
+                    button.name == "FWM.SavedWorld" || button.name == "FWM.PlayerRosterRow") continue;
                 if (!button.interactable)
                 {
                     if (!disabledCaptions.ContainsKey(button)) disabledCaptions.Add(button, entry.Value.color);
@@ -558,10 +564,12 @@ namespace FreeWorldMultiplayer
 
         private string FocusedListHint()
         {
-            if (page != Page.Create) return null;
             GameObject selected = EventSystem.current == null ? null : EventSystem.current.currentSelectedGameObject;
             Button button = selected == null ? null : selected.GetComponentInParent<Button>();
             if (button == null || !button.interactable) return null;
+            if (page == Page.World)
+                return IsRosterButton(button) ? "↑↓ 选择玩家  ·  Home/End 首尾" : null;
+            if (page != Page.Create) return null;
             bool saves = continueWorldForm != null && continueWorldForm.activeInHierarchy;
             if (saves)
             {
@@ -578,6 +586,7 @@ namespace FreeWorldMultiplayer
 
         internal bool NavigateWorldList(Button current, KeyCode key)
         {
+            if (page == Page.World) return NavigatePlayerRoster(current, key);
             if (page != Page.Create || Busy || Connected || current == null) return false;
             bool saves = continueWorldForm != null && continueWorldForm.activeInHierarchy;
             ScrollRect scroll = saves ? saveScroll : presetScroll;
