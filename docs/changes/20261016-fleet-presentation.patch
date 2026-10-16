@@ -1,0 +1,158 @@
+# Fleet presentation V1.18 - task-only changes to pre-existing mixed source files.
+# Apply against the preserved pre-task working-tree baseline, not clean HEAD.
+# New NativeFleetHeading.cs and NativeFleetNameplates.cs are committed as source.
+# Existing untracked files and unrelated modifications remain unstaged.
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f384cac..5c4c259 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,13 @@
+ 
+ 发布号与需求文档的 V1、游戏匹配目录 `v_common`、网络协议号及存档结构版本分别维护，不互相替代。
+ 
++## V1.18 · 2026-10-16
++
++- 修正远端玩家舰队的朝向重复叠加：根节点保持星系坐标，舰船外观只应用一次权威角度；NPC 副本也沿原生舰船外观层应用朝向。
++- 后台航行使用已有原生航段的当前角度，与活跃惯性运动的实际角度统一后供房主显示和网络采样读取，避免位置推进而朝向停留在旧保存值；读取过程不初始化航段或推进模拟。
++- 为联机星系中的玩家舰队增加常驻上方名牌，显示玩家昵称与舰队名称，复用原生中文字体及 HUD 样式；NPC 优先沿用原生身份 HUD，避免重复名牌。
++- 标签跟随屏幕中的舰队位置，保持文字正向且不拦截点击；切换星系、舰队移除及退出联机时清理。协议仍为 6、存档结构仍为 1；游戏内朝向与名牌效果由用户验收。
++
+ ## V1.17 · 2026-10-16
+ 
+ - 针对用户补充的“客人整个客户端短暂停顿”，削减个人状态的主线程序列化：未变化的库存、任务、科技等字段复用已编码值，接收增量后仅确认实际变化字段，不再因一项变化重建全部个人基准。
+diff --git a/README.md b/README.md
+index beea8b4..d079471 100644
+--- a/README.md
++++ b/README.md
+@@ -6,7 +6,7 @@
+ 
+ 发布号以根目录 [VERSION](VERSION) 为唯一来源，发布内容见 [CHANGELOG.md](CHANGELOG.md)。每完成一个独立小 BUG，第二段整数递增一次：`1.9` 之后是 `1.10`；同一修复的重新构建和三端同步不重复升版。需求名称“V1”、游戏匹配目录 `v_common`、网络协议号和存档结构版本保持各自含义。
+ 
+-V1.17 使用网络协议 6，存档结构版本仍为 1；房主和客人建议一起更新 MOD。本轮继续针对客人整个客户端短暂停顿，复用未变化的个人字段编码，消除地图事务跨层重复解码，并避免纯世界时钟变化引发全体实体索引失效。完整预检与资产事务仍保持原子顺序，未写入失败与已开始写入失败分别处理。保留 V1.16 的人物显示插值、按帧预算处理积压消息、控制指令及轻量回执修复，以及 V1.15 的入图屏障、SEED 地形和本地缓存。构建和安装状态以包内 BUILD-INFO 及同步回执为准；游戏内效果由用户验收。
++V1.18 使用网络协议 6，存档结构版本仍为 1；房主和客人建议一起更新 MOD。本轮修正远端玩家舰队的重复旋转及 NPC 副本的朝向应用，并为玩家舰队增加跟随其屏幕位置的常驻上方名牌，显示玩家昵称与舰队名称；NPC 复用原生身份 HUD。保留 V1.17 的个人字段缓存、地图事务解码复用与索引优化，以及 V1.16 的显示插值和 V1.15 的入图屏障、SEED 地形及本地缓存。构建和安装状态以包内 BUILD-INFO 及同步回执为准；游戏内效果由用户验收。
+ 
+ 地块缓存保存于 `%LOCALAPPDATA%\CatStudio\FreeWorldMultiplayer\map-cache-v1`，按渠道和实际运行目录隔离，世界与地块另有独立清单；退出游戏后保留，不绑定具体游戏小版本。默认最多 512 MiB、8192 个内容块和 64 个地图清单，按使用情况清理旧内容。再次入图先对照房主当前内容，只接收缺失或变化的块；校验通过后等待本次原生地图及其他玩家角色投影就绪，再按顺序应用后续变化。缺失、损坏或不兼容时重新获取，缓存不代替完整存档。流程见 [地块同步与本地缓存](docs/地块同步与本地缓存.svg)。
+ 
+diff --git a/VERSION b/VERSION
+index b48f322..adc97d8 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.17
++1.18
+diff --git a/src/Game/GameHooks.cs b/src/Game/GameHooks.cs
+index 7cbc58a..2b596cb 100644
+--- a/src/Game/GameHooks.cs
++++ b/src/Game/GameHooks.cs
+@@ -86,6 +86,7 @@ namespace FreeWorldMultiplayer
+             Patch(harmony, typeof(GalaxyPlayerFleet), "MoveBeanLogic", "FleetPresentationPrefix");
+             NativeCommands.Install(harmony);
+             NativeGalaxyHooks.Install(harmony);
++            NativeFleetNameplates.Install(harmony);
+             NativeSceneRouter.Install(harmony);
+             NativeTravelHooks.Install(harmony);
+             NativeTransferHooks.Install(harmony);
+diff --git a/src/Game/NativeFleetSynchronization.cs b/src/Game/NativeFleetSynchronization.cs
+index e3f997c..391b416 100644
+--- a/src/Game/NativeFleetSynchronization.cs
++++ b/src/Game/NativeFleetSynchronization.cs
+@@ -132,7 +132,7 @@ namespace FreeWorldMultiplayer
+                     sample.PlayerId = player.Key; sample.Kind = fleet is FWCaravanFleet ? 1 : 0;
+                     sample.Primary = ReferenceEquals(fleet, player.Value.galaxyBlock.playerFleet);
+                     if (fleet.pos == null) throw new InvalidOperationException("Owned fleet has no physical position: " + uid);
+-                    Vector3 position; string galaxy;
++                    Vector3 position; string galaxy; float heading;
+                     using (EnterPlayer(player.Key))
+                     {
+                         foreach (FieldInfo field in FleetFields(fleet.GetType()))
+@@ -143,10 +143,10 @@ namespace FreeWorldMultiplayer
+                             if (previous == null || previous.Encoded != value.Encoded) MarkRemoteFleetContentChanged(uid);
+                         }
+                         AirShipFleetInfoBean view = FleetView(player.Key, fleet);
+-                        position = nativeFleetPosition(view); galaxy = view.getCurGalaxyId();
++                        position = nativeFleetPosition(view); galaxy = view.getCurGalaxyId(); heading = NativeFleetHeading(view);
+                     }
+                     sample.Pose = new FleetPose { PlayerId = player.Key, FleetId = uid, GalaxyId = galaxy,
+-                        X = position.x, Y = position.y, Angle = (float)fleet.pos.angle, Status = fleet.status, WorldTimeMM = WorldTimeMM };
++                        X = position.x, Y = position.y, Angle = heading, Status = fleet.status, WorldTimeMM = WorldTimeMM };
+                 }
+                 sampledTransit.Add(CaptureCachedTransit(player.Key));
+             }
+diff --git a/src/Game/NativeGalaxy.cs b/src/Game/NativeGalaxy.cs
+index 6b213de..c5db269 100644
+--- a/src/Game/NativeGalaxy.cs
++++ b/src/Game/NativeGalaxy.cs
+@@ -321,7 +321,7 @@ namespace FreeWorldMultiplayer
+             projection.setVisible(visible);
+             if (!visible) return;
+             Vector3 position = nativeFleetPosition(projection.fleetbean);
+-            float angle = (float)fleet.pos.angle;
++            float angle = NativeFleetHeading(projection.fleetbean);
+             Vector3 replicated; float replicatedAngle;
+             if (!Context.IsHost && TryGetSynchronizedFleetPose(fleet.getUID(), out replicated, out replicatedAngle)) { position = replicated; angle = replicatedAngle; }
+             projection.transform.localPosition = position; // Presentation only; never advance or write the voyage.
+diff --git a/src/Game/NativeNpcProjection.cs b/src/Game/NativeNpcProjection.cs
+index eb80867..5f6c0ee 100644
+--- a/src/Game/NativeNpcProjection.cs
++++ b/src/Game/NativeNpcProjection.cs
+@@ -85,7 +85,10 @@ namespace FreeWorldMultiplayer
+                     boundNpcViews[projection] = canonical;
+                 }
+                 projection.transform.localPosition = new Vector3(canonical.pos.gx, canonical.pos.gy, 0);
+-                projection.transform.localRotation = Quaternion.Euler(0, 0, (float)canonical.pos.angle);
++                // NPCs share the native ship-only rotation path with player fleets.
++                projection.transform.localRotation = Quaternion.identity;
++                GalaxyFleetVisual visual = projection.GetComponent<GalaxyFleetVisual>();
++                if (visual != null) visual.SetRotation((float)canonical.pos.angle);
+                 if (!projection.gameObject.activeSelf) projection.gameObject.SetActive(true);
+             }
+             if (!indexChanged) return;
+diff --git a/src/Game/NativeRemoteFleetProxy.cs b/src/Game/NativeRemoteFleetProxy.cs
+index cd6c8e6..1e52bc0 100644
+--- a/src/Game/NativeRemoteFleetProxy.cs
++++ b/src/Game/NativeRemoteFleetProxy.cs
+@@ -105,7 +105,7 @@ namespace FreeWorldMultiplayer
+                             proxy.Visual.InitWidget();
+                             if (fleet.pos == null) throw new InvalidOperationException("Player fleet proxy has no physical position: " + uid);
+                             proxy.transform.localPosition = new Vector3(fleet.pos.gx, fleet.pos.gy, 0);
+-                            proxy.transform.localRotation = Quaternion.Euler(0, 0, (float)fleet.pos.angle);
++                            proxy.transform.localRotation = Quaternion.identity;
+                             remoteFleetProxies[uid] = proxy;
+                         }
+                         catch
+@@ -165,10 +165,15 @@ namespace FreeWorldMultiplayer
+                 proxy.ContentDirty = false;
+             }
+             if (proxy.Build != null && !proxy.Build.MoveNext()) { proxy.Build.Dispose(); proxy.Build = null; }
++            float heading = (float)fleet.pos.angle;
+             if (Context.IsHost)
+             {
+-                using (EnterPlayer(proxy.PlayerId)) proxy.transform.localPosition = nativeFleetPosition(FleetView(proxy.PlayerId, fleet));
+-                proxy.transform.localRotation = Quaternion.Euler(0, 0, (float)fleet.pos.angle);
++                using (EnterPlayer(proxy.PlayerId))
++                {
++                    AirShipFleetInfoBean view = FleetView(proxy.PlayerId, fleet);
++                    proxy.transform.localPosition = nativeFleetPosition(view);
++                    heading = NativeFleetHeading(view);
++                }
+             }
+             else
+             {
+@@ -176,11 +181,14 @@ namespace FreeWorldMultiplayer
+                 if (TryGetSynchronizedFleetPose(proxy.FleetUid, out position, out angle))
+                 {
+                     proxy.transform.localPosition = position;
+-                    proxy.transform.localRotation = Quaternion.Euler(0, 0, angle);
++                    heading = angle;
+                 }
+             }
++            // Native SetRotation turns each ship under VisualRoot. Rotating this
++            // scene root too would apply the same heading twice and turn the formation.
++            proxy.transform.localRotation = Quaternion.identity;
+             proxy.Visual.ApplyPresentation(new GalaxyFleetVisual.PresentationState {
+-                Angle = proxy.transform.localEulerAngles.z,
++                Angle = heading,
+                 InBattle = Context.IsPlayerFleetBattleLocked != null && Context.IsPlayerFleetBattleLocked(proxy.FleetUid) });
+         }
+         private void RemoveRemoteFleetProxy(long uid)
