@@ -46,16 +46,34 @@ namespace FreeWorldMultiplayer
         }
         internal void ValidateNativeLandings(long mapId, List<NativeLanding> landings)
         {
-            if (landings == null || landings.Select(l => l.ExpeditionUid).Distinct().Count() != landings.Count)
+            if (landings == null || landings.Any(l => l == null) || landings.Select(l => l.ExpeditionUid).Distinct().Count() != landings.Count)
                 throw new InvalidOperationException("Duplicate native landing checkpoint.");
             foreach (NativeLanding landing in landings)
             {
                 if (landing.MapId != mapId || !Players.ContainsKey(landing.PlayerId)) throw new InvalidOperationException("Unknown native landing owner/map.");
                 FWExpedition expedition = NativeWire.Unpack<FWExpedition>(landing.Expedition);
-                if (expedition.getUID() != landing.ExpeditionUid || expedition.endStarMapId != mapId)
+                if (expedition == null || expedition.getUID() != landing.ExpeditionUid || expedition.endStarMapId != mapId)
                     throw new InvalidOperationException("Native landing payload identity mismatch.");
-                foreach (string hero in landing.Heroes) NativeWire.Unpack<FWHeroBean>(hero);
-                foreach (string animal in landing.Animals) NativeWire.Unpack<FWAnimalBean>(animal);
+                if (landing.Complete) continue; // Completed landings do not restore passenger payloads.
+                if (landing.Heroes == null || landing.Animals == null || expedition.roleUidList == null || expedition.animalUidList == null)
+                    throw new InvalidOperationException("Native landing passenger manifest is missing.");
+                var heroes = new HashSet<long>();
+                foreach (string encoded in landing.Heroes)
+                {
+                    FWHeroBean hero = NativeWire.Unpack<FWHeroBean>(encoded);
+                    if (hero == null || !heroes.Add(hero.getUID()) || Context.OwnerOfEntity(hero.getUID()) != landing.PlayerId)
+                        throw new InvalidOperationException("Native landing hero is duplicated or belongs to another player.");
+                }
+                var animals = new HashSet<long>();
+                foreach (string encoded in landing.Animals)
+                {
+                    FWAnimalBean animal = NativeWire.Unpack<FWAnimalBean>(encoded);
+                    if (animal == null || !animals.Add(animal.getUID()) || Context.OwnerOfEntity(animal.getUID()) != landing.PlayerId)
+                        throw new InvalidOperationException("Native landing animal is duplicated or belongs to another player.");
+                }
+                if (heroes.Count != expedition.roleUidList.Count || !heroes.SetEquals(expedition.roleUidList)
+                    || animals.Count != expedition.animalUidList.Count || !animals.SetEquals(expedition.animalUidList))
+                    throw new InvalidOperationException("Native landing passengers differ from the canonical expedition manifest.");
             }
         }
         internal void RestoreNativeLandings(long mapId, List<NativeLanding> landings)
