@@ -36,6 +36,9 @@ internal static class Program
         Check(window.UpperPercentile(50) == 2, "nearest-rank p50 upper bound");
         Check(window.UpperPercentile(95) == 500, "nearest-rank p95 upper bound");
         Check(window.UpperPercentile(99) == 500 && window.MaxMs == 500, "tail bound");
+        Check(PerformanceWindow.HistogramSchemaVersion == 1, "stable histogram schema identifier");
+        Check(window.ExportBinCounts() == "1,1,0,1,0,0,0,1,0,0,0,1,0,0",
+            "exported 14 fixed buckets preserve all five actual samples");
         bool invalidValue = false;
         try { window.Record(Double.NaN, 0); } catch (ArgumentOutOfRangeException) { invalidValue = true; }
         Check(invalidValue && window.Samples == 5, "invalid sample rejected without recording");
@@ -44,6 +47,14 @@ internal static class Program
         Check(invalidPercentile, "invalid percentile rejected");
         window.Clear();
         Check(window.Samples == 0 && window.TotalBytes == 0 && window.MaxMs == 0, "reset");
+        Check(window.ExportBinCounts() == "0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+            "cleared histogram does not leak prior window samples");
+        window.Record(1200, -1);
+        window.Record(2100, -1);
+        Check(window.ExportBinCounts() == "0,0,0,0,0,0,0,0,0,0,0,0,0,2",
+            "overflow bucket records >1000ms samples without losing counts");
+        Check(window.UpperPercentile(95) == 2100,
+            "overflow percentile is bounded by observed max, not invented bucket size");
     }
 
     private static void Queue()

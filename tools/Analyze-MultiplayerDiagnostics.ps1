@@ -72,6 +72,17 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines, [string]$sourceS
         $match = [regex]::Match($line,
             '\[FreeWorldMultiplayer\]\[profile\]\s+stage=([a-z0-9.]+)\s+windowSeconds=([\d.]+)\s+count=(\d+)\s+p50UpperMs=([\d.]+)\s+p95UpperMs=([\d.]+)\s+p99UpperMs=([\d.]+)\s+maxMs=([\d.]+)')
         if ($match.Success -and $state.Profile.Count -lt 10000) {
+            $histogram = [regex]::Match($line, '(?:^|\s)histV=(\d+)\s+bins=(\d+(?:,\d+)*)(?:\s|$)')
+            $bucketCounts = @()
+            $histogramVersion = 0
+            if ($histogram.Success) {
+                $histogramVersion = [int]$histogram.Groups[1].Value
+                # Preserve each of the fourteen bucket counts as integer data.
+                # Missing/old/malformed metadata is never reconstructed from P95.
+                foreach ($value in $histogram.Groups[2].Value.Split(',')) {
+                    $bucketCounts += [long]::Parse($value, [Globalization.CultureInfo]::InvariantCulture)
+                }
+            }
             $state.Profile.Add([pscustomobject]@{
                 Stage = $match.Groups[1].Value
                 LogSide = $sourceSide
@@ -81,6 +92,8 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines, [string]$sourceS
                 P95UpperMs = [double]::Parse($match.Groups[5].Value, [Globalization.CultureInfo]::InvariantCulture)
                 P99UpperMs = [double]::Parse($match.Groups[6].Value, [Globalization.CultureInfo]::InvariantCulture)
                 MaxMs = [double]::Parse($match.Groups[7].Value, [Globalization.CultureInfo]::InvariantCulture)
+                HistogramSchema = $histogramVersion
+                HistogramBuckets = @($bucketCounts)
             })
             continue
         }
@@ -194,6 +207,9 @@ function Summarize-Diagnostics([object]$state) {
             if (-not $verifiedRevision) { 'No matching loaded DLL SourceRevision in both diagnostic headers: runtime source identity unverified.' }
             if ($commands.Count -eq 0) { 'No correlated fleet-command evidence: cannot diagnose movement.' }
             if ($state.Profile.Count -eq 0) { 'No opt-in profile windows: cannot calculate a gameplay P95.' }
+            elseif (@($state.Profile | Where-Object { $_.HistogramSchema -ne 1 -or @($_.HistogramBuckets).Count -ne 14 }).Count -gt 0) {
+                'Some profile windows have no mergeable 14-bucket histogram; cannot pool their P95 across runs.'
+            }
             if ($state.GroundCounts.Count -eq 0) { 'No 2D ground-counts data: scan/change hot spots unverified.' }
         )
         Interpretation = 'Slow-operation records include only throttled >=50 ms events; they cannot yield an overall P95. Profile values are histogram bucket upper bounds; ground counts distinguish scanned from changed entities, 2D poses and tiles, not network bytes. A command ACK is not proof of physical fleet motion.'
@@ -227,8 +243,8 @@ if ($SelfTest) {
         '[FreeWorldMultiplayer][fleet-command] stage=client.sent command=cmdStill fleet=444 role=guest outcome=queued',
         '[FreeWorldMultiplayer][fleet-command] stage=client.result command=cmdStill fleet=444 role=guest outcome=accepted',
         '[FreeWorldMultiplayer][slow-operation] stage=transport.handle ms=6943.3 bytes=20955155 map=-1 role=guest',
-        '[FreeWorldMultiplayer][profile] stage=map.cache.apply windowSeconds=30.0 count=8 p50UpperMs=16.00 p95UpperMs=50.00 p99UpperMs=100.00 maxMs=81.25',
-        '[FreeWorldMultiplayer][profile] stage=ground.capture.tiles windowSeconds=30.0 count=5 p50UpperMs=4.00 p95UpperMs=16.00 p99UpperMs=16.00 maxMs=14.5',
+        '[FreeWorldMultiplayer][profile] stage=map.cache.apply windowSeconds=30.0 count=8 p50UpperMs=16.00 p95UpperMs=100.00 p99UpperMs=100.00 maxMs=81.25 histV=1 bins=0,1,0,0,0,1,2,2,1,1,0,0,0,0',
+        '[FreeWorldMultiplayer][profile] stage=ground.capture.tiles windowSeconds=30.0 count=5 p50UpperMs=4.00 p95UpperMs=16.00 p99UpperMs=16.00 maxMs=14.5 histV=1 bins=1,0,0,1,1,1,1,0,0,0,0,0,0,0',
         '[FreeWorldMultiplayer][ground-counts] captures=5 entitiesScanned=500 entityChanges=2 fieldsScanned=100 tilesScanned=327680 tileChanges=3 posesSampled=40 poseChanges=7'
     ) 'guest'
     Assert-PairedHeaders $state
@@ -239,7 +255,10 @@ if ($SelfTest) {
         @($summary.FleetCommands | Where-Object { $_.CommandId -eq 'cmdStill' -and
             $_.Outcome -eq 'command-acknowledged-no-position-change-in-120-host-ticks' }).Count -ne 1 -or
         $summary.SlowOperationGroups[0].MaxSlowMs -ne 6943.3 -or
-        $summary.ProfileWindows[0].P95UpperMs -ne 50 -or
+        $summary.ProfileWindows[0].P95UpperMs -ne 100 -or
+        $summary.ProfileWindows[0].HistogramSchema -ne 1 -or
+        @($summary.ProfileWindows[0].HistogramBuckets).Count -ne 14 -or
+        (@($summary.ProfileWindows[0].HistogramBuckets) | Measure-Object -Sum).Sum -ne 8 -or
         $summary.ProfileWindows[1].Stage -ne 'ground.capture.tiles' -or
         $summary.GroundCaptureWindows.Count -ne 1 -or
         $summary.GroundCaptureWindows[0].TilesScanned -ne 327680 -or

@@ -91,7 +91,9 @@ namespace FreeWorldMultiplayer
                         + " p99UpperMs=" + metric.UpperPercentile(99).ToString("F2", CultureInfo.InvariantCulture)
                         + " maxMs=" + metric.MaxMs.ToString("F2", CultureInfo.InvariantCulture)
                         + " totalBytes=" + metric.TotalBytes + " maxBytes=" + metric.MaxBytes
-                        + " role=" + (IsHost ? "host" : "guest"));
+                        + " role=" + (IsHost ? "host" : "guest")
+                        + " histV=" + PerformanceWindow.HistogramSchemaVersion
+                        + " bins=" + metric.ExportBinCounts());
                 }
                 Logger.LogEngine("[FreeWorldMultiplayer][profile] stage=inbound.rounds"
                     + " windowSeconds=" + secondsInWindow.ToString("F1", CultureInfo.InvariantCulture)

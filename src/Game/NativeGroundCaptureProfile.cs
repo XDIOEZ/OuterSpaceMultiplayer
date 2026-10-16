@@ -55,7 +55,9 @@ namespace FreeWorldMultiplayer
                         + " p50UpperMs=" + window.UpperPercentile(50).ToString("F2", CultureInfo.InvariantCulture)
                         + " p95UpperMs=" + window.UpperPercentile(95).ToString("F2", CultureInfo.InvariantCulture)
                         + " p99UpperMs=" + window.UpperPercentile(99).ToString("F2", CultureInfo.InvariantCulture)
-                        + " maxMs=" + window.MaxMs.ToString("F2", CultureInfo.InvariantCulture));
+                        + " maxMs=" + window.MaxMs.ToString("F2", CultureInfo.InvariantCulture)
+                        + " histV=" + PerformanceWindow.HistogramSchemaVersion
+                        + " bins=" + window.ExportBinCounts());
                 }
                 Logger.LogEngine("[FreeWorldMultiplayer][ground-counts] captures=" + groundProfile.Captures
                     + " entitiesScanned=" + groundProfile.ScannedEntities

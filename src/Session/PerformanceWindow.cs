@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.Text;
 
 namespace FreeWorldMultiplayer
 {
@@ -6,6 +8,9 @@ namespace FreeWorldMultiplayer
     // bucket bounds, not raw samples or frame-time benchmark claims.
     internal sealed class PerformanceWindow
     {
+        // Version 1 has thirteen finite upper bounds and one >1000ms overflow
+        // bucket. Changing the bounds/order requires a new schema version.
+        internal const int HistogramSchemaVersion = 1;
         private static readonly double[] BoundsMs =
             { 0.25, 0.5, 1, 2, 4, 8, 16, 33, 50, 100, 250, 500, 1000 };
         private readonly long[] counts = new long[BoundsMs.Length + 1];
@@ -42,6 +47,20 @@ namespace FreeWorldMultiplayer
                 if (seen >= atLeast) return i < BoundsMs.Length ? BoundsMs[i] : MaxMs;
             }
             throw new InvalidOperationException("Performance histogram is inconsistent.");
+        }
+
+        // Called only from explicitly enabled, low-frequency profile reporting.
+        // Fixed-size counts can be merged across 30s windows without taking an
+        // invalid arithmetic average of separately calculated P95 values.
+        internal string ExportBinCounts()
+        {
+            var output = new StringBuilder(counts.Length * 4);
+            for (int i = 0; i < counts.Length; i++)
+            {
+                if (i != 0) output.Append(',');
+                output.Append(counts[i].ToString(CultureInfo.InvariantCulture));
+            }
+            return output.ToString();
         }
 
         internal void Clear()
