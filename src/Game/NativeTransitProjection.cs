@@ -27,8 +27,16 @@ namespace FreeWorldMultiplayer
                 foreach (long uid in expedition.roleUidList) heroes.Add(uid);
                 foreach (long uid in expedition.animalUidList) animals.Add(uid);
             }
-            foreach (FWHeroBean hero in data.heros.Where(h => heroes.Contains(h.getUID()) && h.starMapId < 0 && h.fleetUid < 0)) frame.Heroes.Add(NativeWire.Pack(hero));
-            foreach (FWAnimalBean animal in data.animals.Where(a => animals.Contains(a.getUID()) && a.starMapId < 0 && a.fleetUid < 0)) frame.Animals.Add(NativeWire.Pack(animal));
+            // Cargo-only expeditions have no character manifests. Avoid walking the
+            // player's full resident lists when there is nothing to serialize.
+            if (heroes.Count != 0)
+                foreach (FWHeroBean hero in data.heros)
+                    if (heroes.Contains(hero.getUID()) && hero.starMapId < 0 && hero.fleetUid < 0)
+                        frame.Heroes.Add(NativeWire.Pack(hero));
+            if (animals.Count != 0)
+                foreach (FWAnimalBean animal in data.animals)
+                    if (animals.Contains(animal.getUID()) && animal.starMapId < 0 && animal.fleetUid < 0)
+                        frame.Animals.Add(NativeWire.Pack(animal));
             return frame;
         }
         private void ApplyTransit(TransitState state)
