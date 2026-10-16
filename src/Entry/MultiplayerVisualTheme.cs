@@ -86,6 +86,7 @@ namespace FreeWorldMultiplayer
             copyRoomCaption.fontSize = 16;
             copyRoomButton.gameObject.SetActive(false);
             InstallRoomDisclosure();
+            InstallRelationVisual();
 
             // The connection banner belongs to the header, not the navigation row:
             // the latter contains the cancel-connection button when a session is busy.
@@ -299,6 +300,7 @@ namespace FreeWorldMultiplayer
 
             RefreshRoomDisclosure(connected, roomId);
             RefreshSubmitAvailability();
+            RefreshRelationVisual();
             RefreshButtonAvailability();
             bool invalidFocusedInput;
             string inputHint = RefreshInputBorders(out invalidFocusedInput);
