@@ -17,6 +17,9 @@ namespace FreeWorldMultiplayer
         {
             FWGameData data = Players[playerId];
             var frame = new TransitState { PlayerId = playerId };
+            // Most galaxy frames contain no expedition. Empty transit manifests still
+            // need to be sent so clients can clear stale expeditions, but require no scan.
+            if (data.expeditionSeq.Count == 0) return frame;
             var heroes = new HashSet<long>(); var animals = new HashSet<long>();
             foreach (FWExpedition expedition in data.expeditionSeq)
             {
@@ -32,6 +35,13 @@ namespace FreeWorldMultiplayer
         {
             FWGameData data;
             if (state == null || !Players.TryGetValue(state.PlayerId, out data)) throw new InvalidOperationException("运输同步引用未知玩家。");
+            // Keep the authoritative empty manifest's removal semantics without
+            // decoding lists or allocating UID sets on every idle galaxy frame.
+            if (state.Expeditions.Count == 0 && state.Heroes.Count == 0 && state.Animals.Count == 0)
+            {
+                if (data.expeditionSeq.Count != 0) data.expeditionSeq.Clear();
+                return;
+            }
             var incoming = state.Expeditions.Select(NativeWire.Unpack<FWExpedition>).ToList();
             var incomingHeroes = state.Heroes.Select(NativeWire.Unpack<FWHeroBean>).ToList();
             var incomingAnimals = state.Animals.Select(NativeWire.Unpack<FWAnimalBean>).ToList();
