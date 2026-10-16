@@ -36,6 +36,14 @@ namespace FreeWorldMultiplayer
         private bool awaitingClose;
         private Action pendingStart;
         private bool quitting;
+        private bool unloading;
+        private bool awaitingMenuReturn;
+        private bool menuReturnRequested;
+        private bool nativeReturnQueued;
+        private bool showHostLeftNotice;
+        private callbackInt nativeReturnCallback;
+        private ViewCover menuReturnCover;
+        private int menuReturnReadyFrame;
         private bool starting;
         private bool awaitingStartupCompletion;
         private string startupFailureContext;
@@ -82,9 +90,10 @@ namespace FreeWorldMultiplayer
             if (awaitingClose && Session != null && !Session.IsConnected && !Session.IsStarting)
             {
                 Action next = pendingStart; pendingStart = null;
-                try { FinalizeSession(); if (next != null) Perform(next, "切换联机房间失败。"); }
+                try { FinalizeSession(); if (next != null && !awaitingMenuReturn) Perform(next, "切换联机房间失败。"); }
                 catch (Exception error) { ShowError("结束联机会话时释放资源失败。", error); }
             }
+            if (awaitingMenuReturn) CompleteMenuReturn();
             nextUiSearch -= Time.unscaledDeltaTime;
             if (nextUiSearch > 0) return;
             nextUiSearch = 1;
@@ -183,6 +192,7 @@ namespace FreeWorldMultiplayer
         {
             Perform(() =>
             {
+                if (awaitingMenuReturn || nativeReturnQueued) throw new InvalidOperationException("正在退出联机房间并返回主界面，请稍后重新加入。");
                 if (IsStarting) { Feedback = "联机会话正在创建，请等待当前创建完成。"; MultiplayerRoomDialog.RefreshOpenState(); return; }
                 if (awaitingClose) throw new InvalidOperationException("正在保存退出旧房间，请等待完成。");
                 Action create = () =>
@@ -237,8 +247,19 @@ namespace FreeWorldMultiplayer
             if (!closing.IsConnected && !closing.IsStarting)
             {
                 Action next = pendingStart; pendingStart = null;
-                FinalizeSession(); if (next != null) next();
+                FinalizeSession(); if (next != null && !awaitingMenuReturn) next();
             }
+        }
+        internal bool TryQueueNativeReturn(callbackInt callback)
+        {
+            if (quitting || unloading || Session == null) return false;
+            // Preserve the native completion callback while deferring its entire return path.
+            // Repeated menu clicks share one disconnect/save rather than clearing the world early.
+            if (callback != null) nativeReturnCallback += callback;
+            nativeReturnQueued = true; pendingStart = null;
+            Feedback = "正在退出联机房间并返回主界面。";
+            Perform(CloseSession, "退出房间并返回主界面失败。");
+            return true;
         }
         private void FinalizeSession()
         {
@@ -257,12 +278,73 @@ namespace FreeWorldMultiplayer
             }
             closing.StatusChanged -= StatusChanged;
             closing.CommandCompleted -= CommandCompleted;
+            bool hostLeft = closing.HostLeft && !quitting && !unloading;
             try
             {
                 closing.Dispose();
                 Feedback = !String.IsNullOrWhiteSpace(closing.LastError) ? "已退出联机房间。" + closing.LastError : closing.Status;
             }
-            finally { Session = null; Bridge = null; Transport = null; tickFailed = false; awaitingClose = false; awaitingStartupCompletion = false; }
+            finally
+            {
+                Session = null; Bridge = null; Transport = null; tickFailed = false; awaitingClose = false; awaitingStartupCompletion = false;
+                if (hostLeft || nativeReturnQueued)
+                {
+                    // CompleteDisconnect/Dispose has already released the transport and native
+                    // world bindings. Only now may the game's own return-to-cover cleanup run.
+                    pendingStart = null;
+                    nativeReturnQueued = false; showHostLeftNotice = hostLeft;
+                    awaitingMenuReturn = true; menuReturnRequested = false; menuReturnCover = null;
+                }
+            }
+        }
+        private void CompleteMenuReturn()
+        {
+            if (quitting || unloading) { CancelMenuReturn(); return; }
+            try
+            {
+                if (!menuReturnRequested)
+                {
+                    menuReturnRequested = true;
+                    Feedback = showHostLeftNotice ? "房主已经离开游戏，正在返回主界面。" : "正在返回主界面。";
+                    MultiplayerRoomDialog.CloseOpen();
+                    // Same native path as MenuDialog's direct return. It clears script/battle,
+                    // network and scene state without writing this guest world to a solo save.
+                    callbackInt completed = nativeReturnCallback; nativeReturnCallback = null;
+                    NetSender.getInstance().backCover(completed);
+                    return;
+                }
+                ViewCover cover = ViewCover.Instance;
+                GameObject uiRoot = UIDispatcher.getUIRoot();
+                if (UIUntils.isEnterCovering || !UIUntils.isInScene(UIUntils.SCENE_LIST.SCENE_COVER)
+                    || cover == null || !cover.isActiveAndEnabled || !cover.gameObject.scene.isLoaded
+                    || UIDispatcher.Canvas == null || !UIDispatcher.Canvas.isActiveAndEnabled
+                    || uiRoot == null || !uiRoot.activeInHierarchy || !cover.transform.IsChildOf(uiRoot.transform))
+                { menuReturnCover = null; return; }
+                if (menuReturnCover != cover)
+                {
+                    // A live cover for one full frame ensures ViewCover.Start and its native
+                    // menu/user cleanup have finished before registering the notification.
+                    menuReturnCover = cover; menuReturnReadyFrame = Time.frameCount; return;
+                }
+                if (Time.frameCount <= menuReturnReadyFrame) return;
+                bool notify = showHostLeftNotice;
+                CancelMenuReturn();
+                if (notify)
+                {
+                    FairyUIDispatcher.showTip("房主已经离开游戏", "确定", null, null);
+                    Feedback = "房主已经离开游戏。";
+                }
+            }
+            catch (Exception error)
+            {
+                CancelMenuReturn();
+                ShowError("退出联机后返回主界面失败。", error);
+            }
+        }
+        private void CancelMenuReturn()
+        {
+            awaitingMenuReturn = false; nativeReturnQueued = false; showHostLeftNotice = false;
+            menuReturnRequested = false; menuReturnCover = null; nativeReturnCallback = null;
         }
         internal void Leave() { Perform(CloseSession, "退出房间失败，不能宣称本轮进度已经保存。"); }
         private void Perform(Action action, string context)
@@ -281,6 +363,7 @@ namespace FreeWorldMultiplayer
         private void OnApplicationQuit()
         {
             quitting = true;
+            CancelMenuReturn();
             pendingStart = null;
             try { CloseSession(); FinalizeSession(); }
             catch (Exception error) { ShowError("退出时联机保存失败。", error); }
@@ -288,6 +371,8 @@ namespace FreeWorldMultiplayer
         private void OnDestroy()
         {
             if (Instance != this) return;
+            unloading = true;
+            CancelMenuReturn();
             pendingStart = null;
             if (!quitting) { try { CloseSession(); FinalizeSession(); } catch (Exception error) { ShowError("卸载联机 MOD 失败。", error); } }
             if (inviteCallback != null) { inviteCallback.Dispose(); inviteCallback = null; }

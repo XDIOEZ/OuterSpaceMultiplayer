@@ -23,7 +23,7 @@ namespace FreeWorldMultiplayer
             if (item.Kind == TransportEventKind.Disconnected)
             {
                 if (IsHost) RemovePeer(item.PeerId);
-                else { IsConnected = false; Paused = true; Error(item.Error ?? "与房主的连接已断开；重连将使用房主状态。"); CompleteDisconnect(); }
+                else { if (IsConnected && !closing) HostLeft = true; IsConnected = false; Paused = true; Error(item.Error ?? "与房主的连接已断开；重连将使用房主状态。"); CompleteDisconnect(); }
                 return;
             }
             if (item.Kind == TransportEventKind.Connected)
@@ -248,7 +248,13 @@ namespace FreeWorldMultiplayer
                     break;
                 case "closing": Paused = true; PublishLocalMaps(); SetStatus(JsonData.Payload<string>(message.Payload)); break;
                 case "checkpointRequest": Paused = true; finalCheckpointRequested = true; PublishLocalMaps(); SetStatus(JsonData.Payload<string>(message.Payload)); break;
-                case "closed": IsConnected = false; Paused = true; CompleteDisconnect(); SetStatus(JsonData.Payload<string>(message.Payload)); break;
+                case "closed":
+                    string closedReason = JsonData.Payload<string>(message.Payload);
+                    if (IsConnected && !closing) HostLeft = true;
+                    IsConnected = false; Paused = true;
+                    try { CompleteDisconnect(); }
+                    finally { SetStatus(closedReason); }
+                    break;
                 default: throw new InvalidDataException("Unknown host message: " + message.Kind);
             }
         }

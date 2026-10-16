@@ -41,6 +41,7 @@ namespace FreeWorldMultiplayer
         public bool IsConnected { get; private set; }
         public bool IsStarting { get; private set; }
         public bool IsClosing => closing;
+        public bool HostLeft { get; private set; }
         public bool Paused { get; private set; }
         public double Speed { get; private set; } = 1;
         public string LastError { get; private set; }
@@ -168,7 +169,7 @@ namespace FreeWorldMultiplayer
         }
         public void Tick(double unscaledSeconds)
         {
-            if (disposed) return;
+            if (disposed || shutdown) return;
             if (double.IsNaN(unscaledSeconds) || double.IsInfinity(unscaledSeconds) || unscaledSeconds < 0) throw new ArgumentOutOfRangeException(nameof(unscaledSeconds));
             // Poll even though transport/World are not ready. No network, clock, auto-save or map
             // simulation may observe the native factory's half-created global data.
@@ -176,11 +177,19 @@ namespace FreeWorldMultiplayer
             // Unity's unscaled delta is the authority; no client wall-clock or game speed drives raid timers.
             double seconds = unscaledSeconds;
             TransportEvent item; int budget = 256;
-            while (budget-- > 0 && transport.TryDequeue(out item))
+            while (!shutdown && budget-- > 0 && transport.TryDequeue(out item))
             {
                 try { HandleTransport(item); }
                 catch (Exception ex)
                 {
+                    if (shutdown)
+                    {
+                        // Preserve the close/transport reason instead of relabelling cleanup as a failed handshake.
+                        string reason = Status;
+                        if (LastError != null && LastError != reason) reason += Environment.NewLine + LastError;
+                        Error(reason + Environment.NewLine + "退出联机会话时清理失败：" + ex);
+                        return;
+                    }
                     Error("联机消息拒绝：" + ex.Message);
                     if (IsHost && item != null && item.PeerId != null && peers.ContainsKey(item.PeerId))
                         Send(item.PeerId, "error", ex.Message);
@@ -189,6 +198,7 @@ namespace FreeWorldMultiplayer
             }
             if (IsConnected && !transport.IsRunning)
             {
+                if (!IsHost && !closing) HostLeft = true;
                 Paused = true;
                 string cause = LastError ?? "传输已停止";
                 if (IsHost && World != null)

@@ -37,6 +37,7 @@ namespace FreeWorldMultiplayer
             Patch(harmony, typeof(MapManager), "getNowSpeed", "SpeedQueryPrefix");
             Patch(harmony, typeof(UserBean), "saveArchive", "SavePrefix");
             Patch(harmony, typeof(UserBean), "saveArchiveWithSynchronousSnapshot", "SavePrefix");
+            Patch(harmony, typeof(NetSender), "backCover", "BackCoverPrefix", parameters: new[] { typeof(callbackInt) });
             Patch(harmony, typeof(UserBean), "isMineStarMap", "OwnMapPrefix");
             Patch(harmony, typeof(FWStarMapAutoLiveService), "simulateOnActivate", "DisableNativeOfflinePrefix");
             Patch(harmony, typeof(FWStarMapAutoLiveService), "simulateBeforeGroundLoad", "DisableNativeOfflinePrefix");
@@ -90,6 +91,11 @@ namespace FreeWorldMultiplayer
                 new HarmonyMethod(typeof(GameHooks), "LandingOpenPrefix"),
                 new HarmonyMethod(typeof(GameHooks), "LandingOpenPostfix"),
                 finalizer: new HarmonyMethod(typeof(GameHooks), "LandingOpenFinalizer"));
+        }
+        private static bool BackCoverPrefix(callbackInt __0)
+        {
+            MultiplayerRuntime runtime = MultiplayerRuntime.Instance;
+            return runtime == null || !runtime.TryQueueNativeReturn(__0);
         }
         private static bool UidPrefix(ref long __result)
         {
