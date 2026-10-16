@@ -15,6 +15,7 @@ function New-DiagnosticsState {
         Commands = @{}
         Slow = [Collections.Generic.List[object]]::new()
         Profile = [Collections.Generic.List[object]]::new()
+        GroundCounts = [Collections.Generic.List[object]]::new()
         InputFiles = [Collections.Generic.List[string]]::new()
     }
 }
@@ -61,6 +62,21 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines) {
                 P95UpperMs = [double]::Parse($match.Groups[5].Value, [Globalization.CultureInfo]::InvariantCulture)
                 P99UpperMs = [double]::Parse($match.Groups[6].Value, [Globalization.CultureInfo]::InvariantCulture)
                 MaxMs = [double]::Parse($match.Groups[7].Value, [Globalization.CultureInfo]::InvariantCulture)
+            })
+            continue
+        }
+        $match = [regex]::Match($line,
+            '\[FreeWorldMultiplayer\]\[ground-counts\]\s+captures=(\d+)\s+entitiesScanned=(\d+)\s+entityChanges=(\d+)\s+fieldsScanned=(\d+)\s+tilesScanned=(\d+)\s+tileChanges=(\d+)\s+posesSampled=(\d+)\s+poseChanges=(\d+)')
+        if ($match.Success -and $state.GroundCounts.Count -lt 10000) {
+            $state.GroundCounts.Add([pscustomobject]@{
+                Captures = [long]$match.Groups[1].Value
+                EntitiesScanned = [long]$match.Groups[2].Value
+                EntityChanges = [long]$match.Groups[3].Value
+                FieldsScanned = [long]$match.Groups[4].Value
+                TilesScanned = [long]$match.Groups[5].Value
+                TileChanges = [long]$match.Groups[6].Value
+                PosesSampled = [long]$match.Groups[7].Value
+                PoseChanges = [long]$match.Groups[8].Value
             })
         }
     }
@@ -111,7 +127,8 @@ function Summarize-Diagnostics([object]$state) {
         FleetCommands = $commands
         SlowOperationGroups = $slowGroups
         ProfileWindows = @($state.Profile)
-        Interpretation = 'Slow-operation records include only throttled >=50 ms events; they cannot yield an overall P95. Profile values are histogram bucket upper bounds. A command ACK is not proof of physical fleet motion.'
+        GroundCaptureWindows = @($state.GroundCounts)
+        Interpretation = 'Slow-operation records include only throttled >=50 ms events; they cannot yield an overall P95. Profile values are histogram bucket upper bounds; ground counts distinguish scanned from changed entities, 2D poses and tiles, not network bytes. A command ACK is not proof of physical fleet motion.'
     }
 }
 
@@ -125,13 +142,19 @@ if ($SelfTest) {
         '[FreeWorldMultiplayer][fleet-command] stage=host.result command=cmdABC fleet=123 role=host outcome=accepted',
         '[FreeWorldMultiplayer][fleet-command] stage=client.result command=cmdABC fleet=123 role=guest outcome=accepted',
         '[FreeWorldMultiplayer][slow-operation] stage=transport.handle ms=6943.3 bytes=20955155 map=-1 role=guest',
-        '[FreeWorldMultiplayer][profile] stage=map.cache.apply windowSeconds=30.0 count=8 p50UpperMs=16.00 p95UpperMs=50.00 p99UpperMs=100.00 maxMs=81.25'
+        '[FreeWorldMultiplayer][profile] stage=map.cache.apply windowSeconds=30.0 count=8 p50UpperMs=16.00 p95UpperMs=50.00 p99UpperMs=100.00 maxMs=81.25',
+        '[FreeWorldMultiplayer][profile] stage=ground.capture.tiles windowSeconds=30.0 count=5 p50UpperMs=4.00 p95UpperMs=16.00 p99UpperMs=16.00 maxMs=14.5',
+        '[FreeWorldMultiplayer][ground-counts] captures=5 entitiesScanned=500 entityChanges=2 fieldsScanned=100 tilesScanned=327680 tileChanges=3 posesSampled=40 poseChanges=7'
     )
     $summary = Summarize-Diagnostics $state
     if ($summary.FleetCommandsSeen -ne 1 -or
         $summary.FleetCommands[0].Outcome -ne 'command-acknowledged-motion-not-measured' -or
         $summary.SlowOperationGroups[0].MaxSlowMs -ne 6943.3 -or
-        $summary.ProfileWindows[0].P95UpperMs -ne 50) {
+        $summary.ProfileWindows[0].P95UpperMs -ne 50 -or
+        $summary.ProfileWindows[1].Stage -ne 'ground.capture.tiles' -or
+        $summary.GroundCaptureWindows.Count -ne 1 -or
+        $summary.GroundCaptureWindows[0].TilesScanned -ne 327680 -or
+        $summary.GroundCaptureWindows[0].TileChanges -ne 3) {
         throw 'Multiplayer diagnostics analyzer self-test failed.'
     }
     Write-Output 'PASS: fleet command stage correlation, slow-operation and profile parsing'

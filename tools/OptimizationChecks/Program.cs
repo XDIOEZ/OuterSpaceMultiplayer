@@ -78,6 +78,7 @@ internal static class Program
         {
             Histogram();
             Queue();
+            GroundCaptureChecks.Run(Check);
             MapCodecChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;
