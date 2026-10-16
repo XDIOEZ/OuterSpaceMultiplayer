@@ -52,8 +52,14 @@ namespace FreeWorldMultiplayer
                 FWExpedition expedition = owner.expeditionSeq.SingleOrDefault(e => e.getUID() == landing.ExpeditionUid);
                 if (expedition == null) throw new InvalidOperationException("Pending landing lost its canonical expedition: " + landing.ExpeditionUid);
                 landing.Expedition = NativeWire.Pack(expedition);
-                landing.Heroes = expedition.roleUidList.Select(uid => NativeWire.Pack(owner.heros.Single(h => h.getUID() == uid))).ToList();
-                landing.Animals = expedition.animalUidList.Select(uid => NativeWire.Pack(owner.animals.Single(a => a.getUID() == uid))).ToList();
+                // Large landing manifests should not rescan every owned entity for each
+                // passenger. Single() on each lookup group preserves duplicate/missing UID checks.
+                var heroIndex = expedition.roleUidList.Count >= 4 ? owner.heros.ToLookup(h => h.getUID()) : null;
+                var animalIndex = expedition.animalUidList.Count >= 4 ? owner.animals.ToLookup(a => a.getUID()) : null;
+                landing.Heroes = expedition.roleUidList.Select(uid => NativeWire.Pack(heroIndex == null
+                    ? owner.heros.Single(h => h.getUID() == uid) : heroIndex[uid].Single())).ToList();
+                landing.Animals = expedition.animalUidList.Select(uid => NativeWire.Pack(animalIndex == null
+                    ? owner.animals.Single(a => a.getUID() == uid) : animalIndex[uid].Single())).ToList();
             }
             return NativeLandings.Values.Where(l => l.MapId == mapId).ToList();
         }
