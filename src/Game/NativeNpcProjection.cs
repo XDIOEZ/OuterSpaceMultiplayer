@@ -22,15 +22,21 @@ namespace FreeWorldMultiplayer
             foreach (FWFactionFleet record in World.factionFleetRepository)
                 if (record.materializedState != null) canonicalNpcViews[record.materializedState.getUID()] = record.materializedState;
             foreach (FWGalaxy galaxy in World.galaxyBlock.knownGalaxies)
-                foreach (FWFleet fleet in galaxy.galaxyFleetList.OfType<FWFleet>())
-                    if (Context.OwnerOfEntity(fleet.getUID()) == null) canonicalNpcViews[fleet.getUID()] = fleet;
+                foreach (FWBaseBean candidate in galaxy.galaxyFleetList)
+                {
+                    // This runs each frame; avoid allocating an OfType iterator per galaxy.
+                    FWFleet fleet = candidate as FWFleet;
+                    if (fleet != null && Context.OwnerOfEntity(fleet.getUID()) == null)
+                        canonicalNpcViews[fleet.getUID()] = fleet;
+                }
             manager.GetComponentsInChildren(true, replicaNpcViews);
             foreach (GalaxyNPCFleet projection in replicaNpcViews)
             {
                 FWFleet canonical;
                 if (!canonicalNpcViews.TryGetValue(projection.FleetUId, out canonical) || canonical.pos == null)
                 {
-                    projection.gameObject.SetActive(false);
+                    // Already hidden projections need no repeated Unity activation call.
+                    if (projection.gameObject.activeSelf) projection.gameObject.SetActive(false);
                     continue;
                 }
                 AirShipFleetInfoBean view = projection.NpcSetBean == null ? null : projection.NpcSetBean.getFleetBean();
