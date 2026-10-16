@@ -33,7 +33,9 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'git ls-files failed' }
         [void]$tracked.Add(($path -replace '\\', '/'))
     }
-    foreach ($path in @(& git -c core.quotepath=false diff --name-only)) {
+    # Disabling only Git's CRLF warning avoids writing false error records into
+    # Windows PowerShell 5.1; normal status and content normalization are intact.
+    foreach ($path in @(& git -c core.safecrlf=false -c core.quotepath=false diff --name-only)) {
         if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
         [void]$dirty.Add(($path -replace '\\', '/'))
     }
