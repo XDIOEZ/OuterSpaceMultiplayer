@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace FreeWorldMultiplayer
@@ -19,7 +20,7 @@ namespace FreeWorldMultiplayer
 
         private readonly Dictionary<Button, Image> selectionLines = new Dictionary<Button, Image>();
         private readonly Dictionary<string, Button> clockControls = new Dictionary<string, Button>(StringComparer.Ordinal);
-        private readonly Dictionary<Button, Image> rowHighlights = new Dictionary<Button, Image>();
+        private readonly Dictionary<Button, RowVisual> rowHighlights = new Dictionary<Button, RowVisual>();
         private readonly List<Button> obsoleteRows = new List<Button>();
         private readonly Dictionary<Button, Color> disabledCaptions = new Dictionary<Button, Color>();
         private readonly List<InputBorder> inputBorders = new List<InputBorder>();
@@ -31,6 +32,12 @@ namespace FreeWorldMultiplayer
         {
             internal TMP_InputField Field;
             internal Outline Outline;
+        }
+
+        private sealed class RowVisual
+        {
+            internal Image Highlight;
+            internal MultiplayerRowHover Hover;
         }
 
         private void InstallVisualTheme()
@@ -119,7 +126,7 @@ namespace FreeWorldMultiplayer
                 : Busy ? "正在连接 / 退出" : "离线  ·  尚未加入";
             connectionBadgeDot.color = connected ? PositiveColor : Busy ? AccentColor : MutedColor;
             connectionBadgeText.color = connected ? BodyColor : MutedColor;
-            navigationHint.text = page == Page.Create
+            string location = page == Page.Create
                 ? (continueWorldForm != null && continueWorldForm.activeSelf ? "创建 / 继续世界" : "创建 / 新世界")
                 : page == Page.Join ? "加入 / 连接方式"
                 : page == Page.Room ? "房间 / 世界控制"
@@ -150,7 +157,10 @@ namespace FreeWorldMultiplayer
             }
 
             RefreshButtonAvailability();
-            RefreshInputBorders();
+            bool invalidFocusedInput;
+            string inputHint = RefreshInputBorders(out invalidFocusedInput);
+            navigationHint.text = inputHint ?? location;
+            navigationHint.color = invalidFocusedInput ? WarningColor : MutedColor;
             RefreshRowHighlights();
 
             // Indicate the effective host clock setting, not just the buttons' last click.
@@ -190,47 +200,58 @@ namespace FreeWorldMultiplayer
             }
         }
 
-        private static bool InvalidNumber(TMP_InputField field)
+        private static bool NumericRange(string name, out int minimum, out int maximum, out string label)
         {
-            string name = field.name;
-            int minimum, maximum;
+            minimum = 0; maximum = 0; label = null;
             switch (name)
             {
                 case "FWM.HostPort": case "FWM.ResumePort": case "FWM.JoinPort": case "FWM.SettingsPort":
-                    minimum = 1; maximum = 65535; break;
+                    minimum = 1; maximum = 65535; label = "端口"; return true;
                 case "FWM.MaxPlayers": case "FWM.SettingsMaxPlayers":
-                    minimum = 2; maximum = 64; break;
+                    minimum = 2; maximum = 64; label = "人数"; return true;
                 case "FWM.StartingEmployees": case "FWM.SettingsEmployees":
-                    minimum = 1; maximum = 32; break;
+                    minimum = 1; maximum = 32; label = "雇员"; return true;
                 case "FWM.MaxBases": case "FWM.SettingsMaxBases":
-                    minimum = 1; maximum = 64; break;
+                    minimum = 1; maximum = 64; label = "营地"; return true;
                 default: return false; // Room IDs are UInt64; do not parse them as Int32.
             }
-            return !Int32.TryParse(field.text.Trim(), out int value) || value < minimum || value > maximum;
         }
 
-        private void RefreshInputBorders()
+        private string RefreshInputBorders(out bool invalidFocusedInput)
         {
+            invalidFocusedInput = false;
+            string focusedHint = null;
             foreach (InputBorder item in inputBorders)
             {
-                if (item.Field == null || item.Outline == null) continue;
+                if (item.Field == null || item.Outline == null || !item.Field.gameObject.activeInHierarchy) continue;
+                bool hasRange = NumericRange(item.Field.name, out int min, out int max, out string label);
+                bool invalid = hasRange && (!Int32.TryParse(item.Field.text, out int value) || value < min || value > max);
+                bool focused = item.Field.interactable && item.Field.isFocused;
+                // Invalid values remain visibly invalid even while the field has focus.
                 Color32 color = !item.Field.interactable ? new Color32(90, 109, 111, 48)
-                    : item.Field.isFocused ? AccentColor
-                    : InvalidNumber(item.Field) ? WarningColor
+                    : invalid ? WarningColor
+                    : focused ? AccentColor
                     : new Color32(108, 142, 145, 72);
                 item.Outline.effectColor = color;
+                if (focused && hasRange)
+                {
+                    focusedHint = invalid ? label + "须为 " + min + "～" + max : label + "范围 " + min + "～" + max;
+                    invalidFocusedInput = invalid;
+                }
             }
+            return focusedHint;
         }
 
-        private Image RowHighlight(Button button)
+        private RowVisual RowHighlight(Button button)
         {
-            if (rowHighlights.TryGetValue(button, out Image image) && image != null) return image;
+            if (rowHighlights.TryGetValue(button, out RowVisual visual) && visual.Highlight != null) return visual;
             GameObject node = MultiplayerUi.Node("FWM.RowHighlight", button.transform);
-            image = node.AddComponent<Image>(); image.raycastTarget = false;
+            Image image = node.AddComponent<Image>(); image.raycastTarget = false;
             MultiplayerUi.Stretch((RectTransform)node.transform, 6, 6, 4, 4);
             node.transform.SetAsFirstSibling();
-            rowHighlights[button] = image;
-            return image;
+            visual = new RowVisual { Highlight = image, Hover = button.gameObject.AddComponent<MultiplayerRowHover>() };
+            rowHighlights[button] = visual;
+            return visual;
         }
 
         private void RefreshRowHighlights()
@@ -238,28 +259,50 @@ namespace FreeWorldMultiplayer
             // Lists rebuild their native buttons on refresh; discard destroyed rows
             // rather than retaining stale Unity objects across repeated refreshes.
             obsoleteRows.Clear();
-            foreach (KeyValuePair<Button, Image> entry in rowHighlights)
-                if (entry.Key == null || entry.Value == null) obsoleteRows.Add(entry.Key);
+            foreach (KeyValuePair<Button, RowVisual> entry in rowHighlights)
+                if (entry.Key == null || entry.Value.Highlight == null) obsoleteRows.Add(entry.Key);
             foreach (Button button in obsoleteRows) rowHighlights.Remove(button);
 
-            foreach (SaveRow row in saveRows)
+            // The creation, save and room pages are mutually exclusive. Do not
+            // dirty graphics for rows in inactive scroll views every UI tick.
+            if (saveScroll != null && saveScroll.gameObject.activeInHierarchy)
             {
-                if (row.Button == null) continue;
-                bool invalid = !String.IsNullOrEmpty(row.World.Error);
-                bool selected = row.World.WorldId == selectedWorldId;
-                RowHighlight(row.Button).color = selected ? new Color32(214, 187, 125, 45)
-                    : invalid ? new Color32(225, 123, 106, 18) : Color.clear;
-                row.Name.color = invalid ? WarningColor : selected ? HeadingColor : BodyColor;
+                foreach (SaveRow row in saveRows)
+                {
+                    if (row.Button == null) continue;
+                    bool invalid = !String.IsNullOrEmpty(row.World.Error);
+                    bool selected = row.World.WorldId == selectedWorldId;
+                    RowVisual visual = RowHighlight(row.Button);
+                    visual.Highlight.color = selected ? new Color32(214, 187, 125, 45)
+                        : invalid ? new Color32(225, 123, 106, 18)
+                        : row.Button.interactable && visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear;
+                    row.Name.color = invalid ? WarningColor : selected ? HeadingColor : BodyColor;
+                }
             }
-            foreach (PresetRow row in presetRows)
+            if (presetScroll != null && presetScroll.gameObject.activeInHierarchy)
             {
-                if (row.Button == null) continue;
-                bool invalid = !String.IsNullOrEmpty(row.Preset.Error);
-                bool selected = !invalid && row.Preset.Id == selectedPresetId;
-                RowHighlight(row.Button).color = selected ? new Color32(214, 187, 125, 45)
-                    : invalid ? new Color32(225, 123, 106, 18) : Color.clear;
-                row.Name.color = invalid ? WarningColor : selected ? HeadingColor : BodyColor;
+                foreach (PresetRow row in presetRows)
+                {
+                    if (row.Button == null) continue;
+                    bool invalid = !String.IsNullOrEmpty(row.Preset.Error);
+                    bool selected = !invalid && row.Preset.Id == selectedPresetId;
+                    RowVisual visual = RowHighlight(row.Button);
+                    visual.Highlight.color = selected ? new Color32(214, 187, 125, 45)
+                        : invalid ? new Color32(225, 123, 106, 18)
+                        : row.Button.interactable && visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear;
+                    row.Name.color = invalid ? WarningColor : selected ? HeadingColor : BodyColor;
+                }
             }
         }
+    }
+
+    // Unity drives pointer transitions; the modal reads one cached flag on its
+    // normal UI refresh and never allocates listeners or event delegates per frame.
+    internal sealed class MultiplayerRowHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        internal bool Hovered { get; private set; }
+        public void OnPointerEnter(PointerEventData eventData) { Hovered = true; }
+        public void OnPointerExit(PointerEventData eventData) { Hovered = false; }
+        private void OnDisable() { Hovered = false; }
     }
 }
