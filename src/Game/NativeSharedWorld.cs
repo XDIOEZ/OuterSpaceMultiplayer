@@ -143,6 +143,13 @@ namespace FreeWorldMultiplayer
             if (delta == null || delta.Revision <= appliedSharedRevision) return;
             // Reliable ordered delivery is required; accepting a skipped business revision would lose fields.
             if (appliedSharedRevision >= 0 && delta.Revision != appliedSharedRevision + 1) throw new InvalidOperationException("Shared world business delta is missing a revision.");
+            // Empty ticks still advance the reliable revision, but they do not modify
+            // any native object and must not invalidate every player's UID indices.
+            if (delta.Values.Count == 0 && delta.Maps.Count == 0)
+            {
+                appliedSharedRevision = delta.Revision;
+                return;
+            }
             var decoded = new List<Tuple<SharedValue, object, FieldInfo, object>>();
             // Resolve galaxy/planet identities once per delta rather than scanning the
             // entire world for every changed field. Lookup groups retain SingleOrDefault's
