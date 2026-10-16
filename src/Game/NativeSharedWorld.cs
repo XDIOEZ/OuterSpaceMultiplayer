@@ -175,12 +175,15 @@ namespace FreeWorldMultiplayer
                 FieldInfo field = NativeWire.Field(target.GetType(), change.Field);
                 decoded.Add(Tuple.Create(change, target, field, NativeWire.Unpack(change.NativeValue, field.FieldType)));
             }
+            // Several player IDs can share a world data root. Resolve unique roots
+            // once per delta instead of rebuilding Distinct() for every root field.
+            FWGameData[] playerRoots = Players.Values.Distinct().ToArray();
             foreach (var item in decoded)
             {
                 SharedValue change = item.Item1;
                 if (change.Scope == "world")
                 {
-                    foreach (FWGameData player in Players.Values.Distinct()) item.Item3.SetValue(player, item.Item4);
+                    foreach (FWGameData player in playerRoots) item.Item3.SetValue(player, item.Item4);
                 }
                 else if (change.Scope == "galaxy" && change.Field == "galaxyFleetList")
                 {
@@ -191,7 +194,7 @@ namespace FreeWorldMultiplayer
                 }
                 else item.Item3.SetValue(item.Item2, item.Item4);
             }
-            foreach (FWGameData player in Players.Values.Distinct())
+            foreach (FWGameData player in playerRoots)
             {
                 NativeWire.Set(player, "fleetRepositoryIndex", null);
                 var index = NativeWire.Get(player, "uidIndex") as IDictionary; if (index != null) index.Clear();
