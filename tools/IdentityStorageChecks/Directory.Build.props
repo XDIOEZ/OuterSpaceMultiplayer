@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Generated files and all synthetic data stay in the ignored artifacts. -->
+    <BaseOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts\identity-storage-checks\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts\identity-storage-checks\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

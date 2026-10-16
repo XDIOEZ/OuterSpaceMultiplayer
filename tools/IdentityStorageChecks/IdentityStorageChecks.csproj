@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="WorldStubs.cs" />
+    <!-- Compile the real in-progress production identity/settings/save sources. -->
+    <!-- These Core owner files remain untracked/dirty: no silent handoff. -->
+    <Compile Include="../../src/Core/IdentityStore.cs" Link="IdentityStore.cs" />
+    <Compile Include="../../src/Core/ModSettings.cs" Link="ModSettings.cs" />
+    <Compile Include="../../src/Core/Storage.cs" Link="Storage.cs" />
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(MSBuildBinPath)/Newtonsoft.Json.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
