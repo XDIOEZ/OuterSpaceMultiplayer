@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Keep all generated test files out of build SourceRevision inputs. -->
+    <BaseOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts\map-cache-store-checks\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts\map-cache-store-checks\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Stubs.cs" />
+    <!-- The actual disk cache and chunk codec are under test, not copies. -->
+    <Compile Include="../../src/Core/MapCacheStore.cs" Link="MapCacheStore.cs" />
+    <Compile Include="../../src/Core/MapSnapshotDeltaCodec.cs" Link="MapSnapshotDeltaCodec.cs" />
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(MSBuildBinPath)/Newtonsoft.Json.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
