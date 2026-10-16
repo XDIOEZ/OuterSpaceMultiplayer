@@ -76,6 +76,17 @@ namespace FreeWorldMultiplayer
                 border.effectColor = new Color32(108, 142, 145, 72);
                 inputBorders.Add(new InputBorder { Field = field, Outline = border });
             }
+            gameObject.AddComponent<MultiplayerInputTabNavigation>();
+        }
+
+        private static void SetTextIfChanged(TMP_Text label, string value)
+        {
+            if (label != null && label.text != value) label.text = value;
+        }
+
+        private static void SetColorIfChanged(Graphic graphic, Color color)
+        {
+            if (graphic != null && graphic.color != color) graphic.color = color;
         }
 
         private static Image MakeDot(Transform parent, string name, float x, float y, float size)
@@ -122,10 +133,10 @@ namespace FreeWorldMultiplayer
         {
             if (connectionBadge == null || Runtime == null) return;
             bool connected = Connected;
-            connectionBadgeText.text = connected ? (Runtime.Session.IsHost ? "已连接  ·  房主" : "已连接  ·  客人")
-                : Busy ? "正在连接 / 退出" : "离线  ·  尚未加入";
-            connectionBadgeDot.color = connected ? PositiveColor : Busy ? AccentColor : MutedColor;
-            connectionBadgeText.color = connected ? BodyColor : MutedColor;
+            SetTextIfChanged(connectionBadgeText, connected ? (Runtime.Session.IsHost ? "已连接  ·  房主" : "已连接  ·  客人")
+                : Busy ? "正在连接 / 退出" : "离线  ·  尚未加入");
+            SetColorIfChanged(connectionBadgeDot, connected ? PositiveColor : Busy ? AccentColor : MutedColor);
+            SetColorIfChanged(connectionBadgeText, connected ? BodyColor : MutedColor);
             string location = page == Page.Create
                 ? (continueWorldForm != null && continueWorldForm.activeSelf ? "创建 / 继续世界" : "创建 / 新世界")
                 : page == Page.Join ? "加入 / 连接方式"
@@ -141,8 +152,8 @@ namespace FreeWorldMultiplayer
             bool positive = !warning && (message.IndexOf("成功", StringComparison.Ordinal) >= 0
                 || message.IndexOf("已保存", StringComparison.Ordinal) >= 0
                 || message.IndexOf("已连接", StringComparison.Ordinal) >= 0);
-            feedbackDot.color = warning ? WarningColor : positive ? PositiveColor : AccentColor;
-            status.color = warning ? WarningColor : BodyColor;
+            SetColorIfChanged(feedbackDot, warning ? WarningColor : positive ? PositiveColor : AccentColor);
+            SetColorIfChanged(status, warning ? WarningColor : BodyColor);
 
             // Direct launch cannot use Steam; make that clear before the click.
             if (Runtime.DirectLaunch)
@@ -159,8 +170,8 @@ namespace FreeWorldMultiplayer
             RefreshButtonAvailability();
             bool invalidFocusedInput;
             string inputHint = RefreshInputBorders(out invalidFocusedInput);
-            navigationHint.text = inputHint ?? location;
-            navigationHint.color = invalidFocusedInput ? WarningColor : MutedColor;
+            SetTextIfChanged(navigationHint, inputHint ?? location);
+            SetColorIfChanged(navigationHint, invalidFocusedInput ? WarningColor : MutedColor);
             RefreshRowHighlights();
 
             // Indicate the effective host clock setting, not just the buttons' last click.
@@ -174,8 +185,9 @@ namespace FreeWorldMultiplayer
                             || (entry.Key == "Speed5" && session.Speed == 5)));
                 SetSelectedVisual(entry.Value, selected);
                 TMP_Text text = captions[entry.Value];
-                text.fontStyle = selected ? FontStyles.Bold : FontStyles.Normal;
-                text.color = !entry.Value.interactable ? DisabledColor : selected ? HeadingColor : BodyColor;
+                FontStyles style = selected ? FontStyles.Bold : FontStyles.Normal;
+                if (text.fontStyle != style) text.fontStyle = style;
+                SetColorIfChanged(text, !entry.Value.interactable ? DisabledColor : selected ? HeadingColor : BodyColor);
             }
         }
 
@@ -190,11 +202,11 @@ namespace FreeWorldMultiplayer
                 if (!button.interactable)
                 {
                     if (!disabledCaptions.ContainsKey(button)) disabledCaptions.Add(button, entry.Value.color);
-                    entry.Value.color = DisabledColor;
+                    SetColorIfChanged(entry.Value, DisabledColor);
                 }
                 else if (disabledCaptions.TryGetValue(button, out Color original))
                 {
-                    entry.Value.color = original;
+                    SetColorIfChanged(entry.Value, original);
                     disabledCaptions.Remove(button);
                 }
             }
@@ -232,12 +244,13 @@ namespace FreeWorldMultiplayer
                     : invalid ? WarningColor
                     : focused ? AccentColor
                     : new Color32(108, 142, 145, 72);
-                item.Outline.effectColor = color;
+                if (item.Outline.effectColor != color) item.Outline.effectColor = color;
                 if (focused && hasRange)
                 {
                     focusedHint = invalid ? label + "须为 " + min + "～" + max : label + "范围 " + min + "～" + max;
                     invalidFocusedInput = invalid;
                 }
+                else if (focused) focusedHint = "Tab 下一个  ·  Shift+Tab 上一个";
             }
             return focusedHint;
         }
@@ -273,10 +286,13 @@ namespace FreeWorldMultiplayer
                     bool invalid = !String.IsNullOrEmpty(row.World.Error);
                     bool selected = row.World.WorldId == selectedWorldId;
                     RowVisual visual = RowHighlight(row.Button);
-                    visual.Highlight.color = selected ? new Color32(214, 187, 125, 45)
+                    SetColorIfChanged(visual.Highlight, selected ? new Color32(214, 187, 125, 45)
                         : invalid ? new Color32(225, 123, 106, 18)
-                        : row.Button.interactable && visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear;
-                    row.Name.color = invalid ? WarningColor : selected ? HeadingColor : BodyColor;
+                        : row.Button.interactable && visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear);
+                    // The page refresh already owns row caption colors. Keep its
+                    // selected/normal palette to avoid two conflicting TMP writes
+                    // per tick; the invalid metadata and background remain tinted.
+                    SetColorIfChanged(row.Name, selected ? AccentColor : BodyColor);
                 }
             }
             if (presetScroll != null && presetScroll.gameObject.activeInHierarchy)
@@ -287,10 +303,10 @@ namespace FreeWorldMultiplayer
                     bool invalid = !String.IsNullOrEmpty(row.Preset.Error);
                     bool selected = !invalid && row.Preset.Id == selectedPresetId;
                     RowVisual visual = RowHighlight(row.Button);
-                    visual.Highlight.color = selected ? new Color32(214, 187, 125, 45)
+                    SetColorIfChanged(visual.Highlight, selected ? new Color32(214, 187, 125, 45)
                         : invalid ? new Color32(225, 123, 106, 18)
-                        : row.Button.interactable && visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear;
-                    row.Name.color = invalid ? WarningColor : selected ? HeadingColor : BodyColor;
+                        : row.Button.interactable && visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear);
+                    SetColorIfChanged(row.Name, selected ? AccentColor : BodyColor);
                 }
             }
         }
@@ -304,5 +320,55 @@ namespace FreeWorldMultiplayer
         public void OnPointerEnter(PointerEventData eventData) { Hovered = true; }
         public void OnPointerExit(PointerEventData eventData) { Hovered = false; }
         private void OnDisable() { Hovered = false; }
+    }
+
+    // Every native field has Navigation.Mode.None so arrow keys stay with the text
+    // editor. Offer predictable keyboard traversal without touching game input
+    // outside this modal or moving focus to controls on hidden pages.
+    internal sealed class MultiplayerInputTabNavigation : MonoBehaviour
+    {
+        private bool legacyKeyboardAvailable = true;
+
+        private void Update()
+        {
+            if (!legacyKeyboardAvailable) return;
+            bool tab, backwards;
+            try
+            {
+                tab = Input.GetKeyDown(KeyCode.Tab);
+                if (!tab) return;
+                if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)
+                    || Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) return;
+                backwards = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            }
+            catch (InvalidOperationException)
+            {
+                // A player using only Unity's new Input System must not receive
+                // a repeated legacy-input exception from a purely visual feature.
+                legacyKeyboardAvailable = false;
+                return;
+            }
+
+            EventSystem events = EventSystem.current;
+            GameObject selected = events == null ? null : events.currentSelectedGameObject;
+            if (selected == null || !selected.transform.IsChildOf(transform)) return;
+            TMP_InputField current = selected.GetComponentInParent<TMP_InputField>();
+            if (current == null || !current.isActiveAndEnabled || !current.interactable) return;
+
+            TMP_InputField[] fields = GetComponentsInChildren<TMP_InputField>(true);
+            var available = new List<TMP_InputField>(fields.Length);
+            foreach (TMP_InputField field in fields)
+                if (field != null && field.isActiveAndEnabled && field.gameObject.activeInHierarchy && field.interactable)
+                    available.Add(field);
+            if (available.Count < 2) return;
+            int index = available.IndexOf(current);
+            if (index < 0) return;
+            int nextIndex = (index + (backwards ? available.Count - 1 : 1)) % available.Count;
+            TMP_InputField next = available[nextIndex];
+            if (next == current) return;
+            current.DeactivateInputField();
+            events.SetSelectedGameObject(next.gameObject);
+            next.ActivateInputField();
+        }
     }
 }
