@@ -24,6 +24,8 @@
 | UI-20261016-01 | 本轮 UI 结构代理 | `src/Entry/MultiplayerVisualTheme.cs` | 初始化拆为反馈、房间、连接和输入四个步骤；本地提交 `0fbf8c7`；未做游戏内验收，文件占用已释放 |
 | UI-20261016-02 | 待认领 | `src/Entry/MultiplayerRoomDialog.cs`、`src/Entry/MultiplayerLobbyPages.cs`、`src/Entry/MultiplayerRoomPages.cs` | 计划梳理导航与状态刷新边界；这些文件已有未提交改动，必须先确认负责人和交接，未获许可不修改 |
 | UI-20261016-03 | 本轮 UI 结构代理 | `src/Entry/MultiplayerVisualTheme.cs`、`src/Entry/MultiplayerPlayerRosterVisual.cs` | 已完成：视觉刷新和玩家列表数据 / 显示职责拆分，本地提交 `a7c6d6c`；未构建或游戏内验收，文件占用已释放 |
+| landing-capture-scan | 当前性能优化代理（本会话） | `src/Game/NativeLanding.cs` | 已撤销并释放文件：发现 `transport-pvp-game` 正在使用此文件，试验改动已精确撤回，未提交；需主控明确协调后才能继续 |
+| transit-manifest-skip-empty | 当前性能优化代理（本会话） | `src/Game/NativeTransitProjection.cs` | 已完成 `e7a09fb`：货运空乘客清单跳过雇员/动物列表扫描；仅静态差异检查，未构建、未安装、未游戏验收；无接口、协议、存档变更；文件占用已释放 |
 
 其他正在进行的任务请由对应负责人自行登记，不根据文件名推断归属。
 
