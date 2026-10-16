@@ -1,0 +1,26 @@
+{
+  "Schema": 1,
+  "Scenario": {
+    "Id": "填写固定场景编号",
+    "WorldAlias": "填写匿名世界代号",
+    "Network": "填写 Steam/TapTap/IP 通道",
+    "Hardware": "填写双方固定设备代号",
+    "MapGrid": "",
+    "HostPlatform": "Steam",
+    "GuestPlatform": "TapTap",
+    "Workload": "填写完整且可重复的游戏内操作",
+    "Players": 0,
+    "Entities": 0
+  },
+  "Target": { "Role": "host", "Stage": "ground.capture.tiles" },
+  "Baseline": [
+    { "Round": 1, "PairedReport": "artifacts/e8-real/baseline-1.json", "OperatorConfirmedSameSession": false, "OperatorConfirmedSameConditions": false, "GameplayCheck": "unverified" },
+    { "Round": 2, "PairedReport": "artifacts/e8-real/baseline-2.json", "OperatorConfirmedSameSession": false, "OperatorConfirmedSameConditions": false, "GameplayCheck": "unverified" },
+    { "Round": 3, "PairedReport": "artifacts/e8-real/baseline-3.json", "OperatorConfirmedSameSession": false, "OperatorConfirmedSameConditions": false, "GameplayCheck": "unverified" }
+  ],
+  "Candidate": [
+    { "Round": 1, "PairedReport": "artifacts/e8-real/candidate-1.json", "OperatorConfirmedSameSession": false, "OperatorConfirmedSameConditions": false, "GameplayCheck": "unverified" },
+    { "Round": 2, "PairedReport": "artifacts/e8-real/candidate-2.json", "OperatorConfirmedSameSession": false, "OperatorConfirmedSameConditions": false, "GameplayCheck": "unverified" },
+    { "Round": 3, "PairedReport": "artifacts/e8-real/candidate-3.json", "OperatorConfirmedSameSession": false, "OperatorConfirmedSameConditions": false, "GameplayCheck": "unverified" }
+  ]
+}
