@@ -31,9 +31,11 @@ namespace FreeWorldMultiplayer
 
     internal static class MapCacheStore
     {
+        internal static int HashCalls;
         internal static string HashContent(byte[] data)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
+            HashCalls++;
             using (var sha = SHA256.Create())
                 return BitConverter.ToString(sha.ComputeHash(data)).Replace("-", "").ToLowerInvariant();
         }

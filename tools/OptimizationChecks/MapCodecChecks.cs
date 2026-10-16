@@ -48,15 +48,22 @@ internal static class MapCodecChecks
 
         var full = MapSnapshotDeltaCodec.MakeTransfer(encoded, null);
         check(full.ChangedChunks.Count == encoded.Content.Count, "full transfer sends each unique content chunk");
+        MapCacheStore.HashCalls = 0;
         var restored = MapSnapshotDeltaCodec.Reassemble(full, WorldId, MapId, null);
+        check(MapCacheStore.HashCalls == full.ChangedChunks.Count + 1,
+            "cold map validates each unique incoming chunk only once plus final snapshot hash");
         SameSnapshot(check, restored, snapshot, "full transfer");
 
         var available = encoded.Manifest.Chunks.Select(x => x.Hash).Distinct().Where((hash, i) => i % 2 == 0).ToList();
         var cache = new Dictionary<string, byte[]>(encoded.Content, StringComparer.Ordinal);
         var mixed = MapSnapshotDeltaCodec.MakeTransfer(encoded, available);
         check(mixed.ChangedChunks.Count < full.ChangedChunks.Count, "warm transfer skips cached chunks");
+        MapCacheStore.HashCalls = 0;
         restored = MapSnapshotDeltaCodec.Reassemble(mixed, WorldId, MapId,
             hash => cache.TryGetValue(hash, out var bytes) ? bytes : null);
+        check(MapCacheStore.HashCalls >= mixed.ChangedChunks.Count + 1
+            && MapCacheStore.HashCalls < full.ChangedChunks.Count * 2 + 1,
+            "warm map still validates cached chunks without double hashing received chunks");
         SameSnapshot(check, restored, snapshot, "partial cache");
 
         var hot = MapSnapshotDeltaCodec.MakeTransfer(encoded, encoded.Content.Keys);
