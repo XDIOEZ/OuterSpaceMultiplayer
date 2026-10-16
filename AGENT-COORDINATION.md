@@ -17,6 +17,7 @@
 
 | 任务 ID | 负责人 | 目标 / 文件范围 | 状态与下一步 |
 | --- | --- | --- | --- |
+| multiplayer-optimization-plan-20261016 | 当前文档规划 Agent（本会话） | `docs/联机插件优化开发案.md`、`docs/联机优化实施路线.svg`；不占用功能源码 | 已完成并释放文档占用：建立 S0～S5 分阶段方案、可复现性能基线、回归矩阵和路线图；仅文档改动，未变更接口/协议/存档/版本，未构建、安装或运行游戏。 |
 | host-exit-v1.12 | 本次修复主 Agent | 整合房主离开后的客人退出、版本和三端构建 | 源码已提交 `2972361`；统一构建被下方依赖阻断，尚未安装 |
 | host-exit-session | 子 Agent `/root/host_exit_session` | `src/Session/MultiplayerSession.cs`、`src/Session/Networking.cs` | 实现与接口说明已交主 Agent 整合；文件占用已释放；未运行测试或游戏 |
 | host-exit-entry | 子 Agent `/root/host_exit_entry` | `src/Entry/ModPluginLauncher.cs`、`src/Game/GameHooks.cs` | 已整合，占用已释放；原生返回保留 `callbackInt`，待会话清理后执行；封面就绪后仅向 `HostLeft` 客人提示一次；未运行游戏验收 |

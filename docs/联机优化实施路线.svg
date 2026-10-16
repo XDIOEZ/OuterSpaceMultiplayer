@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="660" viewBox="0 0 1280 660" role="img" aria-labelledby="title desc">
+  <title id="title">FreeWorldMultiplayer 联机插件优化实施路线</title>
+  <desc id="desc">先解决舰队移动正确性，再建立性能基线，依次优化主线程队列、地图同步、银河存档，最后三端验收。全程保持房主权威和可靠事务。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#101c2a"/>
+      <stop offset="1" stop-color="#1b2c3f"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10Z" fill="#77bfd0"/>
+    </marker>
+  </defs>
+  <rect width="1280" height="660" fill="url(#bg)"/>
+  <path d="M40 124H1240" stroke="#416579" stroke-width="1"/>
+  <text x="43" y="51" fill="#e0eef4" font-family="Microsoft YaHei, PingFang SC, sans-serif" font-size="28" font-weight="700">FreeWorldMultiplayer / V1 优化实施路线</text>
+  <text x="43" y="85" fill="#9fbcc9" font-family="Microsoft YaHei, PingFang SC, sans-serif" font-size="17">先复现，后测量；分阶段做小改动，每项可回滚</text>
+  <text x="1237" y="52" text-anchor="end" fill="#83abba" font-family="Consolas, monospace" font-size="17">V1.19 · PROTOCOL 6</text>
+
+  <g font-family="Microsoft YaHei, PingFang SC, sans-serif">
+    <g transform="translate(43 160)">
+      <rect width="370" height="161" rx="10" fill="#20354a" stroke="#81cddb" stroke-width="2"/>
+      <path d="M0 0V161" stroke="#81cddb" stroke-width="8"/>
+      <text x="24" y="34" font-size="16" font-weight="700" fill="#85d7e5">S0 · P0 / 正确性</text>
+      <text x="24" y="77" font-size="24" font-weight="700" fill="#eff9fc">舰队移动链路取证</text>
+      <text x="24" y="111" font-size="16" fill="#bad0d9">输入 → 提交 → 执行 → 回执</text>
+      <text x="24" y="140" font-size="15" fill="#8db5c5">不能凭猜测修运动逻辑</text>
+    </g>
+    <g transform="translate(455 160)">
+      <rect width="370" height="161" rx="10" fill="#20354a" stroke="#6e9aac" stroke-width="2"/>
+      <path d="M0 0V161" stroke="#6e9aac" stroke-width="8"/>
+      <text x="24" y="34" font-size="16" font-weight="700" fill="#a3d2e0">S1 · P0 / 观测基线</text>
+      <text x="24" y="77" font-size="24" font-weight="700" fill="#eff9fc">P95 与队列可观测</text>
+      <text x="24" y="111" font-size="16" fill="#bad0d9">主线程 / 字节 / 缓存 / 积压</text>
+      <text x="24" y="140" font-size="15" fill="#8db5c5">固定场景形成前后对照</text>
+    </g>
+    <g transform="translate(867 160)">
+      <rect width="370" height="161" rx="10" fill="#20354a" stroke="#6e9aac" stroke-width="2"/>
+      <path d="M0 0V161" stroke="#6e9aac" stroke-width="8"/>
+      <text x="24" y="34" font-size="16" font-weight="700" fill="#a3d2e0">S2 · P1 / 主线程</text>
+      <text x="24" y="77" font-size="24" font-weight="700" fill="#eff9fc">去重复工作、稳收包</text>
+      <text x="24" y="111" font-size="16" fill="#bad0d9">原子事务 / 背压 / 有界队列</text>
+      <text x="24" y="140" font-size="15" fill="#8db5c5">保证每条可靠消息的命运</text>
+    </g>
+    <path d="M415 239H451" stroke="#77bfd0" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M827 239H863" stroke="#77bfd0" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M1050 323V352H228V380" stroke="#57869a" stroke-width="2" stroke-dasharray="7 7" fill="none" marker-end="url(#arrow)"/>
+
+    <g transform="translate(43 383)">
+      <rect width="370" height="147" rx="10" fill="#23394d" stroke="#5a889b" stroke-width="2"/>
+      <text x="24" y="33" font-size="16" font-weight="700" fill="#a3d2e0">S3 · P1 / 地块同步</text>
+      <text x="24" y="76" font-size="24" font-weight="700" fill="#eff9fc">差量、SEED、缓存</text>
+      <text x="24" y="112" font-size="16" fill="#bad0d9">完整校验后入图，失败回全量</text>
+    </g>
+    <g transform="translate(455 383)">
+      <rect width="370" height="147" rx="10" fill="#23394d" stroke="#5a889b" stroke-width="2"/>
+      <text x="24" y="33" font-size="16" font-weight="700" fill="#a3d2e0">S4 · P2 / 银河与存档</text>
+      <text x="24" y="76" font-size="24" font-weight="700" fill="#eff9fc">减广播与写盘热点</text>
+      <text x="24" y="112" font-size="16" fill="#bad0d9">ACK 基线与完整存档代不变</text>
+    </g>
+    <g transform="translate(867 383)">
+      <rect width="370" height="147" rx="10" fill="#23394d" stroke="#5a889b" stroke-width="2"/>
+      <text x="24" y="33" font-size="16" font-weight="700" fill="#a3d2e0">S5 · P2 / 验收门禁</text>
+      <text x="24" y="76" font-size="24" font-weight="700" fill="#eff9fc">逻辑回归 + 三端验证</text>
+      <text x="24" y="112" font-size="16" fill="#bad0d9">编译、安装、运行结果分开</text>
+    </g>
+    <path d="M415 458H451" stroke="#77bfd0" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M827 458H863" stroke="#77bfd0" stroke-width="3" marker-end="url(#arrow)"/>
+    <rect x="43" y="564" width="1194" height="65" rx="9" fill="#143140" stroke="#467185" stroke-width="1.5"/>
+    <text x="640" y="605" text-anchor="middle" font-size="18" font-weight="700" fill="#bce4ef">始终保持：房主唯一权威  ·  单图唯一模拟者  ·  事务原子确认  ·  完整存档代  ·  可回滚</text>
+  </g>
+</svg>
