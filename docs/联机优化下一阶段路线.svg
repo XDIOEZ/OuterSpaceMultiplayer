@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="700" viewBox="0 0 1240 700" role="img" aria-labelledby="title desc">
+  <title id="title">FreeWorldMultiplayer 下一阶段优化开发路线</title>
+  <desc id="desc">优先将未跟踪源码纳入可复现工作流程，建立三端正式构建门禁，获取双端舰队操作与性能证据，然后按实际热点选择地图、银河或存档优化，最后进行完整回归验收。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#102030"/>
+      <stop offset="1" stop-color="#20364a"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#82bfce"/>
+    </marker>
+  </defs>
+  <rect width="1240" height="700" fill="url(#background)"/>
+  <g font-family="Microsoft YaHei, PingFang SC, sans-serif">
+    <text x="39" y="49" fill="#ecf6fa" font-size="29" font-weight="700">FreeWorldMultiplayer  /  下一阶段优化路线</text>
+    <text x="39" y="83" fill="#aac4d0" font-size="16">先收口源码，再拿证据。减少重复工作，不重写权威联机架构。</text>
+    <text x="1199" y="49" text-anchor="end" fill="#80aebf" font-size="16">V1.19 / 协议 6 / 存档 1</text>
+    <path d="M39 113 H1200" stroke="#45687b" stroke-width="1.4"/>
+
+    <!-- Mandatory gates -->
+    <g transform="translate(39 151)">
+      <rect width="348" height="152" rx="11" fill="#263a4e" stroke="#e2ad66" stroke-width="2"/>
+      <rect x="0" y="0" width="7" height="152" fill="#e2ad66"/>
+      <text x="24" y="32" font-size="16" font-weight="700" fill="#f1bf83">G0 / 源码收口</text>
+      <text x="24" y="72" font-size="23" font-weight="700" fill="#f2f8fb">恢复可复现的源码闭包</text>
+      <text x="24" y="104" font-size="15" fill="#c1d4dc">3 份核心地图源码仍未跟踪</text>
+      <text x="24" y="128" font-size="15" fill="#a6c0cc">保护 92 条既有工作区状态</text>
+    </g>
+    <g transform="translate(446 151)">
+      <rect width="348" height="152" rx="11" fill="#263a4e" stroke="#e2ad66" stroke-width="2"/>
+      <rect x="0" y="0" width="7" height="152" fill="#e2ad66"/>
+      <text x="24" y="32" font-size="16" font-weight="700" fill="#f1bf83">G1 / 正式构建门禁</text>
+      <text x="24" y="72" font-size="23" font-weight="700" fill="#f2f8fb">BuildOnly → 三端清单</text>
+      <text x="24" y="104" font-size="15" fill="#c1d4dc">PowerShell 7 / 真实游戏依赖</text>
+      <text x="24" y="128" font-size="15" fill="#a6c0cc">源码指纹一致才进入安装</text>
+    </g>
+    <g transform="translate(853 151)">
+      <rect width="348" height="152" rx="11" fill="#263a4e" stroke="#74bbcf" stroke-width="2"/>
+      <rect x="0" y="0" width="7" height="152" fill="#74bbcf"/>
+      <text x="24" y="32" font-size="16" font-weight="700" fill="#a3e3f1">F1 + M1 / 两端取证</text>
+      <text x="24" y="72" font-size="23" font-weight="700" fill="#f2f8fb">舰队命令与 P95 采样</text>
+      <text x="24" y="104" font-size="15" fill="#c1d4dc">CommandId / 同场景 ≥3 轮</text>
+      <text x="24" y="128" font-size="15" fill="#a6c0cc">先判断真正最慢的阶段</text>
+    </g>
+    <path d="M391 227 H440" stroke="#82bfce" stroke-width="2.5" marker-end="url(#arrow)"/>
+    <path d="M798 227 H847" stroke="#82bfce" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+    <text x="39" y="356" fill="#a3d7e3" font-size="17" font-weight="700">测量之后才选择优化方向（不要求同时改动）</text>
+    <path d="M1027 306 V376 H621 V397" fill="none" stroke="#729daf" stroke-width="2.5" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+    <g transform="translate(39 401)">
+      <rect width="348" height="140" rx="11" fill="#254253" stroke="#597e94" stroke-width="1.5"/>
+      <text x="24" y="31" font-size="16" fill="#a4d4e1" font-weight="700">O1 / 地图同步</text>
+      <text x="24" y="69" font-size="22" fill="#eef7fa" font-weight="700">减少大地图主线程耗时</text>
+      <text x="24" y="100" font-size="15" fill="#c1d4dc">typed FIFO / 缓存 / 校验</text>
+      <text x="24" y="122" font-size="14" fill="#9ebcc9">不拆半条权威事务</text>
+    </g>
+    <g transform="translate(446 401)">
+      <rect width="348" height="140" rx="11" fill="#254253" stroke="#597e94" stroke-width="1.5"/>
+      <text x="24" y="31" font-size="16" fill="#a4d4e1" font-weight="700">O2 / 银河与传输</text>
+      <text x="24" y="69" font-size="22" fill="#eef7fa" font-weight="700">减少重复广播与扫描</text>
+      <text x="24" y="100" font-size="15" fill="#c1d4dc">按接收者基线 / ACK / 位姿</text>
+      <text x="24" y="122" font-size="14" fill="#9ebcc9">离线舰队仍冻结</text>
+    </g>
+    <g transform="translate(853 401)">
+      <rect width="348" height="140" rx="11" fill="#254253" stroke="#597e94" stroke-width="1.5"/>
+      <text x="24" y="31" font-size="16" fill="#a4d4e1" font-weight="700">O3 / 保存与恢复</text>
+      <text x="24" y="69" font-size="22" fill="#eef7fa" font-weight="700">减少已证实的写盘热点</text>
+      <text x="24" y="100" font-size="15" fill="#c1d4dc">完整 SaveGeneration / 原子切换</text>
+      <text x="24" y="122" font-size="14" fill="#9ebcc9">失败不假报成功</text>
+    </g>
+    <path d="M215 548 V563 H621 V580" fill="none" stroke="#82bfce" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M621 548 V580" stroke="#82bfce" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M1027 548 V563 H621 V580" fill="none" stroke="#82bfce" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="39" y="584" width="1162" height="77" rx="10" fill="#16313e" stroke="#6d98aa" stroke-width="1.4"/>
+    <text x="61" y="614" fill="#c6e6ed" font-size="19" font-weight="700">R1 / 最终放行</text>
+    <text x="61" y="643" fill="#b8d2dd" font-size="16">代码 → 逻辑测试 → 三端正式包 → 安装 → 用户跨机验收　　|　任一资产/存档错误，停止发布并回滚</text>
+  </g>
+</svg>

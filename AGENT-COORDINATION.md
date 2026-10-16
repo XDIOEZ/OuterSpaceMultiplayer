@@ -17,6 +17,7 @@
 
 | 任务 ID | 负责人 | 目标 / 文件范围 | 状态与下一步 |
 | --- | --- | --- | --- |
+| multiplayer-optimization-next-plan-20261016 | 本轮优化案维护 Agent | 仅新增 `docs/联机插件下一阶段优化开发案.md` 和 `docs/联机优化下一阶段路线.svg`；`docs/联机插件优化开发案.md` 仅加入口；本协调文件仅本行 | 已完成，文档占用释放：核实 V1.19/协议6/存档1、Git 未跟踪地图源码、历史双端慢日志及 PowerShell 7 门禁；新方案按 G0/G1/F1/M1/O1～O3/R1 拆单并含 SVG、验收和回退要求；未修改任何功能源码，未构建安装或启动游戏。 |
 | optimization-map-replay-20261016 | 本轮主控（无可用子 Agent） | `src/Session/MapSnapshotCache.cs`、`MapViewLoading.cs`、`src/Core/MapSnapshotDeltaCodec.cs`、`SessionPerformance.cs`；优化回归用例与实施说明 | 已完成源码实施并释放占用：客端缓存完整图保留在原 FIFO 槽，避免二次 JSON 化且走原 `ReceiveMapView`；重组只分配一次完整缓冲；编码/重组/应用及缓存块复用增加可关闭的聚合指标。40 项纯逻辑检查通过；P3/Steam/TapTap 三端真实引用 Roslyn 静态编译通过。原三份地图源文件属于历史未跟踪内容，不可整份暂存，保留本轮窄改与其原内容。正式 `-BuildOnly` 因本机 PowerShell 5.1 不满足 7.0 被拒，未安装或实测联机；故障根因、性能收益、多人资产验收仍未确认。 |
 | multiplayer-optimization-plan-refresh-20261016 | 本轮方案维护 Agent | 仅 `docs/联机插件优化开发案.md` 的执行状态和下一轮任务卡；协调记录只增本行 | 已完成并释放占用：复核既有代码及已提交实施记录，更新 S0～S5 状态、G0/F1/M1/O1～O3/R1 任务、依赖、证据、验收和回退要求；仅文档，不改功能/协议/存档/游戏本体，未执行构建、安装或游戏测试。 |
 | optimize-s0-s1-20261016 | 当前实施主控（本会话；无可用子 Agent） | S0 舰队诊断：`src/Game/NativeGalaxy.cs`、`src/Session/Commands.cs`、`Networking.cs`、`MultiplayerSession.cs`；S1 性能窗口与队列只读统计；S2/S4 房主广播编码去重；S5 纯逻辑回归、文档 | 代码修改已完成、源码占用释放：固定阶段有界舰队诊断、可关闭 30 秒性能直方图、接收队列采样、广播复用；纯逻辑检查 23 项通过，P3/Steam/TapTap 复用历史真实引用的 Roslyn 静态编译均通过（非正式打包）。本机未发现 PowerShell 7，统一构建/安装未执行；未启动游戏/PlayMode/跨机测试，舰队不能移动的实际根因与 S3 热点仍需实测。保留所有其他 Agent 的未提交改动。 |
