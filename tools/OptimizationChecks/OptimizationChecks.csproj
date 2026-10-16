@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Exercise actual production source, not copied algorithms or game assemblies. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Session/PerformanceWindow.cs" Link="PerformanceWindow.cs" />
+    <Compile Include="../../src/Transport/TransportQueue.cs" Link="TransportQueue.cs" />
+  </ItemGroup>
+</Project>

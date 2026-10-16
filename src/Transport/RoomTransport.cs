@@ -54,6 +54,17 @@ namespace FreeWorldMultiplayer
             if (!tcpNext && tcp != null && tcp.TryDequeue(out item)) { tcpNext = false; return true; }
             item = null; return false;
         }
+        internal TransportQueueSnapshot ReadQueueSnapshot()
+        {
+            TransportQueueSnapshot tcpStats = tcp == null ? new TransportQueueSnapshot() : tcp.ReadQueueSnapshot();
+            TransportQueueSnapshot steamStats = steam == null ? new TransportQueueSnapshot() : steam.ReadQueueSnapshot();
+            return new TransportQueueSnapshot
+            {
+                Events = tcpStats.Events + steamStats.Events,
+                QueuedBytes = tcpStats.QueuedBytes + steamStats.QueuedBytes,
+                ReservedBytes = tcpStats.ReservedBytes + steamStats.ReservedBytes
+            };
+        }
         public void InviteFriends() { if (steam == null) throw new InvalidOperationException("此房间未启用 Steam。"); steam.InviteFriends(); }
         public void BeginDrain() { if (tcp != null) tcp.BeginDrain(); if (steam != null) steam.BeginDrain(); }
         public bool IsDrained { get { return (tcp == null || tcp.IsDrained) && (steam == null || steam.IsDrained); } }

@@ -247,6 +247,7 @@ namespace FreeWorldMultiplayer
         private static int GetInt(byte[] data, int offset) { return (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3]; }
 
         public bool TryDequeue(out TransportEvent item) { Poll(); return events.TryDequeue(out item); }
+        internal TransportQueueSnapshot ReadQueueSnapshot() { return events.Snapshot(); }
         public void BeginDrain()
         {
             draining = true;

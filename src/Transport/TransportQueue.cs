@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace FreeWorldMultiplayer
 {
+    internal struct TransportQueueSnapshot
+    {
+        internal int Events;
+        internal long QueuedBytes;
+        internal long ReservedBytes;
+    }
+
     // The only crossing between socket workers and the game main thread.
     internal sealed class TransportQueue
     {
@@ -71,6 +78,17 @@ namespace FreeWorldMultiplayer
                 queuedBytes -= item.Data == null ? 0 : item.Data.Length;
                 return true;
             }
+        }
+
+        internal TransportQueueSnapshot Snapshot()
+        {
+            lock (gate)
+                return new TransportQueueSnapshot
+                {
+                    Events = events.Count,
+                    QueuedBytes = queuedBytes,
+                    ReservedBytes = reservedBytes
+                };
         }
 
         public void Clear() { lock (gate) { events.Clear(); terminalCount = 0; terminalOverflow = false; queuedBytes = 0; } }

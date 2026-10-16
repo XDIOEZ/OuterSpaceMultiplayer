@@ -238,6 +238,7 @@ namespace FreeWorldMultiplayer
         }
 
         public bool TryDequeue(out TransportEvent item) { return events.TryDequeue(out item); }
+        internal TransportQueueSnapshot ReadQueueSnapshot() { return events.Snapshot(); }
         public void BeginDrain()
         {
             draining = true;
