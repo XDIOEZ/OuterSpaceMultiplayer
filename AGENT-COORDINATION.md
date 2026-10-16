@@ -23,6 +23,7 @@
 | agent-coordination-file | 本次修复主 Agent | `AGENT-COORDINATION.md`、`AGENTS.md` | 协作入口、登记模板和本轮分工已建立，两位子 Agent 已各自更新交接；文件占用已释放 |
 | UI-20261016-01 | 本轮 UI 结构代理 | `src/Entry/MultiplayerVisualTheme.cs` | 初始化拆为反馈、房间、连接和输入四个步骤；本地提交 `0fbf8c7`；未做游戏内验收，文件占用已释放 |
 | UI-20261016-02 | 待认领 | `src/Entry/MultiplayerRoomDialog.cs`、`src/Entry/MultiplayerLobbyPages.cs`、`src/Entry/MultiplayerRoomPages.cs` | 计划梳理导航与状态刷新边界；这些文件已有未提交改动，必须先确认负责人和交接，未获许可不修改 |
+| UI-20261016-03 | 本轮 UI 结构代理 | `src/Entry/MultiplayerVisualTheme.cs`、`src/Entry/MultiplayerPlayerRosterVisual.cs` | 已完成：视觉刷新和玩家列表数据 / 显示职责拆分，本地提交 `a7c6d6c`；未构建或游戏内验收，文件占用已释放 |
 
 其他正在进行的任务请由对应负责人自行登记，不根据文件名推断归属。
 
