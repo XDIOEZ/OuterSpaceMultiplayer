@@ -24,6 +24,7 @@ namespace FreeWorldMultiplayer
         private readonly List<Button> obsoleteRows = new List<Button>();
         private readonly Dictionary<Button, Color> disabledCaptions = new Dictionary<Button, Color>();
         private readonly List<InputBorder> inputBorders = new List<InputBorder>();
+        private Button lastVisibleSaveSelection, lastVisiblePresetSelection;
         private GameObject connectionBadge;
         private TMP_Text connectionBadgeText, navigationHint;
         private Image connectionBadgeDot, feedbackDot;
@@ -76,7 +77,7 @@ namespace FreeWorldMultiplayer
                 border.effectColor = new Color32(108, 142, 145, 72);
                 inputBorders.Add(new InputBorder { Field = field, Outline = border });
             }
-            gameObject.AddComponent<MultiplayerInputTabNavigation>();
+            gameObject.AddComponent<MultiplayerInputTabNavigation>().Owner = this;
         }
 
         private static void SetTextIfChanged(TMP_Text label, string value)
@@ -170,7 +171,7 @@ namespace FreeWorldMultiplayer
             RefreshButtonAvailability();
             bool invalidFocusedInput;
             string inputHint = RefreshInputBorders(out invalidFocusedInput);
-            SetTextIfChanged(navigationHint, inputHint ?? location);
+            SetTextIfChanged(navigationHint, inputHint ?? FocusedListHint() ?? location);
             SetColorIfChanged(navigationHint, invalidFocusedInput ? WarningColor : MutedColor);
             RefreshRowHighlights();
 
@@ -280,11 +281,13 @@ namespace FreeWorldMultiplayer
             // dirty graphics for rows in inactive scroll views every UI tick.
             if (saveScroll != null && saveScroll.gameObject.activeInHierarchy)
             {
+                Button selectedButton = null;
                 foreach (SaveRow row in saveRows)
                 {
                     if (row.Button == null) continue;
                     bool invalid = !String.IsNullOrEmpty(row.World.Error);
                     bool selected = row.World.WorldId == selectedWorldId;
+                    if (selected) selectedButton = row.Button;
                     RowVisual visual = RowHighlight(row.Button);
                     SetColorIfChanged(visual.Highlight, selected ? new Color32(214, 187, 125, 45)
                         : invalid ? new Color32(225, 123, 106, 18)
@@ -294,21 +297,118 @@ namespace FreeWorldMultiplayer
                     // per tick; the invalid metadata and background remain tinted.
                     SetColorIfChanged(row.Name, selected ? AccentColor : BodyColor);
                 }
+                // A disk refresh rebuilds the rows and resets the native scroll
+                // to the top. Reveal the preserved selection once for the new
+                // button instance, without overriding ordinary user scrolling.
+                if (selectedButton != lastVisibleSaveSelection)
+                {
+                    lastVisibleSaveSelection = selectedButton;
+                    if (selectedButton != null) RevealScrollRow(saveScroll, selectedButton.transform as RectTransform);
+                }
             }
             if (presetScroll != null && presetScroll.gameObject.activeInHierarchy)
             {
+                Button selectedButton = null;
                 foreach (PresetRow row in presetRows)
                 {
                     if (row.Button == null) continue;
                     bool invalid = !String.IsNullOrEmpty(row.Preset.Error);
                     bool selected = !invalid && row.Preset.Id == selectedPresetId;
+                    if (selected) selectedButton = row.Button;
                     RowVisual visual = RowHighlight(row.Button);
                     SetColorIfChanged(visual.Highlight, selected ? new Color32(214, 187, 125, 45)
                         : invalid ? new Color32(225, 123, 106, 18)
                         : row.Button.interactable && visual.Hover.Hovered ? new Color32(161, 190, 194, 28) : Color.clear);
                     SetColorIfChanged(row.Name, selected ? AccentColor : BodyColor);
                 }
+                if (selectedButton != lastVisiblePresetSelection)
+                {
+                    lastVisiblePresetSelection = selectedButton;
+                    if (selectedButton != null) RevealScrollRow(presetScroll, selectedButton.transform as RectTransform);
+                }
             }
+        }
+
+        private string FocusedListHint()
+        {
+            if (page != Page.Create) return null;
+            GameObject selected = EventSystem.current == null ? null : EventSystem.current.currentSelectedGameObject;
+            Button button = selected == null ? null : selected.GetComponentInParent<Button>();
+            if (button == null || !button.interactable) return null;
+            bool saves = continueWorldForm != null && continueWorldForm.activeInHierarchy;
+            if (saves)
+            {
+                foreach (SaveRow row in saveRows)
+                    if (row.Button == button) return "↑↓ 选择存档  ·  Home/End 首尾";
+            }
+            else
+            {
+                foreach (PresetRow row in presetRows)
+                    if (row.Button == button) return "↑↓ 选择配置  ·  Home/End 首尾";
+            }
+            return null;
+        }
+
+        internal bool NavigateWorldList(Button current, KeyCode key)
+        {
+            if (page != Page.Create || Busy || Connected || current == null) return false;
+            bool saves = continueWorldForm != null && continueWorldForm.activeInHierarchy;
+            ScrollRect scroll = saves ? saveScroll : presetScroll;
+            if (scroll == null || !scroll.gameObject.activeInHierarchy) return false;
+
+            // The list is the authority for row order, and disabled/invalid
+            // preset rows are excluded. Saved-world errors stay selectable so
+            // the player can still inspect why a save is unavailable.
+            var buttons = new List<Button>();
+            if (saves)
+            {
+                foreach (SaveRow row in saveRows)
+                    if (row.Button != null && row.Button.interactable && row.Button.gameObject.activeInHierarchy)
+                        buttons.Add(row.Button);
+            }
+            else
+            {
+                foreach (PresetRow row in presetRows)
+                    if (row.Button != null && row.Button.interactable && row.Button.gameObject.activeInHierarchy)
+                        buttons.Add(row.Button);
+            }
+            int index = buttons.IndexOf(current);
+            if (index < 0) return false;
+
+            int next = index;
+            switch (key)
+            {
+                case KeyCode.UpArrow: next = Mathf.Max(0, index - 1); break;
+                case KeyCode.DownArrow: next = Mathf.Min(buttons.Count - 1, index + 1); break;
+                case KeyCode.Home: next = 0; break;
+                case KeyCode.End: next = buttons.Count - 1; break;
+                default: return false;
+            }
+            if (next == index) return true;
+            Button target = buttons[next];
+            target.onClick.Invoke(); // Same selection path and validation as a mouse click.
+            EventSystem events = EventSystem.current;
+            if (events != null) events.SetSelectedGameObject(target.gameObject);
+            RevealScrollRow(scroll, target.transform as RectTransform);
+            return true;
+        }
+
+        private static void RevealScrollRow(ScrollRect scroll, RectTransform row)
+        {
+            if (scroll == null || row == null || scroll.viewport == null || scroll.content == null) return;
+            LayoutRebuilder.ForceRebuildLayoutImmediate(scroll.content);
+            float scrollableHeight = scroll.content.rect.height - scroll.viewport.rect.height;
+            if (scrollableHeight <= 0) return;
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(scroll.viewport, row);
+            Rect view = scroll.viewport.rect;
+            const float padding = 8;
+            float offset = bounds.max.y > view.yMax - padding
+                ? bounds.max.y - (view.yMax - padding)
+                : bounds.min.y < view.yMin + padding
+                    ? bounds.min.y - (view.yMin + padding) : 0;
+            if (Mathf.Approximately(offset, 0)) return;
+            scroll.StopMovement();
+            scroll.verticalNormalizedPosition = Mathf.Clamp01(scroll.verticalNormalizedPosition + offset / scrollableHeight);
         }
     }
 
@@ -327,16 +427,22 @@ namespace FreeWorldMultiplayer
     // outside this modal or moving focus to controls on hidden pages.
     internal sealed class MultiplayerInputTabNavigation : MonoBehaviour
     {
+        internal MultiplayerRoomDialog Owner;
         private bool legacyKeyboardAvailable = true;
 
         private void Update()
         {
             if (!legacyKeyboardAvailable) return;
             bool tab, backwards;
+            KeyCode listKey;
             try
             {
                 tab = Input.GetKeyDown(KeyCode.Tab);
-                if (!tab) return;
+                listKey = Input.GetKeyDown(KeyCode.UpArrow) ? KeyCode.UpArrow
+                    : Input.GetKeyDown(KeyCode.DownArrow) ? KeyCode.DownArrow
+                    : Input.GetKeyDown(KeyCode.Home) ? KeyCode.Home
+                    : Input.GetKeyDown(KeyCode.End) ? KeyCode.End : KeyCode.None;
+                if (!tab && listKey == KeyCode.None) return;
                 if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)
                     || Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) return;
                 backwards = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
@@ -352,6 +458,13 @@ namespace FreeWorldMultiplayer
             EventSystem events = EventSystem.current;
             GameObject selected = events == null ? null : events.currentSelectedGameObject;
             if (selected == null || !selected.transform.IsChildOf(transform)) return;
+            if (listKey != KeyCode.None)
+            {
+                Button row = selected.GetComponentInParent<Button>();
+                if (row != null && Owner != null) Owner.NavigateWorldList(row, listKey);
+                return;
+            }
+            if (!tab) return;
             TMP_InputField current = selected.GetComponentInParent<TMP_InputField>();
             if (current == null || !current.isActiveAndEnabled || !current.interactable) return;
 
