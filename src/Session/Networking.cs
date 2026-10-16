@@ -14,7 +14,14 @@ namespace FreeWorldMultiplayer
         private void Broadcast(string kind, object payload, string exceptPeer = null)
         {
             if (!IsHost || !transport.IsRunning) return;
-            foreach (string peer in peers.Keys.ToList()) if (peer != exceptPeer) Send(peer, kind, payload);
+            // All recipients share one immutable session envelope; both transports clone per peer.
+            byte[] encoded = null;
+            foreach (string peer in peers.Keys.ToList())
+            {
+                if (peer == exceptPeer) continue;
+                if (encoded == null) encoded = EncodeMessage(kind, payload, null);
+                transport.Send(peer, encoded);
+            }
         }
         private void HandleTransport(TransportEvent item)
         {
