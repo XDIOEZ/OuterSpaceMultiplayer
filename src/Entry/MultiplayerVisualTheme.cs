@@ -28,9 +28,13 @@ namespace FreeWorldMultiplayer
         private readonly List<InputBorder> inputBorders = new List<InputBorder>();
         private Button lastVisibleSaveSelection, lastVisiblePresetSelection;
         private Button copyFeedbackButton;
+        private Button expandFeedbackButton, copyRoomButton;
         private Button joinIpButton, joinSteamButton, saveSettingsButton;
-        private TMP_Text copyFeedbackCaption;
-        private string copiedFeedback;
+        private TMP_Text copyFeedbackCaption, expandFeedbackCaption, feedbackHeading, copyRoomCaption;
+        private string copiedFeedback, copiedRoomId;
+        private double copiedFeedbackUntil, copiedRoomUntil;
+        private bool feedbackExpanded, lastFeedbackExpanded;
+        private Image feedbackSurfaceImage;
         private GameObject connectionBadge;
         private TMP_Text connectionBadgeText, navigationHint;
         private Image connectionBadgeDot, feedbackDot;
@@ -51,18 +55,36 @@ namespace FreeWorldMultiplayer
         {
             // A quiet footer separates actionable errors and save feedback from page content.
             GameObject feedbackSurface = MultiplayerUi.Node("FWM.FeedbackSurface", transform);
-            var surface = feedbackSurface.AddComponent<Image>();
-            surface.color = new Color32(21, 30, 34, 240);
-            surface.raycastTarget = false;
+            feedbackSurfaceImage = feedbackSurface.AddComponent<Image>();
+            feedbackSurfaceImage.color = new Color32(21, 30, 34, 240);
+            feedbackSurfaceImage.raycastTarget = false;
             MultiplayerUi.Top((RectTransform)feedbackSurface.transform, 28, 726, 984, 70);
             feedbackSurface.transform.SetSiblingIndex(status.transform.GetSiblingIndex());
             feedbackDot = MakeDot(feedbackSurface.transform, "FWM.FeedbackDot", 18, 20, 8);
-            MultiplayerUi.Top(status.rectTransform, 52, 739, 780, 50);
+            MultiplayerUi.Top(status.rectTransform, 64, 739, 662, 50);
+            feedbackHeading = Label(transform, "FeedbackExpandedHeading", "操作反馈", 19, 64, 603, 500, 30);
+            feedbackHeading.color = HeadingColor;
+            feedbackHeading.gameObject.SetActive(false);
+            expandFeedbackButton = MultiplayerUi.CloneButton(ButtonTemplate, transform, "FWM.ExpandFeedback",
+                "展开", ToggleFeedback);
+            MultiplayerUi.Top((RectTransform)expandFeedbackButton.transform, 742, 741, 100, 43);
+            expandFeedbackCaption = OfficialModUi.Caption(expandFeedbackButton);
+            expandFeedbackCaption.fontSize = 16;
             copyFeedbackButton = MultiplayerUi.CloneButton(ButtonTemplate, transform, "FWM.CopyFeedback",
                 "复制提示", CopyFeedback);
             MultiplayerUi.Top((RectTransform)copyFeedbackButton.transform, 852, 741, 144, 43);
             copyFeedbackCaption = OfficialModUi.Caption(copyFeedbackButton);
             copyFeedbackCaption.fontSize = 16;
+
+            // Steam guests and hosts can share the real lobby ID directly.
+            // In IP-only rooms there is no Steam ID to copy or fabricate.
+            MultiplayerUi.Top(roomStatus.rectTransform, 0, 0, 984, 76);
+            copyRoomButton = MultiplayerUi.CloneButton(ButtonTemplate, pages[(int)Page.Room].transform,
+                "FWM.CopyRoomId", "复制 Steam 房间号", CopyRoomId);
+            MultiplayerUi.Top((RectTransform)copyRoomButton.transform, 756, 18, 224, 42);
+            copyRoomCaption = OfficialModUi.Caption(copyRoomButton);
+            copyRoomCaption.fontSize = 16;
+            copyRoomButton.gameObject.SetActive(false);
 
             // The connection banner belongs to the header, not the navigation row:
             // the latter contains the cancel-connection button when a session is busy.
@@ -120,9 +142,46 @@ namespace FreeWorldMultiplayer
                 // never session internals, credentials or raw exception traces.
                 GUIUtility.systemCopyBuffer = status.text;
                 copiedFeedback = status.text;
+                copiedFeedbackUntil = Time.unscaledTimeAsDouble + 2.5;
                 SetTextIfChanged(copyFeedbackCaption, "已复制");
             }
             catch (Exception error) { if (Runtime != null) Runtime.ReportUiFailure(error); }
+        }
+
+        private void CopyRoomId()
+        {
+            if (!Connected || Busy || Runtime.Transport == null) return;
+            string roomId = Runtime.Transport.RoomId;
+            if (String.IsNullOrWhiteSpace(roomId)) return;
+            try
+            {
+                GUIUtility.systemCopyBuffer = roomId;
+                copiedRoomId = roomId;
+                copiedRoomUntil = Time.unscaledTimeAsDouble + 2.5;
+                SetTextIfChanged(copyRoomCaption, "已复制房间号");
+            }
+            catch (Exception error) { Runtime.ReportUiFailure(error); }
+        }
+
+        private void ToggleFeedback()
+        {
+            if (status == null || String.IsNullOrWhiteSpace(status.text)) return;
+            feedbackExpanded = !feedbackExpanded;
+            ApplyFeedbackLayout();
+        }
+
+        private void ApplyFeedbackLayout()
+        {
+            if (feedbackSurfaceImage == null || lastFeedbackExpanded == feedbackExpanded) return;
+            lastFeedbackExpanded = feedbackExpanded;
+            feedbackSurfaceImage.raycastTarget = feedbackExpanded; // Block clicks through the expanded message.
+            MultiplayerUi.Top((RectTransform)feedbackSurfaceImage.transform,
+                28, feedbackExpanded ? 594 : 726, 984, feedbackExpanded ? 202 : 70);
+            MultiplayerUi.Top(status.rectTransform, 64,
+                feedbackExpanded ? 640 : 739, feedbackExpanded ? 916 : 662, feedbackExpanded ? 82 : 50);
+            status.maxVisibleLines = feedbackExpanded ? 6 : 2;
+            feedbackHeading.gameObject.SetActive(feedbackExpanded);
+            SetTextIfChanged(expandFeedbackCaption, feedbackExpanded ? "收起" : "展开");
         }
 
         private static Image MakeDot(Transform parent, string name, float x, float y, float size)
@@ -190,12 +249,39 @@ namespace FreeWorldMultiplayer
                 || message.IndexOf("已连接", StringComparison.Ordinal) >= 0);
             SetColorIfChanged(feedbackDot, warning ? WarningColor : positive ? PositiveColor : AccentColor);
             SetColorIfChanged(status, warning ? WarningColor : BodyColor);
+            if (feedbackExpanded && String.IsNullOrWhiteSpace(message))
+            {
+                feedbackExpanded = false;
+                ApplyFeedbackLayout();
+            }
+            if (expandFeedbackButton != null)
+            {
+                expandFeedbackButton.interactable = !String.IsNullOrWhiteSpace(message);
+                SetColorIfChanged(expandFeedbackCaption,
+                    expandFeedbackButton.interactable ? BodyColor : DisabledColor);
+            }
             if (copyFeedbackButton != null)
             {
                 copyFeedbackButton.interactable = !String.IsNullOrWhiteSpace(message);
                 SetTextIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable && message == copiedFeedback
+                    && Time.unscaledTimeAsDouble < copiedFeedbackUntil
                     ? "已复制" : "复制提示");
                 SetColorIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable ? BodyColor : DisabledColor);
+            }
+
+            string roomId = Runtime.Transport == null ? null : Runtime.Transport.RoomId;
+            if (copyRoomButton != null)
+            {
+                bool hasRoomId = !String.IsNullOrWhiteSpace(roomId);
+                if (copyRoomButton.gameObject.activeSelf != hasRoomId)
+                {
+                    copyRoomButton.gameObject.SetActive(hasRoomId);
+                    MultiplayerUi.Top(roomStatus.rectTransform, 0, 0, hasRoomId ? 730 : 984, 76);
+                }
+                copyRoomButton.interactable = connected && !Busy && hasRoomId;
+                SetColorIfChanged(copyRoomCaption, copyRoomButton.interactable ? BodyColor : DisabledColor);
+                SetTextIfChanged(copyRoomCaption, roomId == copiedRoomId
+                    && Time.unscaledTimeAsDouble < copiedRoomUntil ? "已复制房间号" : "复制 Steam 房间号");
             }
 
             // Direct launch cannot use Steam; make that clear before the click.
@@ -233,6 +319,9 @@ namespace FreeWorldMultiplayer
                             || (entry.Key == "Speed5" && session.Speed == 5)));
                 SetSelectedVisual(entry.Value, selected);
                 TMP_Text text = captions[entry.Value];
+                if (entry.Key == "Pause")
+                    SetTextIfChanged(text, session == null || !connected
+                        ? "暂停 / 继续" : session.Paused ? "继续运行" : "暂停世界");
                 FontStyles style = selected ? FontStyles.Bold : FontStyles.Normal;
                 if (text.fontStyle != style) text.fontStyle = style;
                 SetColorIfChanged(text, !entry.Value.interactable ? DisabledColor : selected ? HeadingColor : BodyColor);
