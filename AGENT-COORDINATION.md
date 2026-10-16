@@ -17,6 +17,7 @@
 
 | 任务 ID | 负责人 | 目标 / 文件范围 | 状态与下一步 |
 | --- | --- | --- | --- |
+| optimize-s0-s1-20261016 | 当前实施主控（本会话；无可用子 Agent） | S0 舰队诊断：`src/Game/NativeGalaxy.cs`、`src/Session/Commands.cs`、`Networking.cs`、`MultiplayerSession.cs`；S1 性能窗口与队列只读统计；S2/S4 房主广播编码去重；S5 纯逻辑回归、文档 | 代码修改已完成、源码占用释放：固定阶段有界舰队诊断、可关闭 30 秒性能直方图、接收队列采样、广播复用；纯逻辑检查 23 项通过，P3/Steam/TapTap 复用历史真实引用的 Roslyn 静态编译均通过（非正式打包）。本机未发现 PowerShell 7，统一构建/安装未执行；未启动游戏/PlayMode/跨机测试，舰队不能移动的实际根因与 S3 热点仍需实测。保留所有其他 Agent 的未提交改动。 |
 | multiplayer-optimization-plan-20261016 | 当前文档规划 Agent（本会话） | `docs/联机插件优化开发案.md`、`docs/联机优化实施路线.svg`；不占用功能源码 | 已完成并释放文档占用：建立 S0～S5 分阶段方案、可复现性能基线、回归矩阵和路线图；仅文档改动，未变更接口/协议/存档/版本，未构建、安装或运行游戏。 |
 | host-exit-v1.12 | 本次修复主 Agent | 整合房主离开后的客人退出、版本和三端构建 | 源码已提交 `2972361`；统一构建被下方依赖阻断，尚未安装 |
 | host-exit-session | 子 Agent `/root/host_exit_session` | `src/Session/MultiplayerSession.cs`、`src/Session/Networking.cs` | 实现与接口说明已交主 Agent 整合；文件占用已释放；未运行测试或游戏 |
