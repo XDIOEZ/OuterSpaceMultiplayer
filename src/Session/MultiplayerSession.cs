@@ -90,6 +90,7 @@ namespace FreeWorldMultiplayer
         private void NotifyCommandResult(CommandResult result)
         {
             if (result == null) return;
+            TraceCompletedFleetResult(result);
             Action<CommandResult> callback;
             if ((result.Applied || !result.Success) && commandCallbacks.TryGetValue(result.CommandId, out callback))
             {

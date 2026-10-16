@@ -228,14 +228,18 @@ namespace FreeWorldMultiplayer
             if (view == null || view.bean == null) throw new InvalidOperationException("No player fleet selected.");
             if (Context.OwnerOfEntity(view.bean.getUID()) != Context.LocalPlayerId) throw new InvalidOperationException("Cannot navigate another player's fleet.");
             var command = new GameCommand { Kind = CommandKind.FleetCommand, EntityId = view.bean.getUID(), MapId = -1, PayloadJson = NativeWire.Json(order) };
+            FleetCommandTrace.Emit("native.route", command.CommandId, command.EntityId, Context.IsHost, "begin");
             if (callback != null) fleetCallbacks.Add(command.CommandId, callback);
             CommandResult result = Context.SubmitCommand(command);
+            FleetCommandTrace.Emit("native.submit-return", command.CommandId, command.EntityId, Context.IsHost,
+                result.Success ? "queued-or-accepted" : "rejected");
             if (!result.Success) { CompleteLocalFleetCallback(command.CommandId, false); throw new InvalidOperationException(result.Error); }
             return result;
         }
         public BridgeResult ExecuteFleetCommand(GameCommand command)
         {
-            return Run(() =>
+            FleetCommandTrace.Emit("host.native.begin", command.CommandId, command.EntityId, true, "begin");
+            BridgeResult outcome = Run(() =>
             {
                 if (!Context.IsHost || !Online.Contains(command.PlayerId) || Context.OwnerOfEntity(command.EntityId) != command.PlayerId) throw new InvalidOperationException("Fleet navigation requires the online owning player and host authority.");
                 FleetOrder order = NativeWire.Parse<FleetOrder>(command.PayloadJson);
@@ -294,12 +298,20 @@ namespace FreeWorldMultiplayer
                 }
                 RefreshFleetVisibility();
             });
+            FleetCommandTrace.Emit("host.native.end", command.CommandId, command.EntityId, true,
+                outcome.Success ? "accepted" : "rejected");
+            return outcome;
         }
         internal void ObserveFleetCommandResult(CommandResult result) { if (!result.Success) CompleteLocalFleetCallback(result.CommandId, false); }
         private void CompleteLocalFleetCallback(string id, bool success)
         {
             callbackbool callback;
-            if (id != null && fleetCallbacks.TryGetValue(id, out callback)) { fleetCallbacks.Remove(id); callback(success); }
+            if (id != null && fleetCallbacks.TryGetValue(id, out callback))
+            {
+                fleetCallbacks.Remove(id);
+                FleetCommandTrace.Emit("native.callback", id, -1, Context.IsHost, success ? "completed" : "rejected");
+                callback(success);
+            }
         }
         internal void DisposeGalaxy()
         {
@@ -342,6 +354,9 @@ namespace FreeWorldMultiplayer
         private static bool NavigationPrefix(AirShipFleetInfoBean __instance, MethodBase __originalMethod, object[] __args, ref bool __result)
         {
             if (Bypass) return true;
+            FleetCommandTrace.Emit("native.hook", null,
+                __instance == null || __instance.bean == null ? -1 : __instance.bean.getUID(),
+                Bridge.Context.IsHost, "invoked");
             var order = new GameBridge.FleetOrder(); callbackbool callback = null;
             if (__originalMethod.Name == "beginFollowingTarget")
             {

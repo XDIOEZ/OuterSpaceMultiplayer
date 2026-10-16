@@ -78,7 +78,10 @@ namespace FreeWorldMultiplayer
                     GameCommand command = JsonData.Payload<GameCommand>(message.Payload);
                     command.PlayerId = playerId; command.SessionId = SessionId;
                     commandReplyPeers[TransactionKey(command)] = peer;
+                    if (command.Kind == CommandKind.FleetCommand)
+                        FleetCommandTrace.Emit("host.received", command.CommandId, command.EntityId, true, "queued");
                     CommandResult result = ExecuteHostCommand(command);
+                    TraceHostFleetResult(command, result);
                     Send(peer, "result", result);
                     break;
                 case "map": AcceptMapUpdate(playerId, peer, JsonData.Payload<MapUpdate>(message.Payload)); break;

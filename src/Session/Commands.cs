@@ -13,6 +13,7 @@ namespace FreeWorldMultiplayer
         public CommandResult Submit(GameCommand command)
         {
             if (command == null) throw new ArgumentNullException(nameof(command));
+            TraceLocalFleetCommand(command, "session.submit", "begin");
             if (!IsConnected || World == null || closing) return CommandResult.Fail(command.CommandId, "房间未连接或正在关闭。");
             if (string.IsNullOrWhiteSpace(command.CommandId)) command.CommandId = Guid.NewGuid().ToString("N");
             command.PlayerId = LocalPlayerId; command.SessionId = SessionId;
@@ -27,8 +28,9 @@ namespace FreeWorldMultiplayer
             }
             MapRecord map;
             if (World.Maps.TryGetValue(command.MapId, out map)) { command.AuthorityEpoch = map.AuthorityEpoch; command.BaseRevision = map.Revision; }
-            if (!IsHost) { Send("host", "command", command); return new CommandResult { CommandId = command.CommandId, Success = true, Error = "等待房主处理" }; }
+            if (!IsHost) { Send("host", "command", command); TraceLocalFleetCommand(command, "client.sent", "queued"); return new CommandResult { CommandId = command.CommandId, Success = true, Error = "等待房主处理" }; }
             CommandResult result = ExecuteHostCommand(command);
+            TraceHostFleetResult(command, result);
             NotifyCommandResult(result); return result;
         }
         private static string TransactionKey(GameCommand command) { return command.PlayerId + ":" + command.CommandId; }
