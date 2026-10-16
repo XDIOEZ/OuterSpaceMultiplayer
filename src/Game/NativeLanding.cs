@@ -1,11 +1,24 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace FreeWorldMultiplayer
 {
     public sealed partial class GameBridge
     {
+        // AirSupport's animation fields are read every ground frame. Cache native
+        // field metadata, but retain NativeWire's property/inheritance fallback.
+        private static readonly FieldInfo AirSupportTweenerField = GetAirSupportAnimationField("tweener");
+        private static readonly FieldInfo AirSupportSequenceField = GetAirSupportAnimationField("sequence");
+
+        private static FieldInfo GetAirSupportAnimationField(string name)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            Type type = typeof(AirSupport);
+            return type.GetProperty(name, flags) == null ? type.GetField(name, flags) : null;
+        }
+
         internal sealed class NativeLanding
         {
             public long ExpeditionUid;
@@ -142,8 +155,11 @@ namespace FreeWorldMultiplayer
             foreach (AirSupport support in manager.airSupports)
             {
                 if (support == null || support.expedition == null) continue;
-                DG.Tweening.Tween tween = NativeWire.Get(support, "tweener") as DG.Tweening.Tween;
-                DG.Tweening.Tween sequence = NativeWire.Get(support, "sequence") as DG.Tweening.Tween;
+                bool nativeType = support.GetType() == typeof(AirSupport);
+                DG.Tweening.Tween tween = (nativeType && AirSupportTweenerField != null
+                    ? AirSupportTweenerField.GetValue(support) : NativeWire.Get(support, "tweener")) as DG.Tweening.Tween;
+                DG.Tweening.Tween sequence = (nativeType && AirSupportSequenceField != null
+                    ? AirSupportSequenceField.GetValue(support) : NativeWire.Get(support, "sequence")) as DG.Tweening.Tween;
                 if (tween != null) tween.timeScale = speed;
                 if (sequence != null) sequence.timeScale = speed;
             }
