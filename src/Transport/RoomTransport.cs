@@ -9,6 +9,7 @@ namespace FreeWorldMultiplayer
         private SteamTransport steam;
         private bool host;
         private bool clientSteam;
+        private bool tcpNext;
         public string Name { get { return steam != null && tcp != null ? "TCP + Steam" : steam != null ? "Steam" : "TCP/IP"; } }
         public string LocalPeerId { get { return host ? "host" : clientSteam ? steam.LocalPeerId : tcp.LocalPeerId; } }
         public bool IsRunning { get { return (tcp != null && tcp.IsRunning) || (steam != null && steam.IsRunning); } }
@@ -45,9 +46,12 @@ namespace FreeWorldMultiplayer
         }
         public bool TryDequeue(out TransportEvent item)
         {
-            // Pump Steam even under sustained TCP traffic.
-            if (steam != null && steam.TryDequeue(out item)) return true;
-            if (tcp != null && tcp.TryDequeue(out item)) return true;
+            // Both channels share the main-thread message budget. Always draining Steam
+            // first can indefinitely starve TCP when Steam has a sustained backlog.
+            // Alternate priority when both have events; keep polling Steam when TCP is busy.
+            if (tcpNext && tcp != null && tcp.TryDequeue(out item)) { tcpNext = false; return true; }
+            if (steam != null && steam.TryDequeue(out item)) { tcpNext = true; return true; }
+            if (!tcpNext && tcp != null && tcp.TryDequeue(out item)) { tcpNext = false; return true; }
             item = null; return false;
         }
         public void InviteFriends() { if (steam == null) throw new InvalidOperationException("此房间未启用 Steam。"); steam.InviteFriends(); }
