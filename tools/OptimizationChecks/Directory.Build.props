@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Keep MSBuild-generated output out of tools/ so that running tests
+         cannot change the main MOD source fingerprint. -->
+    <BaseOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts\optimization-checks\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts\optimization-checks\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>
