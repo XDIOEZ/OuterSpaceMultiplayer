@@ -85,6 +85,7 @@ namespace FreeWorldMultiplayer
             copyRoomCaption = OfficialModUi.Caption(copyRoomButton);
             copyRoomCaption.fontSize = 16;
             copyRoomButton.gameObject.SetActive(false);
+            InstallRoomDisclosure();
 
             // The connection banner belongs to the header, not the navigation row:
             // the latter contains the cancel-connection button when a session is busy.
@@ -296,6 +297,7 @@ namespace FreeWorldMultiplayer
                     if (button != null && button.name == "FWM.Invite") button.interactable = false;
             }
 
+            RefreshRoomDisclosure(connected, roomId);
             RefreshSubmitAvailability();
             RefreshButtonAvailability();
             bool invalidFocusedInput;
