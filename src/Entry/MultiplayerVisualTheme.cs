@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -27,6 +28,7 @@ namespace FreeWorldMultiplayer
         private readonly List<InputBorder> inputBorders = new List<InputBorder>();
         private Button lastVisibleSaveSelection, lastVisiblePresetSelection;
         private Button copyFeedbackButton;
+        private Button joinIpButton, joinSteamButton, saveSettingsButton;
         private TMP_Text copyFeedbackCaption;
         private string copiedFeedback;
         private GameObject connectionBadge;
@@ -85,6 +87,16 @@ namespace FreeWorldMultiplayer
                 border.effectDistance = new Vector2(1.5f, -1.5f);
                 border.effectColor = new Color32(108, 142, 145, 72);
                 inputBorders.Add(new InputBorder { Field = field, Outline = border });
+            }
+            // Resolve once after all pages exist; none of these are shared game buttons.
+            foreach (Button button in GetComponentsInChildren<Button>(true))
+            {
+                switch (button.name)
+                {
+                    case "FWM.JoinTcp": joinIpButton = button; break;
+                    case "FWM.JoinSteam": joinSteamButton = button; break;
+                    case "FWM.SaveSettings": saveSettingsButton = button; break;
+                }
             }
             gameObject.AddComponent<MultiplayerInputTabNavigation>().Owner = this;
         }
@@ -198,6 +210,7 @@ namespace FreeWorldMultiplayer
                     if (button != null && button.name == "FWM.Invite") button.interactable = false;
             }
 
+            RefreshSubmitAvailability();
             RefreshButtonAvailability();
             bool invalidFocusedInput;
             string inputHint = RefreshInputBorders(out invalidFocusedInput);
@@ -279,6 +292,31 @@ namespace FreeWorldMultiplayer
                 CultureInfo.InvariantCulture, out ulong roomId) || roomId == 0;
         }
 
+        private void RefreshSubmitAvailability()
+        {
+            // Session/permission state is set by the page refresh first. These
+            // gates only enforce local input validity; actual session methods
+            // remain the authority and still validate again at submission time.
+            bool idle = !Busy && !Connected;
+            if (createWorldButton != null)
+                createWorldButton.interactable = createWorldButton.interactable && idle
+                    && worldName != null && !String.IsNullOrWhiteSpace(worldName.text)
+                    && !InvalidNumberField(maxPlayers) && !InvalidNumberField(maxBases)
+                    && !InvalidNumberField(startingEmployees) && !InvalidNumberField(port);
+            if (loadButton != null)
+                loadButton.interactable = loadButton.interactable && idle && !InvalidNumberField(resumePort);
+            if (joinIpButton != null)
+                joinIpButton.interactable = idle && joinAddress != null
+                    && !String.IsNullOrWhiteSpace(joinAddress.text) && !InvalidNumberField(joinPort);
+            if (joinSteamButton != null)
+                joinSteamButton.interactable = idle && !Runtime.DirectLaunch && room != null
+                    && !String.IsNullOrWhiteSpace(room.text) && !InvalidSteamRoom(room);
+            if (saveSettingsButton != null)
+                saveSettingsButton.interactable = !Busy && !InvalidNumberField(settingsEmployees)
+                    && !InvalidNumberField(settingsPlayers) && !InvalidNumberField(settingsMaxBases)
+                    && !InvalidNumberField(settingsPort);
+        }
+
         private string FormGuidance(out bool needsAttention)
         {
             needsAttention = false;
@@ -287,9 +325,11 @@ namespace FreeWorldMultiplayer
             {
                 if (continueWorldForm != null && continueWorldForm.activeInHierarchy)
                 {
-                    if (loadButton != null && loadButton.interactable) return "已选中 · 可以继续";
-                    needsAttention = true;
-                    return saveRows.Count == 0 ? "暂无联机存档" : "请选择可继续的存档";
+                    WorldSummary selected = worlds.FirstOrDefault(w => w.WorldId == selectedWorldId);
+                    if (selected == null) { needsAttention = true; return saveRows.Count == 0 ? "暂无联机存档" : "请选择存档"; }
+                    if (!String.IsNullOrEmpty(selected.Error)) { needsAttention = true; return "所选存档无法继续"; }
+                    if (InvalidNumberField(resumePort)) { needsAttention = true; return "请检查房主端口"; }
+                    return "所选存档可继续";
                 }
                 if (SelectedPreset() == null) { needsAttention = true; return "先选择自定义世界配置"; }
                 if (worldName == null || String.IsNullOrWhiteSpace(worldName.text))
@@ -301,10 +341,14 @@ namespace FreeWorldMultiplayer
             }
             if (page == Page.Join)
             {
-                if (InvalidNumberField(joinPort))
-                { needsAttention = true; return Runtime.DirectLaunch ? "请检查 IP 端口" : "IP 端口无效（不影响 Steam）"; }
-                if (!Runtime.DirectLaunch && InvalidSteamRoom(room))
-                { needsAttention = true; return "Steam 房间号无效（不影响 IP）"; }
+                if (joinIpButton != null && joinIpButton.interactable)
+                    return "IP 参数完整 · 可尝试加入";
+                if (joinSteamButton != null && joinSteamButton.interactable)
+                    return "Steam 房间号有效 · 可尝试加入";
+                needsAttention = true;
+                if (InvalidNumberField(joinPort)) return Runtime.DirectLaunch ? "请检查 IP 端口" : "IP 端口无效（Steam 不受影响）";
+                if (!Runtime.DirectLaunch && InvalidSteamRoom(room)) return "Steam 房间号无效（IP 不受影响）";
+                return Runtime.DirectLaunch ? "填写房主 IP 地址" : "填写 IP 地址或 Steam 房间号";
             }
             if (page == Page.Settings && (InvalidNumberField(settingsEmployees)
                 || InvalidNumberField(settingsPlayers) || InvalidNumberField(settingsMaxBases)
