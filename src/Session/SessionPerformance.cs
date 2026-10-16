@@ -20,11 +20,28 @@ namespace FreeWorldMultiplayer
             { "maps.publish", new PerformanceWindow() },
             { "personal.publish", new PerformanceWindow() },
             { "galaxy.broadcast", new PerformanceWindow() },
-            { "world.save", new PerformanceWindow() }
+            { "world.save", new PerformanceWindow() },
+            { "map.cache.encode", new PerformanceWindow() },
+            { "map.cache.reassemble", new PerformanceWindow() },
+            { "map.cache.apply", new PerformanceWindow() }
         };
         private double profileElapsed;
         private long profileReceived, profileBatchPeak, profileBudgetStops, profileMapBackpressure;
         private long profileQueuedEventPeak, profileQueuedBytePeak, profileReservedBytePeak;
+        private long profileCacheTransfers, profileCacheFullBytes, profileCacheContentBytes;
+        private long profileCacheFullChunks, profileCacheChangedChunks;
+
+        private void RecordMapCacheTransfer(MapCacheTransfer transfer)
+        {
+            if (!profileEnabled || transfer == null || transfer.Manifest == null) return;
+            // Prepared chunks are not equivalent to on-wire bytes (JSON/base64 adds overhead).
+            profileCacheTransfers++;
+            profileCacheFullBytes += transfer.Manifest.TotalLength;
+            profileCacheFullChunks += transfer.Manifest.Chunks.Count;
+            profileCacheChangedChunks += transfer.ChangedChunks.Count;
+            foreach (MapCacheChunk chunk in transfer.ChangedChunks)
+                profileCacheContentBytes += chunk.Data == null ? 0 : chunk.Data.Length;
+        }
 
         private void RecordProfile(string stage, long startTicks, long bytes = -1)
         {
@@ -83,6 +100,13 @@ namespace FreeWorldMultiplayer
                     + " queuedEventPeak=" + profileQueuedEventPeak
                     + " queuedBytePeak=" + profileQueuedBytePeak + " reservedBytePeak=" + profileReservedBytePeak
                     + " role=" + (IsHost ? "host" : "guest"));
+                if (profileCacheTransfers != 0)
+                    Logger.LogEngine("[FreeWorldMultiplayer][profile] stage=map.cache.chunks"
+                        + " preparedViews=" + profileCacheTransfers
+                        + " fullContentBytes=" + profileCacheFullBytes
+                        + " changedContentBytes=" + profileCacheContentBytes
+                        + " totalChunks=" + profileCacheFullChunks + " changedChunks=" + profileCacheChangedChunks
+                        + " role=" + (IsHost ? "host" : "guest"));
             }
             catch { /* Diagnostics must not affect authoritative state transitions. */ }
             finally
@@ -90,6 +114,8 @@ namespace FreeWorldMultiplayer
                 foreach (PerformanceWindow metric in profileStages.Values) metric.Clear();
                 profileReceived = profileBatchPeak = profileBudgetStops = profileMapBackpressure = 0;
                 profileQueuedEventPeak = profileQueuedBytePeak = profileReservedBytePeak = 0;
+                profileCacheTransfers = profileCacheFullBytes = profileCacheContentBytes = 0;
+                profileCacheFullChunks = profileCacheChangedChunks = 0;
             }
         }
     }

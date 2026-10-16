@@ -9,7 +9,14 @@
   <ItemGroup>
     <!-- Exercise actual production source, not copied algorithms or game assemblies. -->
     <Compile Include="Program.cs" />
+    <Compile Include="MapCodecChecks.cs" />
+    <Compile Include="MapCodecStubs.cs" />
     <Compile Include="../../src/Session/PerformanceWindow.cs" Link="PerformanceWindow.cs" />
     <Compile Include="../../src/Transport/TransportQueue.cs" Link="TransportQueue.cs" />
+    <Compile Include="../../src/Core/MapSnapshotDeltaCodec.cs" Link="MapSnapshotDeltaCodec.cs" />
+    <!-- Newtonsoft is shipped with the installed dotnet SDK: no NuGet/network restore. -->
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(MSBuildBinPath)/Newtonsoft.Json.dll</HintPath>
+    </Reference>
   </ItemGroup>
 </Project>
