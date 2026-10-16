@@ -1,0 +1,53 @@
+# V1.19 Stopwatch runtime compatibility fix.
+# Apply against the preserved V1.18 pre-task working-tree baseline.
+# This patch records only this fix; pre-existing mixed changes remain unstaged.
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 5c4c259..c717ade 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,11 @@
+ 
+ 发布号与需求文档的 V1、游戏匹配目录 `v_common`、网络协议号及存档结构版本分别维护，不互相替代。
+ 
++## V1.19 · 2026-10-16
++
++- 修复创建房间时 `Method not found: void System.Diagnostics.Stopwatch.Reset()` 导致会话停止推进：收包分帧计时改用 Steam、TapTap 实际运行库已保留的 `Restart()`，不再引用缺失的 `Reset()`。
++- 保留原有每帧收包时间预算及完整事务顺序。协议仍为 6、存档结构仍为 1；构建、安装与游戏内创建房间验收分别记录。
++
+ ## V1.18 · 2026-10-16
+ 
+ - 修正远端玩家舰队的朝向重复叠加：根节点保持星系坐标，舰船外观只应用一次权威角度；NPC 副本也沿原生舰船外观层应用朝向。
+diff --git a/README.md b/README.md
+index d079471..7818281 100644
+--- a/README.md
++++ b/README.md
+@@ -6,7 +6,7 @@
+ 
+ 发布号以根目录 [VERSION](VERSION) 为唯一来源，发布内容见 [CHANGELOG.md](CHANGELOG.md)。每完成一个独立小 BUG，第二段整数递增一次：`1.9` 之后是 `1.10`；同一修复的重新构建和三端同步不重复升版。需求名称“V1”、游戏匹配目录 `v_common`、网络协议号和存档结构版本保持各自含义。
+ 
+-V1.18 使用网络协议 6，存档结构版本仍为 1；房主和客人建议一起更新 MOD。本轮修正远端玩家舰队的重复旋转及 NPC 副本的朝向应用，并为玩家舰队增加跟随其屏幕位置的常驻上方名牌，显示玩家昵称与舰队名称；NPC 复用原生身份 HUD。保留 V1.17 的个人字段缓存、地图事务解码复用与索引优化，以及 V1.16 的显示插值和 V1.15 的入图屏障、SEED 地形及本地缓存。构建和安装状态以包内 BUILD-INFO 及同步回执为准；游戏内效果由用户验收。
++V1.19 使用网络协议 6，存档结构版本仍为 1；房主和客人建议一起更新 MOD。本轮将收包分帧计时改用实际发行运行库保留的 `Stopwatch.Restart()`，修复因缺失 `Reset()` 导致创建房间时会话停止推进的问题，保留原有收包时间预算。保留 V1.18 的舰队朝向和名牌调整，以及此前的地表同步、入图屏障、SEED 地形及本地缓存。构建和安装状态以包内 BUILD-INFO 及同步回执为准；游戏内效果由用户验收。
+ 
+ 地块缓存保存于 `%LOCALAPPDATA%\CatStudio\FreeWorldMultiplayer\map-cache-v1`，按渠道和实际运行目录隔离，世界与地块另有独立清单；退出游戏后保留，不绑定具体游戏小版本。默认最多 512 MiB、8192 个内容块和 64 个地图清单，按使用情况清理旧内容。再次入图先对照房主当前内容，只接收缺失或变化的块；校验通过后等待本次原生地图及其他玩家角色投影就绪，再按顺序应用后续变化。缺失、损坏或不兼容时重新获取，缓存不代替完整存档。流程见 [地块同步与本地缓存](docs/地块同步与本地缓存.svg)。
+ 
+diff --git a/VERSION b/VERSION
+index adc97d8..bc44934 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.18
++1.19
+diff --git a/src/Session/MultiplayerSession.cs b/src/Session/MultiplayerSession.cs
+index fb21a68..8bf57c5 100644
+--- a/src/Session/MultiplayerSession.cs
++++ b/src/Session/MultiplayerSession.cs
+@@ -268,7 +268,7 @@ namespace FreeWorldMultiplayer
+             // Poll even though transport/World are not ready. No network, clock, auto-save or map
+             // simulation may observe the native factory's half-created global data.
+             if (IsStarting) { TickHostCreation(); return; }
+-            inboundWorkClock.Reset(); inboundWorkClock.Start(); inboundWorkCount = 0;
++            inboundWorkClock.Restart(); inboundWorkCount = 0;
+             // Unity's unscaled delta is the authority; no client wall-clock or game speed drives raid timers.
+             double seconds = unscaledSeconds;
+             TickMapCache(seconds);
