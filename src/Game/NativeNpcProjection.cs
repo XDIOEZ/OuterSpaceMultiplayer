@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using Script.FreeWorldAirShip.Galaxy.NPCFleet;
 using UnityEngine;
@@ -9,6 +10,11 @@ namespace FreeWorldMultiplayer
 {
     public sealed partial class GameBridge
     {
+        // The native manager flushes this private, parameterless method each frame.
+        // Resolve it once instead of searching all native methods for every projection tick.
+        private static readonly MethodInfo flushNpcPresentations = typeof(GalaxyNPCFleetManager).GetMethod(
+            "FlushPendingFleetPresentations", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null, Type.EmptyTypes, null);
         private readonly List<GalaxyNPCFleet> replicaNpcViews = new List<GalaxyNPCFleet>();
         private readonly Dictionary<long, FWFleet> canonicalNpcViews = new Dictionary<long, FWFleet>();
         private string npcPresentationSignature;
@@ -17,7 +23,12 @@ namespace FreeWorldMultiplayer
         internal void ProjectNpcReplicas(GalaxyNPCFleetManager manager)
         {
             if (Context.IsHost || manager == null || World == null) return;
-            NativeWire.Call(manager, "FlushPendingFleetPresentations");
+            if (flushNpcPresentations == null) NativeWire.Call(manager, "FlushPendingFleetPresentations");
+            else
+            {
+                try { flushNpcPresentations.Invoke(manager, null); }
+                catch (TargetInvocationException error) { throw error.InnerException ?? error; }
+            }
             canonicalNpcViews.Clear();
             foreach (FWFactionFleet record in World.factionFleetRepository)
                 if (record.materializedState != null) canonicalNpcViews[record.materializedState.getUID()] = record.materializedState;
