@@ -127,13 +127,19 @@ namespace FreeWorldMultiplayer
         internal void PumpNativeLandings()
         {
             if (!IsSimulator || NativeLandings.Count == 0 || !IsMapReady(CurrentMapId)) return;
-            // The hook runs every ground frame, including when only completed or
-            // other-map landings remain. Do not require a native manager unless
-            // there is actually a pending landing for the active map.
-            if (!NativeLandings.Values.Any(l => l.MapId == CurrentMapId && !l.Complete)) return;
+            // Snapshot matching landings in a single pass. Most frames contain only
+            // completed or other-map entries, so avoid allocating a list until needed.
+            List<NativeLanding> pending = null;
+            foreach (NativeLanding landing in NativeLandings.Values)
+            {
+                if (landing.MapId != CurrentMapId || landing.Complete) continue;
+                if (pending == null) pending = new List<NativeLanding>();
+                pending.Add(landing);
+            }
+            if (pending == null) return;
             AirSupportManager manager = AirSupportManager.getInstance();
             if (manager == null) throw new InvalidOperationException("Ready ground map has no native AirSupportManager.");
-            foreach (NativeLanding landing in NativeLandings.Values.Where(l => l.MapId == CurrentMapId && !l.Complete).ToArray())
+            foreach (NativeLanding landing in pending)
             {
                 FWExpedition expedition = Players[landing.PlayerId].expeditionSeq.Single(e => e.getUID() == landing.ExpeditionUid);
                 if (!string.IsNullOrEmpty(expedition.landingFailure)) throw new InvalidOperationException(expedition.landingFailure);
