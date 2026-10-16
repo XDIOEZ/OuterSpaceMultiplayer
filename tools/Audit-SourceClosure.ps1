@@ -33,9 +33,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'git ls-files failed' }
         [void]$tracked.Add(($path -replace '\\', '/'))
     }
-    # Disabling only Git's CRLF warning avoids writing false error records into
-    # Windows PowerShell 5.1; normal status and content normalization are intact.
-    foreach ($path in @(& git -c core.safecrlf=false -c core.quotepath=false diff --name-only)) {
+    # Include BOTH index and worktree changes relative to HEAD. An input already
+    # staged for another task is still not a clean, reproducible committed source.
+    # Disabling only Git's CRLF warning does not change file content/status.
+    foreach ($path in @(& git -c core.safecrlf=false -c core.quotepath=false diff HEAD --name-only)) {
         if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
         [void]$dirty.Add(($path -replace '\\', '/'))
     }

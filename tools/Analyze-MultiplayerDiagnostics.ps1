@@ -19,6 +19,7 @@ function New-DiagnosticsState {
         InputFiles = [Collections.Generic.List[string]]::new()
         ModVersions = @{}
         AssemblyVersions = @{}
+        SourceRevisions = @{}
         RoleMismatchedEntries = 0
     }
 }
@@ -30,6 +31,8 @@ function Read-DiagnosticLines([object]$state, [string[]]$lines, [string]$sourceS
             if ($header.Success) { $state.ModVersions[$sourceSide] = $header.Groups[1].Value; continue }
             $header = [regex]::Match($line, '^\s*AssemblyVersion:\s*(\S+)')
             if ($header.Success) { $state.AssemblyVersions[$sourceSide] = $header.Groups[1].Value; continue }
+            $header = [regex]::Match($line, '^\s*SourceRevision:\s*(\S+)')
+            if ($header.Success) { $state.SourceRevisions[$sourceSide] = $header.Groups[1].Value; continue }
         }
         $match = [regex]::Match($line,
             '\[FreeWorldMultiplayer\]\[fleet-command\]\s+stage=(\S+)\s+command=(\S+)\s+fleet=(-?\d+)\s+role=(host|guest)\s+outcome=(\S+)')
@@ -107,9 +110,21 @@ function Assert-PairedHeaders([object]$state) {
             throw "Host/guest $name differ; these logs cannot be used as matching runtime evidence."
         }
     }
+    $source = $state.SourceRevisions
+    if ($source.ContainsKey('host') -and $source.ContainsKey('guest') -and
+        $source['host'] -match '^[A-Fa-f0-9]{64}$' -and
+        $source['guest'] -match '^[A-Fa-f0-9]{64}$' -and
+        -not [string]::Equals($source['host'], $source['guest'], [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Loaded host/guest SourceRevision differ; do not combine incompatible runtime evidence.'
+    }
 }
 
 function Summarize-Diagnostics([object]$state) {
+    $revisions = $state.SourceRevisions
+    $verifiedRevision = $revisions.ContainsKey('host') -and $revisions.ContainsKey('guest') -and
+        $revisions['host'] -match '^[A-Fa-f0-9]{64}$' -and
+        $revisions['guest'] -match '^[A-Fa-f0-9]{64}$' -and
+        [string]::Equals($revisions['host'], $revisions['guest'], [StringComparison]::OrdinalIgnoreCase)
     $commands = @($state.Commands.Keys | Sort-Object | ForEach-Object {
         $commandId = $_
         $events = @($state.Commands[$commandId])
@@ -155,11 +170,13 @@ function Summarize-Diagnostics([object]$state) {
             GuestModVersion = $state.ModVersions['guest']
             HostAssemblyVersion = $state.AssemblyVersions['host']
             GuestAssemblyVersion = $state.AssemblyVersions['guest']
+            HostLoadedSourceRevision = $revisions['host']
+            GuestLoadedSourceRevision = $revisions['guest']
             RoleMismatchedEntries = $state.RoleMismatchedEntries
             HasBothVersionHeaders = $state.ModVersions.ContainsKey('host') -and $state.ModVersions.ContainsKey('guest')
-            SourceRevisionVerified = $false
+            SourceRevisionVerified = [bool]$verifiedRevision
             SameRoomSessionVerified = $false
-            Notice = 'Matching version headers do NOT establish identical source revisions or prove two logs came from the same room session.'
+            Notice = 'Identical loaded assembly fingerprints prove matching source inputs, not the same room session, player identity, transport health or gameplay success.'
         }
         FleetCommandsSeen = $commands.Count
         FleetCommands = $commands
@@ -167,6 +184,7 @@ function Summarize-Diagnostics([object]$state) {
         ProfileWindows = @($state.Profile)
         GroundCaptureWindows = @($state.GroundCounts)
         MissingEvidence = @(
+            if (-not $verifiedRevision) { 'No matching loaded DLL SourceRevision in both diagnostic headers: runtime source identity unverified.' }
             if ($commands.Count -eq 0) { 'No correlated fleet-command evidence: cannot diagnose movement.' }
             if ($state.Profile.Count -eq 0) { 'No opt-in profile windows: cannot calculate a gameplay P95.' }
             if ($state.GroundCounts.Count -eq 0) { 'No 2D ground-counts data: scan/change hot spots unverified.' }
@@ -177,9 +195,11 @@ function Summarize-Diagnostics([object]$state) {
 
 if ($SelfTest) {
     $state = New-DiagnosticsState
+    $testRevision = 'A' * 64
     Read-DiagnosticLines $state @(
         'ModVersion: V1.19',
         'AssemblyVersion: 1.19.0.0',
+        ('SourceRevision: ' + $testRevision),
         '[FreeWorldMultiplayer][fleet-command] stage=host.received command=cmdABC fleet=123 role=host outcome=queued',
         '[FreeWorldMultiplayer][fleet-command] stage=host.native.begin command=cmdABC fleet=123 role=host outcome=begin',
         '[FreeWorldMultiplayer][fleet-command] stage=host.native.end command=cmdABC fleet=123 role=host outcome=accepted',
@@ -188,6 +208,7 @@ if ($SelfTest) {
     Read-DiagnosticLines $state @(
         'ModVersion: V1.19',
         'AssemblyVersion: 1.19.0.0',
+        ('SourceRevision: ' + $testRevision),
         '[FreeWorldMultiplayer][fleet-command] stage=client.sent command=cmdABC fleet=123 role=guest outcome=queued',
         '[FreeWorldMultiplayer][fleet-command] stage=client.result command=cmdABC fleet=123 role=guest outcome=accepted',
         '[FreeWorldMultiplayer][slow-operation] stage=transport.handle ms=6943.3 bytes=20955155 map=-1 role=guest',
@@ -206,7 +227,8 @@ if ($SelfTest) {
         $summary.GroundCaptureWindows[0].TilesScanned -ne 327680 -or
         $summary.GroundCaptureWindows[0].TileChanges -ne 3 -or
         -not $summary.PairEvidence.HasBothVersionHeaders -or
-        $summary.PairEvidence.SourceRevisionVerified -or
+        -not $summary.PairEvidence.SourceRevisionVerified -or
+        $summary.PairEvidence.SameRoomSessionVerified -or
         $summary.ProfileWindows[0].LogSide -ne 'guest') {
         throw 'Multiplayer diagnostics analyzer self-test failed.'
     }
@@ -215,6 +237,17 @@ if ($SelfTest) {
     try { Assert-PairedHeaders $state }
     catch { $rejected = $true }
     if (-not $rejected) { throw 'Mismatched host/guest versions must be rejected.' }
+    $state.ModVersions['guest'] = 'V1.19'
+    $state.SourceRevisions['guest'] = 'B' * 64
+    $rejected = $false
+    try { Assert-PairedHeaders $state }
+    catch { $rejected = $true }
+    if (-not $rejected) { throw 'Mismatched loaded DLL source revisions must be rejected.' }
+    $state.SourceRevisions.Remove('guest')
+    Assert-PairedHeaders $state
+    if ((Summarize-Diagnostics $state).PairEvidence.SourceRevisionVerified) {
+        throw 'Missing runtime source fingerprint must never be reported as verified.'
+    }
     Write-Output 'PASS: fleet command stage correlation, slow-operation and profile parsing'
     return
 }
