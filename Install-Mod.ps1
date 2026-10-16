@@ -2,9 +2,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$GamePath,
-    [ValidateSet('Project3', 'Steam')][string]$TargetType = 'Steam',
+    [ValidateSet('Project3', 'Steam', 'TapTap')][string]$TargetType = 'Steam',
     [string]$PackagePath,
-    [string]$HarmonyPath
+    [string]$HarmonyPath,
+    [switch]$PassThru
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,7 +13,7 @@ Set-StrictMode -Version Latest
 $workspace = [IO.Path]::GetFullPath($PSScriptRoot)
 $GamePath = [IO.Path]::GetFullPath($GamePath).TrimEnd('\', '/')
 if (-not $PackagePath) {
-    $packageLabel = if ($TargetType -eq 'Project3') { 'p3-development-reference' } else { 'steam-target' }
+    $packageLabel = switch ($TargetType) { 'Steam' { 'steam-target' } 'TapTap' { 'taptap-target' } default { 'p3-development-reference' } }
     $PackagePath = Join-Path $workspace ('artifacts\' + $packageLabel + '\FreeWorldMultiplayer')
 }
 $PackagePath = [IO.Path]::GetFullPath($PackagePath).TrimEnd('\', '/')
@@ -36,7 +37,8 @@ if ($TargetType -eq 'Project3') {
     $gameAssembly = Join-Path $GamePath 'Outer Space_Data\Managed\Assembly-CSharp.dll'
     $coreLibrary = Join-Path $GamePath 'Outer Space_Data\Managed\mscorlib.dll'
     foreach ($process in @(Get-Process -Name 'Outer Space' -ErrorAction SilentlyContinue)) {
-        if ([string]::Equals($process.Path, $gameExecutable, [StringComparison]::OrdinalIgnoreCase)) { throw 'Close the target game before installation. No process was stopped.' }
+        # Elevated games may hide their executable path. Unknown is not proof of a different target.
+        if ([string]::IsNullOrWhiteSpace($process.Path) -or [string]::Equals($process.Path, $gameExecutable, [StringComparison]::OrdinalIgnoreCase)) { throw 'Close the target game before installation (including any Outer Space process with an unreadable path). No process was stopped.' }
     }
 }
 foreach ($required in @($gameAssembly, $coreLibrary, (Join-Path $PackagePath 'BUILD-INFO.json'))) {
@@ -44,7 +46,16 @@ foreach ($required in @($gameAssembly, $coreLibrary, (Join-Path $PackagePath 'BU
 }
 $info = Get-Content -LiteralPath (Join-Path $PackagePath 'BUILD-INFO.json') -Raw | ConvertFrom-Json
 if (-not $info.Compiled -or $info.ReferenceMode -ne $TargetType) {
-    throw 'Installation requires a successful build against the selected target APIs. Project3 and Steam packages cannot be interchanged.'
+    throw 'Installation requires a successful build against the selected target APIs. Project3, Steam and TapTap packages cannot be interchanged.'
+}
+$development = & (Join-Path $workspace 'tools\Get-DevelopmentRevision.ps1') -Root $workspace
+if ($info.SourceRoot -ne $workspace -or $info.SourceRevision -ne $development.SourceRevision) {
+    throw 'Package is not from the current main development repository state. Rebuild here before syncing a runtime copy.'
+}
+$modVersion = & (Join-Path $workspace 'tools\Get-ModVersion.ps1') -Root $workspace
+if (-not $info.PSObject.Properties['ModVersion'] -or -not $info.PSObject.Properties['AssemblyVersion'] -or
+    $info.ModVersion -ne $modVersion.ModVersion -or $info.AssemblyVersion -ne $modVersion.AssemblyVersion) {
+    throw 'Package version differs from the main repository VERSION. Rebuild before installation.'
 }
 $gameReference = @($info.References | Where-Object Assembly -EQ 'Assembly-CSharp')
 $harmonyReference = @($info.References | Where-Object Assembly -EQ '0Harmony')
@@ -63,11 +74,33 @@ if (-not $compatibility.KnownDirectReferencesCompatible) {
 $manifest = Join-Path $PackagePath 'Manifest\manifest.xml'
 [xml]$manifestXml = Get-Content -LiteralPath $manifest -Raw
 if ($manifestXml.ModXmlManifest.packageId -ne 'com.catstudio.freeworldmultiplayer') { throw 'Unexpected MOD package identity.' }
-$files = @('README.md', 'DEPENDENCIES.md', 'Launch-Direct.ps1', 'BUILD-INFO.json',
+$files = @('README.md', 'DEPENDENCIES.md', 'VERSION', 'CHANGELOG.md', 'Launch-Direct.ps1', 'Update-From-Main.ps1', 'BUILD-INFO.json',
     'v_common\Assemblies\FreeWorldMultiplayer.dll', 'v_common\Assemblies\FreeWorldMultiplayer.pdb',
     'Manifest\icon.png', 'Manifest\preview.png', 'Manifest\manifest.xml')
+if ($TargetType -ne 'Project3') {
+    $files += @('v_common\Assemblies\FreeWorldMultiplayer.Newtonsoft.Json.dll','Newtonsoft.Json.LICENSE.md','PRIVATE-JSON-BUILD.json')
+    $privateInfo = Get-Content -LiteralPath (Join-Path $PackagePath 'PRIVATE-JSON-BUILD.json') -Raw | ConvertFrom-Json
+    if (-not $info.UsesPrivateJson -or -not $privateInfo.CompiledAgainstInstalledSteamRuntime -or @($privateInfo.MissingDirectMembers).Count -ne 0) {
+        throw 'Player package is missing its verified private JSON dependency.'
+    }
+    if ((Get-FileHash -LiteralPath (Join-Path $PackagePath 'v_common\Assemblies\FreeWorldMultiplayer.Newtonsoft.Json.dll') -Algorithm SHA256).Hash -ne $privateInfo.SHA256) {
+        throw 'Private JSON differs from its build record.'
+    }
+    foreach ($reference in $privateInfo.RuntimeAssemblies) {
+        $path = Join-Path $GamePath ('Outer Space_Data\Managed\' + $reference.Name + '.dll')
+        if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $reference.SHA256) { throw ('Private JSON runtime changed: ' + $reference.Name) }
+    }
+}
 foreach ($relative in $files) {
     if (-not (Test-Path -LiteralPath (Join-Path $PackagePath $relative) -PathType Leaf)) { throw "Package file missing: $relative" }
+}
+$packageVersion = & (Join-Path $workspace 'tools\Get-ModVersion.ps1') -Root $PackagePath
+if ($packageVersion.ModVersion -ne $modVersion.ModVersion -or $packageVersion.AssemblyVersion -ne $modVersion.AssemblyVersion) {
+    throw 'Package VERSION differs from its build record and source version.'
+}
+$modAssemblyPath = Join-Path $PackagePath 'v_common\Assemblies\FreeWorldMultiplayer.dll'
+if ([Reflection.AssemblyName]::GetAssemblyName($modAssemblyPath).Version.ToString() -ne $modVersion.AssemblyVersion) {
+    throw 'MOD assembly version differs from the package VERSION. No installation files were written.'
 }
 $modsRoot = Join-Path $GamePath 'mods'
 $destinationRoot = Join-Path $modsRoot 'FreeWorldMultiplayer'
@@ -113,6 +146,7 @@ try {
     throw $failure
 }
 $receipt = [ordered]@{ InstalledAtUtc=[DateTimeOffset]::UtcNow.ToString('o'); TargetType=$TargetType; GamePath=$GamePath; PackagePath=$PackagePath;
+    SourceRoot=$info.SourceRoot; SourceRevision=$info.SourceRevision; ModVersion=$modVersion.ModVersion; AssemblyVersion=$modVersion.AssemblyVersion;
     Destination=$destinationRoot; Files=@($changed.ToArray() | ForEach-Object { [ordered]@{ Path=$_.Relative; SHA256=(Get-FileHash -LiteralPath $_.Destination -Algorithm SHA256).Hash } });
     TargetRuntimeMetadataInspection=$compatibility;
     ActivationChanged=$false; RuntimeTested=$false; Project3SourceOrSettingsModified=$false; OnlyAuthorizedModDirectoryWritten=$true }
@@ -121,3 +155,4 @@ $receiptPath = Join-Path $receiptRoot 'receipt.json'
 Write-Host "Installed only this MOD: $destinationRoot"
 Write-Host "Receipt: $receiptPath"
 Write-Host 'Player data, other MODs, game assemblies and activation settings were preserved. Loading and gameplay acceptance remain unrun.'
+if ($PassThru) { [pscustomobject]@{ TargetType=$TargetType; Destination=$destinationRoot; SourceRevision=$info.SourceRevision; ModVersion=$modVersion.ModVersion; AssemblyVersion=$modVersion.AssemblyVersion; ReceiptPath=$receiptPath } }

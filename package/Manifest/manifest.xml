@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModXmlManifest xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <packageId>com.catstudio.freeworldmultiplayer</packageId>
-  <name>FreeWorldMultiplayer / 联机 V1</name>
+  <name>FreeWorldMultiplayer / 联机 @MOD_DISPLAY_VERSION@</name>
   <author>CatStudio</author>
   <icon>icon.png</icon>
   <previewImage>preview.png</previewImage>
-  <desc>独立联机世界、Steam 房间与 IP 直连。通过屏幕右上角“联机 V1”进入房间面板。需先启用 Harmony (com.harmony)。参考程序集与运行兼容范围见包内 BUILD-INFO.json。</desc>
+  <desc>独立联机世界、Steam 房间与 IP 直连。通过屏幕右上角“联机 @MOD_DISPLAY_VERSION@”进入房间面板。需先启用 Harmony (com.harmony)。参考程序集与运行兼容范围见包内 BUILD-INFO.json。</desc>
   <versions><ModMetaVersion><version>v_common</version><dependencies>com.harmony</dependencies><main>FreeWorldMultiplayer.dll</main></ModMetaVersion></versions>
 </ModXmlManifest>
