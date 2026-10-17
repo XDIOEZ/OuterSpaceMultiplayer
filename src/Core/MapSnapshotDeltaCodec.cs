@@ -55,6 +55,11 @@ namespace FreeWorldMultiplayer
             internal MapCacheManifest Manifest;
             internal Dictionary<string, byte[]> Content = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         }
+        private struct WrittenChunk
+        {
+            internal int Offset;
+            internal int Length;
+        }
         internal static Encoded Encode(string worldId, MapSnapshot snapshot)
         {
             if (string.IsNullOrWhiteSpace(worldId) || snapshot == null || snapshot.IsDeltaBaseline || snapshot.MapId < 0
@@ -114,20 +119,33 @@ namespace FreeWorldMultiplayer
             // lengths add up to it. Fill that exact buffer once: MemoryStream.ToArray()
             // previously copied another full 20+ MiB array on every map cache restore.
             byte[] bytes = new byte[(int)transfer.Manifest.TotalLength];
+            // Reuse bytes already written into the final buffer for repeated hashes;
+            // retaining every disk-loaded byte[] would double the live map memory.
+            var written = new Dictionary<string, WrittenChunk>(StringComparer.Ordinal);
             int writeOffset = 0;
             foreach (MapCacheChunkReference reference in transfer.Manifest.Chunks)
             {
-                byte[] data;
-                bool fromTransfer = changed.TryGetValue(reference.Hash, out data);
-                if (!fromTransfer) data = read == null ? null : read(reference.Hash);
-                // The changed-chunk loop already verifies each received chunk's
-                // SHA-256 before it enters this dictionary. Rehash only cached
-                // data here; otherwise cold maps hash every incoming chunk twice.
-                if (data == null || data.Length != reference.Length ||
-                    (!fromTransfer && MapCacheStore.HashContent(data) != reference.Hash))
-                    throw new InvalidDataException("Required cached map chunk is unavailable: " + reference.Hash);
-                Buffer.BlockCopy(data, 0, bytes, writeOffset, data.Length);
-                writeOffset += data.Length;
+                WrittenChunk previous;
+                if (written.TryGetValue(reference.Hash, out previous))
+                {
+                    if (previous.Length != reference.Length)
+                        throw new InvalidDataException("Required cached map chunk is unavailable: " + reference.Hash);
+                    Buffer.BlockCopy(bytes, previous.Offset, bytes, writeOffset, reference.Length);
+                }
+                else
+                {
+                    byte[] data;
+                    bool fromTransfer = changed.TryGetValue(reference.Hash, out data);
+                    if (!fromTransfer) data = read == null ? null : read(reference.Hash);
+                    // Received chunks were verified above; verify each on-disk chunk
+                    // once before allowing later references to reuse these bytes.
+                    if (data == null || data.Length != reference.Length ||
+                        (!fromTransfer && MapCacheStore.HashContent(data) != reference.Hash))
+                        throw new InvalidDataException("Required cached map chunk is unavailable: " + reference.Hash);
+                    Buffer.BlockCopy(data, 0, bytes, writeOffset, data.Length);
+                    written.Add(reference.Hash, new WrittenChunk { Offset = writeOffset, Length = data.Length });
+                }
+                writeOffset += reference.Length;
             }
             if (writeOffset != bytes.Length) throw new InvalidDataException("Map cache content length differs from the manifest.");
             if (MapCacheStore.HashContent(bytes) != transfer.Manifest.SnapshotHash) throw new InvalidDataException("Reassembled map checksum differs from the host.");

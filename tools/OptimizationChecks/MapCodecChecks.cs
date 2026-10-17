@@ -45,6 +45,7 @@ internal static class MapCodecChecks
         var encoded = MapSnapshotDeltaCodec.Encode(WorldId, snapshot);
         check(encoded.Manifest.TotalLength > 1024 * 1024, "large map codec payload");
         check(encoded.Manifest.Chunks.Count > 1, "large map splits into chunks");
+        check(encoded.Manifest.Chunks.Count > encoded.Content.Count, "large repeated map has duplicate cache chunk references");
 
         var full = MapSnapshotDeltaCodec.MakeTransfer(encoded, null);
         check(full.ChangedChunks.Count == encoded.Content.Count, "full transfer sends each unique content chunk");
@@ -68,9 +69,23 @@ internal static class MapCodecChecks
 
         var hot = MapSnapshotDeltaCodec.MakeTransfer(encoded, encoded.Content.Keys);
         check(hot.ChangedChunks.Count == 0, "fully cached transfer sends no changed chunks");
+        int cacheReads = 0;
+        MapCacheStore.HashCalls = 0;
         restored = MapSnapshotDeltaCodec.Reassemble(hot, WorldId, MapId,
-            hash => cache.TryGetValue(hash, out var bytes) ? bytes : null);
+            hash => { cacheReads++; return cache.TryGetValue(hash, out var bytes) ? bytes : null; });
+        check(cacheReads == encoded.Content.Count, "hot map reads each unique cached chunk once");
+        check(MapCacheStore.HashCalls == encoded.Content.Count + 1,
+            "hot map verifies each unique cached chunk once plus final snapshot hash");
         SameSnapshot(check, restored, snapshot, "hot cache");
+
+        var cachedHash = encoded.Manifest.Chunks[0].Hash;
+        var badCachedChunk = (byte[])cache[cachedHash].Clone();
+        badCachedChunk[0] ^= 1;
+        bool corruptCacheRejected = false;
+        try { MapSnapshotDeltaCodec.Reassemble(hot, WorldId, MapId,
+            hash => hash == cachedHash ? badCachedChunk : cache[hash]); }
+        catch (InvalidDataException) { corruptCacheRejected = true; }
+        check(corruptCacheRejected, "repeated cached chunks still reject corrupt content");
 
         bool failed = false;
         try { MapSnapshotDeltaCodec.Reassemble(mixed, WorldId, MapId, _ => null); }
