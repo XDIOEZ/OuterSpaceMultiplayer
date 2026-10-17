@@ -53,8 +53,15 @@ namespace FreeWorldMultiplayer
         public static string HashContent(byte[] content)
         {
             if (content == null) throw new ArgumentNullException(nameof(content));
+            return HashContent(content, 0, content.Length);
+        }
+        // Hash an existing wire buffer slice without copying each chunk first.
+        // The complete-array API above remains unchanged for persisted content.
+        internal static string HashContent(byte[] content, int offset, int count)
+        {
+            if (content == null) throw new ArgumentNullException(nameof(content));
             using (var sha = SHA256.Create())
-                return BitConverter.ToString(sha.ComputeHash(content)).Replace("-", "").ToLowerInvariant();
+                return BitConverter.ToString(sha.ComputeHash(content, offset, count)).Replace("-", "").ToLowerInvariant();
         }
         private static bool IsHash(string value)
         {

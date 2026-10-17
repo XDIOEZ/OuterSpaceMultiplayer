@@ -42,10 +42,21 @@ internal static class MapCodecChecks
             NativeJson = checkpoint.ToString(Formatting.None),
             EntityOwners = new Dictionary<long, string> { { 100L, "player" } }
         };
+        MapCacheStore.HashCalls = 0;
         var encoded = MapSnapshotDeltaCodec.Encode(WorldId, snapshot);
         check(encoded.Manifest.TotalLength > 1024 * 1024, "large map codec payload");
         check(encoded.Manifest.Chunks.Count > 1, "large map splits into chunks");
         check(encoded.Manifest.Chunks.Count > encoded.Content.Count, "large repeated map has duplicate cache chunk references");
+        long previousChunkCopyBytes = encoded.Manifest.Chunks.Sum(chunk => (long)chunk.Length);
+        long uniqueChunkCopyBytes = encoded.Content.Values.Sum(data => (long)data.Length);
+        check(previousChunkCopyBytes == encoded.Manifest.TotalLength && uniqueChunkCopyBytes < previousChunkCopyBytes,
+            "repeated source chunks now allocate only their distinct retained contents");
+        check(MapCacheStore.HashCalls == encoded.Manifest.Chunks.Count + 1,
+            "encoder hashes each original chunk slice and one full snapshot");
+        check(encoded.Content.All(chunk => MapCacheStore.HashContent(chunk.Value) == chunk.Key),
+            "encoded unique chunks retain the same SHA256 as their original slices");
+        Console.WriteLine("INFO: synthetic map avoids " + (previousChunkCopyBytes - uniqueChunkCopyBytes)
+            + " bytes of duplicate transient chunk arrays");
 
         var full = MapSnapshotDeltaCodec.MakeTransfer(encoded, null);
         check(full.ChangedChunks.Count == encoded.Content.Count, "full transfer sends each unique content chunk");

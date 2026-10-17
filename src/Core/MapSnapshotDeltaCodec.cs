@@ -86,10 +86,17 @@ namespace FreeWorldMultiplayer
         }
         private static void AddChunk(Encoded encoded, byte[] all, int offset, int count)
         {
-            var data = new byte[count]; Buffer.BlockCopy(all, offset, data, 0, count);
-            string hash = MapCacheStore.HashContent(data);
+            // Repeated map content is common. Hash the original slice first so only
+            // distinct chunks allocate a retained byte array; do not create and
+            // immediately discard a duplicate chunk on every repeated boundary.
+            string hash = MapCacheStore.HashContent(all, offset, count);
             encoded.Manifest.Chunks.Add(new MapCacheChunkReference { Hash = hash, Length = count });
-            if (!encoded.Content.ContainsKey(hash)) encoded.Content.Add(hash, data);
+            if (!encoded.Content.ContainsKey(hash))
+            {
+                var data = new byte[count];
+                Buffer.BlockCopy(all, offset, data, 0, count);
+                encoded.Content.Add(hash, data);
+            }
         }
         internal static MapCacheTransfer MakeTransfer(Encoded encoded, IEnumerable<string> available)
         {

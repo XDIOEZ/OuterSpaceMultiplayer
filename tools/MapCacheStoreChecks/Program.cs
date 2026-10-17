@@ -59,10 +59,23 @@ internal static class Program
             const string world = "synthetic-world-a";
             const long mapId = 1000001000004L;
             const string scope = "synthetic-steam-target";
+            byte[] slice = Encoding.UTF8.GetBytes("repeated-chunk-地图");
+            byte[] padded = new byte[slice.Length + 11];
+            Buffer.BlockCopy(slice, 0, padded, 5, slice.Length);
+            Check(MapCacheStore.HashContent(padded, 5, slice.Length) == MapCacheStore.HashContent(slice),
+                "slice hashing matches complete-buffer SHA256 without copying bytes");
+            Check(MapCacheStore.HashContent(padded, 0, padded.Length) == MapCacheStore.HashContent(padded),
+                "slice hashing supports the complete source range");
+            Check(MapCacheStore.HashContent(padded, 0, 0) == MapCacheStore.HashContent(new byte[0]),
+                "zero-length slice retains the standard SHA256 digest");
+            Check(Rejects<ArgumentException>(() => MapCacheStore.HashContent(padded, 6, padded.Length)),
+                "slice hashing rejects a range beyond the input buffer");
             var snapshot = Example(mapId);
             var encoded = MapSnapshotDeltaCodec.Encode(world, snapshot);
             Check(encoded.Manifest.TotalLength > 0 && encoded.Content.Count > 0,
                 "production map codec builds valid cold input");
+            Check(encoded.Content.All(chunk => MapCacheStore.HashContent(chunk.Value) == chunk.Key),
+                "encoded content retains the exact bytes declared by sliced SHA256 hashes");
 
             var store = new MapCacheStore(root, scope);
             string firstHash = encoded.Content.Keys.First();

@@ -35,9 +35,14 @@ namespace FreeWorldMultiplayer
         internal static string HashContent(byte[] data)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
+            return HashContent(data, 0, data.Length);
+        }
+        internal static string HashContent(byte[] data, int offset, int count)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
             HashCalls++;
             using (var sha = SHA256.Create())
-                return BitConverter.ToString(sha.ComputeHash(data)).Replace("-", "").ToLowerInvariant();
+                return BitConverter.ToString(sha.ComputeHash(data, offset, count)).Replace("-", "").ToLowerInvariant();
         }
     }
 }
