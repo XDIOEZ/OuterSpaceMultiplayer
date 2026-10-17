@@ -19,6 +19,13 @@ namespace FreeWorldMultiplayer
         public bool Applied;
         public string Error;
     }
+    public sealed class PlayerUpdate
+    {
+        public string PlayerId;
+        public long BaseRevision;
+        public long Revision;
+        public string NativeFieldsJson;
+    }
 }
 
 internal static class Program
@@ -106,6 +113,7 @@ internal static class Program
             MapCacheExpiryChecks.Run(Check);
             OptionalPeerNoticeChecks.Run(Check);
             UnauthenticatedFrameChecks.Run(Check);
+            MapTransactionPlayerChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;
         }

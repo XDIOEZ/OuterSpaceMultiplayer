@@ -312,6 +312,8 @@ namespace FreeWorldMultiplayer
                 // A malformed remote envelope must fail before applying any native map change.
                 // Local capture and wire serialization always supply a list (possibly empty).
                 if (update.EntityOwners == null || update.Players == null || (update.Checkpoint != null && update.Checkpoint.MapId != map.MapId)) throw new InvalidDataException("Incomplete map transaction ownership or player update registry.");
+                // Validate the entire set before any native map or personal write.
+                MapTransactionPlayerValidation.RequireUnique(update.Players);
                 foreach (var owner in update.EntityOwners)
                 {
                     string existing;
