@@ -70,6 +70,7 @@ namespace FreeWorldMultiplayer
             internal double Start, Duration, Expires = -1;
         }
         private static readonly FieldInfo effectBeamEmitters = NativeWire.Field(typeof(BeamBehavior), "emitters");
+        private static readonly Func<BattleEffectPose, long> BattleEffectPoseId = pose => pose.Id;
         private readonly Dictionary<BaseProjectile, BattleEffectPose> battleEffectProjectiles = new Dictionary<BaseProjectile, BattleEffectPose>();
         private readonly Dictionary<GameObject, BattleVfxSource> battleEffectVfx = new Dictionary<GameObject, BattleVfxSource>();
         // Capture also removes despawned native instances during enumeration.
@@ -83,6 +84,7 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<long, BattleEffectReplica> battleEffectReplicas = new Dictionary<long, BattleEffectReplica>();
         private readonly BattleEffectFrameSnapshot<long, BattleEffectReplica> battleEffectFrameSnapshot =
             new BattleEffectFrameSnapshot<long, BattleEffectReplica>();
+        private readonly BattleEffectPresenceBuffer battleEffectPresence = new BattleEffectPresenceBuffer();
         private readonly Dictionary<string, WeaponData> battleEffectWeapons = new Dictionary<string, WeaponData>(StringComparer.Ordinal);
         // The receive/update loop consults cached weapon controllers for
         // every wire weapon. Use the same exact 64-bit + ordinal slot identity
@@ -353,11 +355,12 @@ namespace FreeWorldMultiplayer
                 weapons.Add(Tuple.Create(value, weapon));
             }
             EnsureBattleEffectsRoot(); applyingBattleEffects = true;
+            HashSet<long> present = null;
             try
             {
                 double now = Time.timeAsDouble;
                 double interval = lastBattleEffectsReceipt == 0 ? 0 : Math.Min(0.25, Math.Max(0.01, now - lastBattleEffectsReceipt));
-                var present = new HashSet<long>(state.Projectiles.Concat(state.Vfx).Select(p => p.Id));
+                present = battleEffectPresence.Capture(state.Projectiles, state.Vfx, BattleEffectPoseId);
                 foreach (BattleEffectEvent item in state.Events)
                 {
                     if (item.Serial <= appliedBattleEffectEvent) continue;
@@ -389,7 +392,11 @@ namespace FreeWorldMultiplayer
                 }
                 appliedBattleEffectsSequence = state.Sequence; lastBattleEffectsReceipt = now;
             }
-            finally { applyingBattleEffects = false; }
+            finally
+            {
+                try { if (present != null) battleEffectPresence.Release(present); }
+                finally { applyingBattleEffects = false; }
+            }
         }
         internal void UpdatePlayerBattleEffects()
         {
@@ -444,6 +451,7 @@ namespace FreeWorldMultiplayer
                 try { ReleaseBattleEffect(value); } catch (Exception error) { errors.Add(error); }
             battleEffectReplicas.Clear(); battleEffectProjectiles.Clear(); battleEffectVfx.Clear(); battleEffectEvents.Clear();
             battleEffectFrameSnapshot.Reset();
+            battleEffectPresence.Reset();
             battleProjectileCaptureSnapshot.Reset();
             battleVfxCaptureSnapshot.Reset();
             battleEffectShellPool.Clear(); battleEffectShellKeys.Clear(); battleEffectWeapons.Clear(); battleEffectControllers.Clear(); battleEffectVfxLeases.Clear();
