@@ -156,6 +156,7 @@ namespace FreeWorldMultiplayer
     {
         public string LocalPlayerId = "host";
         public bool IsHost = true;
+        public bool Paused;
         public Func<long, bool> IsPlayerFleetBattleLocked;
         public Action<string, long> RequestPlayerFleetInteraction;
         public Dictionary<long, string> Owners = new Dictionary<long, string>();
@@ -164,7 +165,7 @@ namespace FreeWorldMultiplayer
             string owner;
             return Owners.TryGetValue(uid, out owner) ? owner : null;
         }
-        public bool IsPaused() { return false; }
+        public bool IsPaused() { return Paused; }
         public string GetPlayerDisplayName(string id) { return id; }
     }
     public sealed class FakePlayer

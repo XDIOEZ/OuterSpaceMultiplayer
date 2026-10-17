@@ -12,5 +12,6 @@
     <Compile Include="Program.cs" />
     <Compile Include="Stubs.cs" />
     <Compile Include="../../src/Game/NativeRemoteFleetProxy.cs" Link="NativeRemoteFleetProxy.cs" />
+    <Compile Include="../../src/Game/RemoteFleetPoseCheckpoint.cs" Link="RemoteFleetPoseCheckpoint.cs" />
   </ItemGroup>
 </Project>

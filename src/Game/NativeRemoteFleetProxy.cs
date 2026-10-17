@@ -35,16 +35,9 @@ namespace FreeWorldMultiplayer
 
     public sealed partial class GameBridge
     {
-        private sealed class RemotePoseBuffer
-        {
-            internal FleetPose Pose;
-            internal long Sequence;
-            internal double Receipt, StartedAt, Duration, PauseAt = -1;
-            internal Vector3 From;
-            internal float FromAngle;
-        }
         private readonly Dictionary<long, RemotePlayerFleetProxyView> remoteFleetProxies = new Dictionary<long, RemotePlayerFleetProxyView>();
-        private readonly Dictionary<long, RemotePoseBuffer> remoteFleetPoses = new Dictionary<long, RemotePoseBuffer>();
+        private readonly Dictionary<long, RemoteFleetPoseCheckpoint<FleetPose, Vector3>> remoteFleetPoses =
+            new Dictionary<long, RemoteFleetPoseCheckpoint<FleetPose, Vector3>>();
         private readonly HashSet<long> visibleRemoteFleetIds = new HashSet<long>();
         private GameObject remoteFleetPrefab;
 
@@ -81,7 +74,7 @@ namespace FreeWorldMultiplayer
                 if (player.Key == Context.LocalPlayerId || !Online.Contains(player.Key)) continue;
                 foreach (FWFleet fleet in OwnedFleets(player.Key))
                 {
-                    RemotePoseBuffer pose;
+                    RemoteFleetPoseCheckpoint<FleetPose, Vector3> pose;
                     string physicalGalaxy = !Context.IsHost && remoteFleetPoses.TryGetValue(fleet.getUID(), out pose) ? pose.Pose.GalaxyId : fleet.pos == null ? null : fleet.pos.galaxyId;
                     if (physicalGalaxy != galaxyId) continue;
                     long uid = fleet.getUID(); visibleRemoteFleetIds.Add(uid);
@@ -138,20 +131,26 @@ namespace FreeWorldMultiplayer
         }
         private void PushRemoteFleetPose(FleetPose pose, long sequence, bool reset)
         {
-            RemotePoseBuffer previous;
+            RemoteFleetPoseCheckpoint<FleetPose, Vector3> previous;
             double now = Time.unscaledTimeAsDouble;
             bool known = remoteFleetPoses.TryGetValue(pose.FleetId, out previous);
             if (known && !reset && sequence <= previous.Sequence) return;
             bool snap = reset || !known || previous.Pose.GalaxyId != pose.GalaxyId || now - previous.Receipt > 2;
             Vector3 from = new Vector3(pose.X, pose.Y, 0); float fromAngle = pose.Angle;
             if (!snap) TryGetSynchronizedFleetPose(pose.FleetId, out from, out fromAngle);
-            remoteFleetPoses[pose.FleetId] = new RemotePoseBuffer { Pose = pose, Sequence = sequence, Receipt = now,
-                From = from, FromAngle = fromAngle, StartedAt = now, Duration = snap ? 0 : Math.Max(0.05, Math.Min(1, now - previous.Receipt)),
-                PauseAt = Context.IsPaused() ? now : -1 };
+            // Resolve all snapshot/interpolation inputs before mutating an
+            // existing buffer, as in the previous fresh-object assignment.
+            double duration = snap ? 0 : Math.Max(0.05, Math.Min(1, now - previous.Receipt));
+            double pauseAt = Context.IsPaused() ? now : -1;
+            if (known)
+                previous.Replace(pose, sequence, now, from, fromAngle, duration, pauseAt);
+            else
+                remoteFleetPoses.Add(pose.FleetId, new RemoteFleetPoseCheckpoint<FleetPose, Vector3>(
+                    pose, sequence, now, from, fromAngle, duration, pauseAt));
         }
         private bool TryGetSynchronizedFleetPose(long uid, out Vector3 position, out float angle)
         {
-            RemotePoseBuffer buffer;
+            RemoteFleetPoseCheckpoint<FleetPose, Vector3> buffer;
             if (!remoteFleetPoses.TryGetValue(uid, out buffer)) { position = default(Vector3); angle = 0; return false; }
             double now = Time.unscaledTimeAsDouble;
             if (Context.IsPaused()) { if (buffer.PauseAt < 0) buffer.PauseAt = now; now = buffer.PauseAt; }

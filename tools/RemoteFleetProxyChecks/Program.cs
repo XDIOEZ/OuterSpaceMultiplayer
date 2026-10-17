@@ -31,6 +31,41 @@ internal static class Program
         typeof(GameBridge).GetMethod("RefreshRemoteFleetProxies", BindingFlags.NonPublic | BindingFlags.Instance)
             .Invoke(bridge, new object[] { manager, galaxy });
     }
+    private static System.Collections.IDictionary PoseBuffers(GameBridge bridge)
+    {
+        return (System.Collections.IDictionary)typeof(GameBridge)
+            .GetField("remoteFleetPoses", BindingFlags.NonPublic | BindingFlags.Instance)
+            .GetValue(bridge);
+    }
+    private static void PushPose(GameBridge bridge, long uid, string galaxy,
+        float x, float angle, long sequence, bool reset = false)
+    {
+        Type poseType = typeof(GameBridge).GetNestedType("FleetPose", BindingFlags.NonPublic);
+        object pose = Activator.CreateInstance(poseType);
+        poseType.GetField("FleetId").SetValue(pose, uid);
+        poseType.GetField("PlayerId").SetValue(pose, "guest");
+        poseType.GetField("GalaxyId").SetValue(pose, galaxy);
+        poseType.GetField("X").SetValue(pose, x);
+        poseType.GetField("Y").SetValue(pose, 7f);
+        poseType.GetField("Angle").SetValue(pose, angle);
+        typeof(GameBridge).GetMethod("PushRemoteFleetPose",
+            BindingFlags.NonPublic | BindingFlags.Instance)
+            .Invoke(bridge, new object[] { pose, sequence, reset });
+    }
+    private static object PoseValue(object buffer, string member)
+    {
+        return buffer.GetType().GetField(member,
+            BindingFlags.NonPublic | BindingFlags.Instance).GetValue(buffer);
+    }
+    private static float SynchronizedX(GameBridge bridge, long uid)
+    {
+        object[] args = { uid, new UnityEngine.Vector3(), 0f };
+        bool exists = (bool)typeof(GameBridge)
+            .GetMethod("TryGetSynchronizedFleetPose",
+                BindingFlags.NonPublic | BindingFlags.Instance).Invoke(bridge, args);
+        Check(exists, "actual game bridge interpolates an existing native fleet");
+        return ((UnityEngine.Vector3)args[1]).x;
+    }
     public static int Main()
     {
         try
@@ -134,6 +169,56 @@ internal static class Program
             UnityEngine.Object.Destroy(remaining.gameObject);
             Check(remaining.BoundFleet == null && remaining.Bridge == null && remaining.Visual.Disposed,
                 "native scene teardown also releases the bound fleet before a visibility refresh");
+
+            // Exercise the ACTUAL PushRemoteFleetPose production method, not
+            // only a stand-alone numerical model. Verify its private cache
+            // holds one object across movement, snapping and resync.
+            var poseBuffers = PoseBuffers(bridge);
+            UnityEngine.Time.unscaledTimeAsDouble = 100;
+            PushPose(bridge, 1000, "alpha", 10, 0, 1);
+            object originalPoseBuffer = poseBuffers[1000L];
+            Check(originalPoseBuffer != null && poseBuffers.Count == 1,
+                "first received remote fleet creates exactly one pose checkpoint");
+            UnityEngine.Time.unscaledTimeAsDouble = 100.1;
+            PushPose(bridge, 1000, "alpha", 50, 90, 2);
+            Check(ReferenceEquals(originalPoseBuffer, poseBuffers[1000L]) &&
+                (long)PoseValue(originalPoseBuffer, "Sequence") == 2 &&
+                (double)PoseValue(originalPoseBuffer, "Duration") > 0,
+                "second authoritative pose reuses existing native checkpoint");
+            UnityEngine.Time.unscaledTimeAsDouble = 100.15;
+            float interpolatedX = SynchronizedX(bridge, 1000);
+            Check(interpolatedX > 10 && interpolatedX < 50,
+                "real production interpolation still progresses between received poses");
+            PushPose(bridge, 1000, "alpha", 500, 180, 1);
+            Check(ReferenceEquals(poseBuffers[1000L], originalPoseBuffer) &&
+                (long)PoseValue(originalPoseBuffer, "Sequence") == 2,
+                "out-of-order native pose cannot overwrite the current replica state");
+            bridge.Context.Paused = true;
+            UnityEngine.Time.unscaledTimeAsDouble = 100.18;
+            float frozenX = SynchronizedX(bridge, 1000);
+            UnityEngine.Time.unscaledTimeAsDouble = 105;
+            Check(SynchronizedX(bridge, 1000) == frozenX,
+                "host pause freezes the real remote pose presentation time");
+            bridge.Context.Paused = false;
+            UnityEngine.Time.unscaledTimeAsDouble = 105.05;
+            Check(SynchronizedX(bridge, 1000) >= frozenX,
+                "resuming synchronized time does not reverse a fleet's progress");
+            UnityEngine.Time.unscaledTimeAsDouble = 106;
+            PushPose(bridge, 1000, "beta", 90, -20, 3);
+            Check(ReferenceEquals(poseBuffers[1000L], originalPoseBuffer) &&
+                (double)PoseValue(originalPoseBuffer, "Duration") == 0 &&
+                SynchronizedX(bridge, 1000) == 90,
+                "cross-galaxy fleet movement snaps in place without creating another object");
+            UnityEngine.Time.unscaledTimeAsDouble = 107;
+            PushPose(bridge, 1000, "beta", -40, 11, 1, reset: true);
+            Check(ReferenceEquals(poseBuffers[1000L], originalPoseBuffer) &&
+                (long)PoseValue(originalPoseBuffer, "Sequence") == 1 &&
+                SynchronizedX(bridge, 1000) == -40,
+                "full galaxy resync accepts a lower sequence and snaps to its authoritative pose");
+            typeof(GameBridge).GetMethod("DisposeRemoteFleetProxies",
+                BindingFlags.NonPublic | BindingFlags.Instance).Invoke(bridge, null);
+            Check(poseBuffers.Count == 0,
+                "room cleanup discards all pose checkpoints for the previous multiplayer world");
             Console.WriteLine("PASS: " + checks + " linked NativeRemoteFleetProxy lifecycle checks");
             return 0;
         }
