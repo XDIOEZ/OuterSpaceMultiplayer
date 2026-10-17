@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Both helpers compile directly from the game production source. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Game/FleetSamplePresenceBuffer.cs" Link="FleetSamplePresenceBuffer.cs" />
+    <Compile Include="../../src/Game/FleetSampleCachePruner.cs" Link="FleetSampleCachePruner.cs" />
+  </ItemGroup>
+</Project>

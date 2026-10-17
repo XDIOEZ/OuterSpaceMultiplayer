@@ -61,6 +61,7 @@ namespace FreeWorldMultiplayer
         private static readonly Func<string, string, FleetValue> NewFleetWireField =
             (name, encoded) => new FleetValue { Name = name, NativeValue = encoded };
         private readonly Dictionary<long, FleetSample> fleetSamples = new Dictionary<long, FleetSample>();
+        private readonly FleetSamplePresenceBuffer fleetSamplePresence = new FleetSamplePresenceBuffer();
         private readonly Dictionary<long, NativeWire.CachedValue> transitValues = new Dictionary<long, NativeWire.CachedValue>();
         private readonly HashSet<long> sampledTransitIds = new HashSet<long>();
         private readonly Dictionary<string, GalaxyRecipient> galaxyRecipients = new Dictionary<string, GalaxyRecipient>();
@@ -98,39 +99,44 @@ namespace FreeWorldMultiplayer
         {
             if (fleetSampleFrame == Time.frameCount) return;
             fleetSampleSequence++;
-            var present = new HashSet<long>(); sampledTransit.Clear(); sampledTransitIds.Clear();
-            foreach (var player in Players)
+            var present = fleetSamplePresence.Rent();
+            try
             {
-                foreach (FWFleet fleet in OwnedFleets(player.Key))
+                sampledTransit.Clear(); sampledTransitIds.Clear();
+                foreach (var player in Players)
                 {
-                    long uid = fleet.getUID();
-                    if (Context.OwnerOfEntity(uid) != player.Key || !present.Add(uid)) throw new InvalidOperationException("Owned fleet identity is missing or duplicated: " + uid);
-                    FleetSample sample;
-                    if (!fleetSamples.TryGetValue(uid, out sample)) { sample = new FleetSample(); fleetSamples.Add(uid, sample); }
-                    sample.PlayerId = player.Key; sample.Kind = fleet is FWCaravanFleet ? 1 : 0;
-                    sample.Primary = ReferenceEquals(fleet, player.Value.galaxyBlock.playerFleet);
-                    if (fleet.pos == null) throw new InvalidOperationException("Owned fleet has no physical position: " + uid);
-                    Vector3 position; string galaxy; float heading;
-                    using (EnterPlayer(player.Key))
+                    foreach (FWFleet fleet in OwnedFleets(player.Key))
                     {
-                        foreach (FieldInfo field in FleetFields(fleet.GetType()))
+                        long uid = fleet.getUID();
+                        if (Context.OwnerOfEntity(uid) != player.Key || !present.Add(uid)) throw new InvalidOperationException("Owned fleet identity is missing or duplicated: " + uid);
+                        FleetSample sample;
+                        if (!fleetSamples.TryGetValue(uid, out sample)) { sample = new FleetSample(); fleetSamples.Add(uid, sample); }
+                        sample.PlayerId = player.Key; sample.Kind = fleet is FWCaravanFleet ? 1 : 0;
+                        sample.Primary = ReferenceEquals(fleet, player.Value.galaxyBlock.playerFleet);
+                        if (fleet.pos == null) throw new InvalidOperationException("Owned fleet has no physical position: " + uid);
+                        Vector3 position; string galaxy; float heading;
+                        using (EnterPlayer(player.Key))
                         {
-                            NativeWire.CachedValue previous; sample.Values.TryGetValue(field.Name, out previous);
-                            NativeWire.CachedValue value = NativeWire.CaptureValue(FleetFieldValue(fleet, field), previous);
-                            sample.Values[field.Name] = value;
-                            if (previous == null || previous.Encoded != value.Encoded) MarkRemoteFleetContentChanged(uid);
+                            foreach (FieldInfo field in FleetFields(fleet.GetType()))
+                            {
+                                NativeWire.CachedValue previous; sample.Values.TryGetValue(field.Name, out previous);
+                                NativeWire.CachedValue value = NativeWire.CaptureValue(FleetFieldValue(fleet, field), previous);
+                                sample.Values[field.Name] = value;
+                                if (previous == null || previous.Encoded != value.Encoded) MarkRemoteFleetContentChanged(uid);
+                            }
+                            AirShipFleetInfoBean view = FleetView(player.Key, fleet);
+                            position = nativeFleetPosition(view); galaxy = view.getCurGalaxyId(); heading = NativeFleetHeading(view);
                         }
-                        AirShipFleetInfoBean view = FleetView(player.Key, fleet);
-                        position = nativeFleetPosition(view); galaxy = view.getCurGalaxyId(); heading = NativeFleetHeading(view);
+                        sample.Pose = new FleetPose { PlayerId = player.Key, FleetId = uid, GalaxyId = galaxy,
+                            X = position.x, Y = position.y, Angle = heading, Status = fleet.status, WorldTimeMM = WorldTimeMM };
                     }
-                    sample.Pose = new FleetPose { PlayerId = player.Key, FleetId = uid, GalaxyId = galaxy,
-                        X = position.x, Y = position.y, Angle = heading, Status = fleet.status, WorldTimeMM = WorldTimeMM };
+                    sampledTransit.Add(CaptureCachedTransit(player.Key));
                 }
-                sampledTransit.Add(CaptureCachedTransit(player.Key));
+                FleetSampleCachePruner.RemoveMissing(fleetSamples, present);
+                FleetSampleCachePruner.RemoveMissing(transitValues, sampledTransitIds);
+                fleetSampleFrame = Time.frameCount;
             }
-            FleetSampleCachePruner.RemoveMissing(fleetSamples, present);
-            FleetSampleCachePruner.RemoveMissing(transitValues, sampledTransitIds);
-            fleetSampleFrame = Time.frameCount;
+            finally { fleetSamplePresence.Return(present); }
         }
         private GalaxySnapshot CaptureFleetFrame(string recipient)
         {
@@ -343,6 +349,7 @@ namespace FreeWorldMultiplayer
         private void ClearFleetSynchronization()
         {
             fleetSamples.Clear(); transitValues.Clear(); sampledTransitIds.Clear(); galaxyRecipients.Clear(); sampledTransit.Clear();
+            fleetSamplePresence.Reset();
             fleetSampleFrame = -1; fleetSampleSequence = appliedFleetSequence = 0;
         }
     }
