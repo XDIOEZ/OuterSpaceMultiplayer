@@ -221,6 +221,7 @@ namespace FreeWorldMultiplayer
             var frameIndex = FleetFrameIndex<FWFleet>.ShouldIndex(sync.Content.Count, sync.Poses.Count)
                 ? new FleetFrameIndex<FWFleet>(OwnedFleets, fleet => fleet.getUID()) : null;
             var staged = new List<Tuple<FleetContent, FWFleet, Dictionary<string, object>, bool>>();
+            int createdFleetCount = 0;
             var ids = new HashSet<long>();
             foreach (FleetContent content in sync.Content)
             {
@@ -254,6 +255,14 @@ namespace FreeWorldMultiplayer
                 if (content.Full && decoded.Count != fields.Length) throw new InvalidOperationException("Initial fleet content is incomplete.");
                 if (sync.Full && !content.Full) throw new InvalidOperationException("A complete galaxy baseline contains partial fleet content.");
                 staged.Add(Tuple.Create(content, fleet, decoded, created));
+                if (created) createdFleetCount++;
+            }
+            FleetCreatedPoseIndex<FleetPose> createdPoseIndex = null;
+            if (FleetCreatedPoseIndex<FleetPose>.ShouldIndex(createdFleetCount))
+            {
+                createdPoseIndex = new FleetCreatedPoseIndex<FleetPose>();
+                foreach (var stage in staged)
+                    if (stage.Item4) createdPoseIndex.RegisterCreated(stage.Item1.PlayerId, stage.Item1.FleetId);
             }
             var poseIds = new HashSet<long>();
             foreach (FleetPose pose in sync.Poses)
@@ -264,10 +273,18 @@ namespace FreeWorldMultiplayer
                     || float.IsNaN(pose.X) || float.IsInfinity(pose.X) || float.IsNaN(pose.Y) || float.IsInfinity(pose.Y)
                     || float.IsNaN(pose.Angle) || float.IsInfinity(pose.Angle) || pose.WorldTimeMM < 0
                     || !(frameIndex == null ? OwnedFleets(pose.PlayerId).Any(f => f.getUID() == pose.FleetId) : frameIndex.Contains(pose.PlayerId, pose.FleetId))
-                        && !staged.Any(s => s.Item4 && s.Item1.FleetId == pose.FleetId && s.Item1.PlayerId == pose.PlayerId))
+                        && !(createdPoseIndex == null
+                            ? staged.Any(s => s.Item4 && s.Item1.FleetId == pose.FleetId && s.Item1.PlayerId == pose.PlayerId)
+                            : createdPoseIndex.HasCreated(pose.PlayerId, pose.FleetId)))
                     throw new InvalidOperationException("Invalid authoritative fleet pose.");
             }
-            foreach (var stage in staged) if (stage.Item4 && !sync.Poses.Any(p => p.FleetId == stage.Item1.FleetId)) throw new InvalidOperationException("New fleet replica has no physical galaxy pose.");
+            if (createdPoseIndex != null)
+                foreach (FleetPose pose in sync.Poses) createdPoseIndex.RegisterValidatedPose(pose.FleetId, pose);
+            foreach (var stage in staged)
+                if (stage.Item4 && !(createdPoseIndex == null
+                    ? sync.Poses.Any(p => p.FleetId == stage.Item1.FleetId)
+                    : createdPoseIndex.HasPose(stage.Item1.FleetId)))
+                    throw new InvalidOperationException("New fleet replica has no physical galaxy pose.");
             var removed = new HashSet<long>(sync.Removed);
             if (removed.Count != sync.Removed.Count) throw new InvalidOperationException("Galaxy fleet removal identities are duplicated.");
             if (sync.Full)
@@ -292,7 +309,9 @@ namespace FreeWorldMultiplayer
                 }
                 if (stage.Item4)
                 {
-                    FleetPose pose = sync.Poses.Single(p => p.FleetId == stage.Item1.FleetId);
+                    FleetPose pose = createdPoseIndex == null
+                        ? sync.Poses.Single(p => p.FleetId == stage.Item1.FleetId)
+                        : createdPoseIndex.SinglePose(stage.Item1.FleetId);
                     Players[stage.Item1.PlayerId].galaxyBlock.knownGalaxies.Single(g => g.id == pose.GalaxyId).galaxyFleetList.Add(stage.Item2);
                     if (frameIndex != null) frameIndex.RegisterCreated(stage.Item1.PlayerId, stage.Item1.FleetId, stage.Item2);
                     ownedFleetIndexFrame = -1;
