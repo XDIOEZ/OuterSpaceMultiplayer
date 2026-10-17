@@ -66,6 +66,16 @@ internal static class MapCodecChecks
             "encoded unique chunks retain the same SHA256 as their original slices");
         check(MatchesLegacySerializedBytes(encoded, snapshot),
             "large cached map bytes, SHA and cuts match legacy UTF-16-to-UTF-8 serialization exactly");
+        byte[] fullPayloadBytes = ExpandEncodedBytes(encoded);
+        check(JToken.DeepEquals(JObject.Parse(Encoding.UTF8.GetString(fullPayloadBytes)),
+            MapSnapshotDeltaCodec.ParseCachePayload(fullPayloadBytes)),
+            "large map streaming JSON reader reconstructs the same JObject as legacy string parsing");
+        long legacyParseBytes = AllocatedByParsing(() => JObject.Parse(Encoding.UTF8.GetString(fullPayloadBytes)));
+        long streamedParseBytes = AllocatedByParsing(() => MapSnapshotDeltaCodec.ParseCachePayload(fullPayloadBytes));
+        Console.WriteLine("INFO: 4 large-map JSON parses allocated " + legacyParseBytes +
+            " bytes with UTF-16 intermediate vs " + streamedParseBytes + " bytes via UTF-8 streaming");
+        check(streamedParseBytes < legacyParseBytes,
+            "streaming the existing map buffer lowers managed JSON parsing allocations");
         var trickyMap = Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"note\":\"雪\\n\\t\\\\\\\"🌍\",\"ratio\":1.25}"));
         var special = new MapSnapshot
         {
@@ -92,6 +102,24 @@ internal static class MapCodecChecks
         var specialEncoded = MapSnapshotDeltaCodec.Encode(WorldId, special);
         check(MatchesLegacySerializedBytes(specialEncoded, special),
             "unicode, escapes, floating point and nested landing bytes retain legacy cache identity");
+        check(JToken.DeepEquals(JObject.Parse(Encoding.UTF8.GetString(ExpandEncodedBytes(specialEncoded))),
+            MapSnapshotDeltaCodec.ParseCachePayload(ExpandEncodedBytes(specialEncoded))),
+            "unicode and nested landing map JSON parses identically from both inputs");
+        check(SameJsonAcceptance("{\"a\":1}  \n // trailing comment"),
+            "streaming cache JSON keeps legacy trailing-comment acceptance");
+        check(SameJsonAcceptance("{\"a\":1}{\"b\":2}")
+            && SameJsonAcceptance("[1,2]")
+            && SameJsonAcceptance("{\"a\":1")
+            && SameJsonAcceptance(""),
+            "streaming cache JSON keeps legacy rejection of extra, non-object or truncated payloads");
+        check(SameParseOutcome(new byte[] { (byte)'{', (byte)'\"', (byte)'a',
+                    (byte)'\"', (byte)':', (byte)'\"', 0xC3, 0x28, (byte)'\"', (byte)'}' }),
+            "streaming cache parser preserves strict UTF-8 error rejection");
+        check(SameParseOutcome(new byte[] { 0xEF, 0xBB, 0xBF, (byte)'{', (byte)'}' }),
+            "streaming cache parser preserves legacy UTF-8 BOM handling");
+        check(SameJsonAcceptance("{\"created\":\"2026-10-17T00:00:00Z\",\"extra\":null}")
+            && SameJsonAcceptance("{\"a\":{\"b\":[1,2,3]}}   "),
+            "streaming cache parser preserves legacy date-token and trailing-whitespace behavior");
         SameSnapshot(check, MapSnapshotDeltaCodec.Reassemble(MapSnapshotDeltaCodec.MakeTransfer(specialEncoded, null),
             WorldId, MapId, null), special, "unicode and nested landing serialization");
         Console.WriteLine("INFO: synthetic map avoids " + (previousChunkCopyBytes - uniqueChunkCopyBytes)
@@ -173,6 +201,47 @@ internal static class MapCodecChecks
             && expected.EntityOwners.All(entry =>
                 actual.EntityOwners.TryGetValue(entry.Key, out var playerId) && playerId == entry.Value),
             name + " owner registry");
+    }
+
+    private static byte[] ExpandEncodedBytes(MapSnapshotDeltaCodec.Encoded encoded)
+    {
+        var bytes = new byte[(int)encoded.Manifest.TotalLength];
+        int offset = 0;
+        foreach (MapCacheChunkReference chunk in encoded.Manifest.Chunks)
+        {
+            byte[] part = encoded.Content[chunk.Hash];
+            Buffer.BlockCopy(part, 0, bytes, offset, part.Length);
+            offset += part.Length;
+        }
+        if (offset != bytes.Length) throw new InvalidOperationException("Invalid synthetic cache fixture");
+        return bytes;
+    }
+
+    private static long AllocatedByParsing(Func<JObject> parse)
+    {
+        parse(); parse(); // warm both parsers before sampling
+        long start = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 4; ++i) parse();
+        return GC.GetAllocatedBytesForCurrentThread() - start;
+    }
+
+    private static bool SameJsonAcceptance(string json)
+    {
+        return SameParseOutcome(Encoding.UTF8.GetBytes(json));
+    }
+
+    private static bool SameParseOutcome(byte[] encoded)
+    {
+        JObject oldValue = null, newValue = null;
+        bool oldRejected = false, newRejected = false;
+        try { oldValue = JObject.Parse(new UTF8Encoding(false, true).GetString(encoded)); }
+        catch (JsonException) { oldRejected = true; }
+        catch (DecoderFallbackException) { oldRejected = true; }
+        try { newValue = MapSnapshotDeltaCodec.ParseCachePayload(encoded); }
+        catch (JsonException) { newRejected = true; }
+        catch (DecoderFallbackException) { newRejected = true; }
+        return oldRejected == newRejected
+            && (oldRejected || JToken.DeepEquals(oldValue, newValue));
     }
 
     // This is intentionally the PRE-optimization construction: an entire

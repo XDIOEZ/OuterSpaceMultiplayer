@@ -187,7 +187,7 @@ namespace FreeWorldMultiplayer
             }
             if (writeOffset != bytes.Length) throw new InvalidDataException("Map cache content length differs from the manifest.");
             if (MapCacheStore.HashContent(bytes) != transfer.Manifest.SnapshotHash) throw new InvalidDataException("Reassembled map checksum differs from the host.");
-            JObject payload = JObject.Parse(Utf8.GetString(bytes));
+            JObject payload = ParseCachePayload(bytes);
             if ((int?)payload["Schema"] != Schema || (string)payload["WorldId"] != worldId || (long?)payload["MapId"] != mapId)
                 throw new InvalidDataException("Reassembled map identity/schema differs from the host.");
             var checkpoint = payload["Checkpoint"] as JObject;
@@ -195,6 +195,25 @@ namespace FreeWorldMultiplayer
             TransformCheckpoint(checkpoint, false);
             return new MapSnapshot { MapId = mapId, Revision = (long)payload["Revision"], NativeJson = checkpoint.ToString(Formatting.None),
                 EntityOwners = payload["EntityOwners"].ToObject<Dictionary<long, string>>(JsonSerializer.Create(JsonData.Settings)) };
+        }
+        internal static JObject ParseCachePayload(byte[] bytes)
+        {
+            // The reassembled, SHA-verified UTF-8 buffer is already in memory.
+            // Parse directly from it instead of allocating a second full-sized
+            // UTF-16 JSON string on the game's main thread.
+            using (var stream = new MemoryStream(bytes, false))
+            using (var text = new StreamReader(stream, Utf8, false, 8192))
+            using (var reader = new JsonTextReader(text))
+            {
+                JObject payload = JObject.Load(reader);
+                // JObject.Parse also rejects a second JSON document and all
+                // trailing non-comment tokens. Keep that validation on the
+                // streaming path rather than silently accepting extra data.
+                while (reader.Read())
+                    if (reader.TokenType != JsonToken.Comment)
+                        throw new JsonReaderException("Additional text after map cache JSON payload.");
+                return payload;
+            }
         }
         internal static bool IsHash(string value)
         { return value != null && value.Length == 64 && value.All(c => c >= '0' && c <= '9' || c >= 'a' && c <= 'f'); }
