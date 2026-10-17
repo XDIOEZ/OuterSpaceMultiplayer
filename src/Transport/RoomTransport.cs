@@ -3,7 +3,7 @@ using System;
 namespace FreeWorldMultiplayer
 {
     /// <summary>A Steam host also exposes TCP; clients explicitly select one connection method.</summary>
-    public sealed class RoomTransport : ITransport, ITransportDrain
+    public sealed class RoomTransport : ITransport, ITransportDrain, ITransportPeerAdmission
     {
         private TcpTransport tcp;
         private SteamTransport steam;
@@ -13,6 +13,13 @@ namespace FreeWorldMultiplayer
         public string Name { get { return steam != null && tcp != null ? "TCP + Steam" : steam != null ? "Steam" : "TCP/IP"; } }
         public string LocalPeerId { get { return host ? "host" : clientSteam ? steam.LocalPeerId : tcp.LocalPeerId; } }
         public bool IsRunning { get { return (tcp != null && tcp.IsRunning) || (steam != null && steam.IsRunning); } }
+        public void MarkAuthenticated(string peerId)
+        {
+            if (!host || peerId == null) return;
+            if (peerId.StartsWith("steam:", StringComparison.Ordinal))
+            { if (steam != null) steam.MarkAuthenticated(peerId); }
+            else if (tcp != null) tcp.MarkAuthenticated(peerId);
+        }
         public string RoomId { get { return steam == null ? "" : steam.RoomId; } }
         public void StartHost(TransportOptions options)
         {

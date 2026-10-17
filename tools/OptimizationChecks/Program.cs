@@ -105,6 +105,7 @@ internal static class Program
             DeferredCommandReplyChecks.Run(Check);
             MapCacheExpiryChecks.Run(Check);
             OptionalPeerNoticeChecks.Run(Check);
+            UnauthenticatedFrameChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;
         }

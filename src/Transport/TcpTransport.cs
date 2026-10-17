@@ -8,7 +8,7 @@ using System.Threading;
 namespace FreeWorldMultiplayer
 {
     /// <summary>Independent managed TCP transport. Does not initialize or invoke Steam/Unity.</summary>
-    public sealed class TcpTransport : ITransport, ITransportDrain
+    public sealed class TcpTransport : ITransport, ITransportDrain, ITransportPeerAdmission
     {
         private sealed class Peer
         {
@@ -20,6 +20,7 @@ namespace FreeWorldMultiplayer
             public long OutgoingBytes;
             public int InFlightBytes;
             public bool Closed;
+            public bool Authenticated;
         }
         private readonly object gate = new object();
         private readonly Dictionary<string, Peer> peers = new Dictionary<string, Peer>();
@@ -34,6 +35,14 @@ namespace FreeWorldMultiplayer
         public string Name { get { return "TCP/IP"; } }
         public string LocalPeerId { get; private set; }
         public bool IsRunning { get { return running; } }
+        public void MarkAuthenticated(string peerId)
+        {
+            if (!host || peerId == null) return;
+            Peer peer;
+            lock (gate) if (!peers.TryGetValue(peerId, out peer)) return;
+            lock (peer.Gate) if (!peer.Closed) peer.Authenticated = true;
+        }
+
 
         public void StartHost(TransportOptions options)
         {
@@ -145,6 +154,10 @@ namespace FreeWorldMultiplayer
                     ReadExact(peer.Stream, header, header.Length);
                     int length = (header[0] << 24) | (header[1] << 16) | (header[2] << 8) | header[3];
                     if (length <= 0 || length > TransportQueue.MaxMessageBytes) throw new InvalidDataException("收到非法消息长度：" + length);
+                    bool authenticated;
+                    lock (peer.Gate) authenticated = peer.Authenticated;
+                    if (!UnauthenticatedFramePolicy.AllowsFrame(host, authenticated, length))
+                        throw new InvalidDataException("尚未完成身份认证，消息帧大小超出握手上限。");
                     if (!events.TryReserve(length)) throw new IOException("接收与重组总容量已满。");
                     bool reservation = true;
                     try

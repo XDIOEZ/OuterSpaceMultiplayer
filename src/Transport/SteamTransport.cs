@@ -8,7 +8,7 @@ using Steamworks;
 namespace FreeWorldMultiplayer
 {
     /// <summary>Steam lobby discovery and reliable SteamNetworkingSockets P2P. Main thread only.</summary>
-    public sealed class SteamTransport : ITransport, ITransportDrain
+    public sealed class SteamTransport : ITransport, ITransportDrain, ITransportPeerAdmission
     {
         private const int VirtualPort = 17321;
         private const int FragmentPayload = 48 * 1024;
@@ -20,6 +20,7 @@ namespace FreeWorldMultiplayer
             public string Id;
             public HSteamNetConnection Connection;
             public bool Connected;
+            public bool Authenticated;
             public readonly Queue<SendItem> Outgoing = new Queue<SendItem>();
             public long OutgoingBytes;
             public byte[] Incoming;
@@ -47,6 +48,12 @@ namespace FreeWorldMultiplayer
         public string Name { get { return "Steam Lobby / SteamNetworkingSockets"; } }
         public string LocalPeerId { get; private set; }
         public bool IsRunning { get { return running; } }
+        public void MarkAuthenticated(string peerId)
+        {
+            if (!host || peerId == null) return;
+            Peer peer;
+            if (peers.TryGetValue(peerId, out peer) && peer.Connected) peer.Authenticated = true;
+        }
         public string RoomId { get { return lobby.m_SteamID == 0 ? "" : lobby.m_SteamID.ToString(); } }
 
         private void Initialize(TransportOptions options, bool asHost)
@@ -226,6 +233,9 @@ namespace FreeWorldMultiplayer
         {
             int magic = GetInt(packet, 0), id = GetInt(packet, 4), total = GetInt(packet, 8), offset = GetInt(packet, 12), length = packet.Length - HeaderLength;
             if (magic != Magic || total <= 0 || total > TransportQueue.MaxMessageBytes || offset < 0 || offset > total - length || length == 0) { Disconnect(peer.Id, "Steam 分片头无效。"); return; }
+            // Check the announced total before reserving memory for reassembly.
+            if (!UnauthenticatedFramePolicy.AllowsFrame(host, peer.Authenticated, total))
+            { Disconnect(peer.Id, "Steam 未认证消息超过握手大小上限。"); return; }
             if (peer.Incoming == null)
             {
                 if (offset != 0 || !events.TryReserve(total)) { Disconnect(peer.Id, "Steam 重组顺序或容量无效。"); return; }

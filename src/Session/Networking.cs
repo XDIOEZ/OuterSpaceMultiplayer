@@ -39,7 +39,24 @@ namespace FreeWorldMultiplayer
                 return;
             }
             if (item.Kind != TransportEventKind.Message) return;
+            // An untrusted peer must never cause a 128 MiB UTF-16 string and
+            // JSON token tree allocation before its handshake is complete.
+            if (IsHost && !UnauthenticatedFramePolicy.AllowsFrame(true,
+                item.PeerId != null && peers.ContainsKey(item.PeerId),
+                item.Data == null ? 0 : item.Data.Length))
+            {
+                if (item.PeerId != null)
+                {
+                    try { transport.Disconnect(item.PeerId, "未认证消息超过握手大小上限。"); }
+                    catch (IOException) { }
+                    catch (InvalidOperationException) { }
+                }
+                return;
+            }
             WireMessage message = Protocol.Decode(item.Data);
+            if (IsHost && (item.PeerId == null || !peers.ContainsKey(item.PeerId))
+                && !UnauthenticatedFramePolicy.IsHandshakeKind(message.Kind))
+                throw new InvalidDataException("尚未认证的连接只能发送 hello/auth。");
             if (IsHost) HandleHostMessage(item.PeerId, message);
             else HandleClientMessage(message);
         }
@@ -157,6 +174,8 @@ namespace FreeWorldMultiplayer
             Broadcast("playerJoined", new PlayerIntroduction { Player = introduction });
             peers[peer] = player.PlayerId; playerPeers[player.PlayerId] = peer;
             Send(peer, "welcome", new Welcome { PlayerId = player.PlayerId, World = PublicWorld(player.PlayerId), Uids = JsonData.Clone(player.Uids) });
+            ITransportPeerAdmission admission = transport as ITransportPeerAdmission;
+            if (admission != null) admission.MarkAuthenticated(peer);
             if (player.CurrentMapId >= 0) EnterMap(player, player.CurrentMapId);
             BroadcastPolicy();
             SetStatus(player.Nickname + " 已加入");
