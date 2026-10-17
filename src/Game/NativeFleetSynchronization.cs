@@ -15,7 +15,11 @@ namespace FreeWorldMultiplayer
             public long FleetId;
             public int Kind;
             public bool Full, Primary;
-            public List<FleetValue> Fields = new List<FleetValue>();
+            public List<FleetValue> Fields;
+            // Keep a non-null default for native Json.NET deserialization,
+            // including a malicious payload that omits the Fields property.
+            public FleetContent() { Fields = new List<FleetValue>(); }
+            internal FleetContent(List<FleetValue> fields) { Fields = fields; }
         }
         private sealed class FleetPose
         {
@@ -54,6 +58,8 @@ namespace FreeWorldMultiplayer
             internal GalaxySnapshot Snapshot;
         }
         private static readonly Dictionary<Type, FieldInfo[]> fleetSyncFields = new Dictionary<Type, FieldInfo[]>();
+        private static readonly Func<string, string, FleetValue> NewFleetWireField =
+            (name, encoded) => new FleetValue { Name = name, NativeValue = encoded };
         private readonly Dictionary<long, FleetSample> fleetSamples = new Dictionary<long, FleetSample>();
         private readonly Dictionary<long, NativeWire.CachedValue> transitValues = new Dictionary<long, NativeWire.CachedValue>();
         private readonly HashSet<long> sampledTransitIds = new HashSet<long>();
@@ -166,14 +172,14 @@ namespace FreeWorldMultiplayer
                 FleetSample sample = pair.Value;
                 Dictionary<string, string> known;
                 bool full = !peer.Values.TryGetValue(pair.Key, out known);
-                var content = new FleetContent { PlayerId = sample.PlayerId, FleetId = pair.Key, Kind = sample.Kind, Primary = sample.Primary, Full = full };
-                foreach (var field in sample.Values)
+                List<FleetValue> changed = FleetDeltaFieldSelector.Select(sample.Values, known, full, NewFleetWireField);
+                if (changed != null)
                 {
-                    string previous;
-                    if (full || !known.TryGetValue(field.Key, out previous) || !String.Equals(previous, field.Value.Encoded, StringComparison.Ordinal))
-                        content.Fields.Add(new FleetValue { Name = field.Key, NativeValue = field.Value.Encoded });
+                    // Most frames only change poses. Do not construct an empty
+                    // content DTO/list for each stable fleet and each recipient.
+                    sync.Content.Add(new FleetContent(changed) { PlayerId = sample.PlayerId, FleetId = pair.Key,
+                        Kind = sample.Kind, Primary = sample.Primary, Full = full });
                 }
-                if (content.Fields.Count != 0) sync.Content.Add(content);
                 FleetPose previousPose;
                 if (!peer.Poses.TryGetValue(pair.Key, out previousPose) || !SameFleetPose(previousPose, sample.Pose)) sync.Poses.Add(sample.Pose);
             }
