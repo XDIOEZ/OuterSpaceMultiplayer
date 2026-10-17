@@ -74,6 +74,8 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<GameObject, BattleVfxSource> battleEffectVfx = new Dictionary<GameObject, BattleVfxSource>();
         private readonly List<BattleEffectEvent> battleEffectEvents = new List<BattleEffectEvent>();
         private readonly Dictionary<long, BattleEffectReplica> battleEffectReplicas = new Dictionary<long, BattleEffectReplica>();
+        private readonly BattleEffectFrameSnapshot<long, BattleEffectReplica> battleEffectFrameSnapshot =
+            new BattleEffectFrameSnapshot<long, BattleEffectReplica>();
         private readonly Dictionary<string, WeaponData> battleEffectWeapons = new Dictionary<string, WeaponData>(StringComparer.Ordinal);
         private readonly Dictionary<string, WeaponController> battleEffectControllers = new Dictionary<string, WeaponController>(StringComparer.Ordinal);
         private readonly Dictionary<string, Stack<GameObject>> battleEffectShellPool = new Dictionary<string, Stack<GameObject>>(StringComparer.Ordinal);
@@ -372,17 +374,25 @@ namespace FreeWorldMultiplayer
         {
             if (!HasNativePlayerBattle || !IsPlayerBattleReplica || Context.IsPaused()) return;
             double now = Time.timeAsDouble;
-            foreach (var pair in battleEffectReplicas.ToArray())
+            // Preserve snapshot-before-removal order. The reusable buffer
+            // avoids a new dictionary-sized array on each active render frame.
+            var snapshot = battleEffectFrameSnapshot.Capture(battleEffectReplicas);
+            try
             {
-                BattleEffectReplica value = pair.Value;
-                long lease;
-                if (value.Object == null || value.Vfx && (!battleEffectVfxLeases.TryGetValue(value.Object, out lease) || lease != value.Id)
-                    || value.Expires >= 0 && now >= value.Expires)
-                { ReleaseBattleEffect(value); battleEffectReplicas.Remove(pair.Key); continue; }
-                float t = value.Duration <= 0 ? 1 : Mathf.Clamp01((float)((now - value.Start) / value.Duration));
-                value.Object.transform.position = Vector3.Lerp(value.From, value.To, t);
-                value.Object.transform.rotation = Quaternion.Euler(0, 0, Mathf.LerpAngle(value.FromAngle, value.ToAngle, t));
+                for (int i = 0; i < snapshot.Count; i++)
+                {
+                    var pair = snapshot[i];
+                    BattleEffectReplica value = pair.Value;
+                    long lease;
+                    if (value.Object == null || value.Vfx && (!battleEffectVfxLeases.TryGetValue(value.Object, out lease) || lease != value.Id)
+                        || value.Expires >= 0 && now >= value.Expires)
+                    { ReleaseBattleEffect(value); battleEffectReplicas.Remove(pair.Key); continue; }
+                    float t = value.Duration <= 0 ? 1 : Mathf.Clamp01((float)((now - value.Start) / value.Duration));
+                    value.Object.transform.position = Vector3.Lerp(value.From, value.To, t);
+                    value.Object.transform.rotation = Quaternion.Euler(0, 0, Mathf.LerpAngle(value.FromAngle, value.ToAngle, t));
+                }
             }
+            finally { battleEffectFrameSnapshot.Release(snapshot); }
         }
         private void ReleaseBattleEffect(BattleEffectReplica replica)
         {
@@ -412,6 +422,7 @@ namespace FreeWorldMultiplayer
             foreach (BattleEffectReplica value in battleEffectReplicas.Values)
                 try { ReleaseBattleEffect(value); } catch (Exception error) { errors.Add(error); }
             battleEffectReplicas.Clear(); battleEffectProjectiles.Clear(); battleEffectVfx.Clear(); battleEffectEvents.Clear();
+            battleEffectFrameSnapshot.Reset();
             battleEffectShellPool.Clear(); battleEffectShellKeys.Clear(); battleEffectWeapons.Clear(); battleEffectControllers.Clear(); battleEffectVfxLeases.Clear();
             if (battleEffectsRoot != null)
             {

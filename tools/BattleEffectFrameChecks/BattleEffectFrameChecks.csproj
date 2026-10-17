@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The linked file is the production buffer used by GameBridge.UpdatePlayerBattleEffects. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Game/BattleEffectFrameSnapshot.cs" Link="BattleEffectFrameSnapshot.cs" />
+  </ItemGroup>
+</Project>
