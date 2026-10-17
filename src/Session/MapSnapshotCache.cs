@@ -52,28 +52,6 @@ namespace FreeWorldMultiplayer
             try { mapCache.WriteContent(hash, content); }
             catch (Exception error) { DisableMapCache(error); }
         }
-        private void TickMapCache(double seconds)
-        {
-            if (mapCacheWarning != null && !mapCacheWarningReported)
-            {
-                mapCacheWarningReported = true;
-                MessageFaulted?.Invoke("[map-cache] 本地派生缓存已停用，本场继续从房主获取权威数据。" + Environment.NewLine + mapCacheWarning);
-            }
-            foreach (var pair in offeredMapViews.ToList())
-            {
-                pair.Value.Elapsed += seconds;
-                if (pair.Value.Elapsed < 60) continue;
-                retainedMapViewBytes -= pair.Value.RetainedBytes; offeredMapViews.Remove(pair.Key);
-                string peer;
-                if (playerPeers.TryGetValue(pair.Value.Player, out peer)) Send(peer, "error", "等待地图缓存清单超时，请重新进入该地图。");
-            }
-            foreach (var pair in waitingMapCaches.ToList())
-            {
-                waitingMapCacheSeconds[pair.Key] += seconds;
-                if (waitingMapCacheSeconds[pair.Key] >= 60)
-                    FailMapLoading(new TimeoutException("等待房主地图内容超时：map=" + pair.Value.MapId));
-            }
-        }
         private void SendNetworkMapView(string peer, string playerId, MapView view, bool fullTerrain = false, bool ignoreCache = false)
         {
             RequireFullCheckpoint(view.Snapshot, view.Access.MapId);

@@ -103,6 +103,7 @@ internal static class Program
             MapCodecChecks.Run(Check);
             CommandSubmitStatusChecks.Run(Check);
             DeferredCommandReplyChecks.Run(Check);
+            MapCacheExpiryChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;
         }

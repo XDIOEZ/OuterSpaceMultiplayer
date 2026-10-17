@@ -16,12 +16,15 @@
     <Compile Include="FleetMotionChecks.cs" />
     <Compile Include="CommandSubmitStatusChecks.cs" />
     <Compile Include="DeferredCommandReplyChecks.cs" />
+    <Compile Include="MapCacheExpiryChecks.cs" />
+    <Compile Include="MapCacheExpiryStubs.cs" />
     <Compile Include="../../src/Session/PerformanceWindow.cs" Link="PerformanceWindow.cs" />
     <Compile Include="../../src/Core/GroundCaptureMetrics.cs" Link="GroundCaptureMetrics.cs" />
     <Compile Include="../../src/Core/RuntimeSourceRevision.cs" Link="RuntimeSourceRevision.cs" />
     <Compile Include="../../src/Core/FleetMotionEvidence.cs" Link="FleetMotionEvidence.cs" />
     <Compile Include="../../src/Entry/CommandSubmitStatus.cs" Link="CommandSubmitStatus.cs" />
     <Compile Include="../../src/Session/DeferredCommandReplyMap.cs" Link="DeferredCommandReplyMap.cs" />
+    <Compile Include="../../src/Session/MapCacheExpiry.cs" Link="MapCacheExpiry.cs" />
     <Compile Include="../../src/Transport/TransportQueue.cs" Link="TransportQueue.cs" />
     <Compile Include="../../src/Core/MapSnapshotDeltaCodec.cs" Link="MapSnapshotDeltaCodec.cs" />
     <!-- Newtonsoft is shipped with the installed dotnet SDK: no NuGet/network restore. -->
