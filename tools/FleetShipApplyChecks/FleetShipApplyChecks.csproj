@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Validate the actual production source, not a copied index/apply. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Game/NativeFleetShipApply.cs" Link="NativeFleetShipApply.cs" />
+    <Compile Include="../../src/Game/NativeFleetShipLookup.cs" Link="NativeFleetShipLookup.cs" />
+  </ItemGroup>
+</Project>

@@ -61,6 +61,8 @@ namespace FreeWorldMultiplayer
         private static readonly Func<string, string, FleetValue> NewFleetWireField =
             (name, encoded) => new FleetValue { Name = name, NativeValue = encoded };
         private static readonly Func<FWAirShip, long> NativeFleetShipUid = ship => ship.getUID();
+        private static readonly Action<FWAirShip, FWAirShip> NativeFleetShipCopy =
+            (source, destination) => NativeWire.Copy(source, destination);
         private readonly Dictionary<long, FleetSample> fleetSamples = new Dictionary<long, FleetSample>();
         private readonly FleetSamplePresenceBuffer fleetSamplePresence = new FleetSamplePresenceBuffer();
         private readonly Dictionary<long, NativeWire.CachedValue> transitValues = new Dictionary<long, NativeWire.CachedValue>();
@@ -344,17 +346,11 @@ namespace FreeWorldMultiplayer
         }
         private static void ApplyFleetShips(FWGameData owner, FWFleet fleet, List<FWAirShip> ships)
         {
-            var canonical = new List<FWAirShip>(ships.Count);
-            foreach (FWAirShip incoming in ships)
-            {
-                // A stored-ship entry may share this exact asset. Preserve its existing
-                // reference and wrappers; fleet removal alone does not imply deleting storage.
-                FWAirShip current = owner.galaxyBlock.airShipList.SingleOrDefault(s => s.getUID() == incoming.getUID())
-                    ?? fleet.ships.SingleOrDefault(s => s.getUID() == incoming.getUID());
-                if (current == null) current = incoming; else NativeWire.Copy(incoming, current);
-                canonical.Add(current);
-            }
-            fleet.ships.Clear(); fleet.ships.AddRange(canonical);
+            // A stored-ship entry may share this exact asset. Preserve its
+            // existing reference and native wrappers, including during a
+            // dense resync. No lookup escapes this single content apply.
+            NativeFleetShipApply.Apply(ships, owner.galaxyBlock.airShipList,
+                fleet.ships, NativeFleetShipUid, NativeFleetShipCopy);
         }
         private void ClearFleetSynchronization()
         {
