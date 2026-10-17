@@ -158,7 +158,9 @@ namespace FreeWorldMultiplayer
             try
             {
                 long reassembleStarted = Stopwatch.GetTimestamp();
-                try { view.Snapshot = MapSnapshotDeltaCodec.Reassemble(view.Cache, World.WorldId, view.Access.MapId, ReadMapCacheContent); }
+                // ReadMapCacheContent delegates to MapCacheStore.TryReadContent,
+                // which checks each disk chunk's SHA-256 before returning.
+                try { view.Snapshot = MapSnapshotDeltaCodec.ReassembleFromVerifiedCache(view.Cache, World.WorldId, view.Access.MapId, ReadMapCacheContent); }
                 finally { ReportSlowOperation("map.cache.reassemble", reassembleStarted, receivingWireBytes, view.Access.MapId); }
                 ValidateLoadingView(view);
                 if (mapCache != null)

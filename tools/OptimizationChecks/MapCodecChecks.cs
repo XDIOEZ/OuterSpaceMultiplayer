@@ -144,6 +144,12 @@ internal static class MapCodecChecks
             && MapCacheStore.HashCalls < full.ChangedChunks.Count * 2 + 1,
             "warm map still validates cached chunks without double hashing received chunks");
         SameSnapshot(check, restored, snapshot, "partial cache");
+        MapCacheStore.HashCalls = 0;
+        var trustedMixed = MapSnapshotDeltaCodec.ReassembleFromVerifiedCache(mixed, WorldId, MapId,
+            hash => cache.TryGetValue(hash, out var bytes) ? bytes : null);
+        check(MapCacheStore.HashCalls == mixed.ChangedChunks.Count + 1,
+            "verified-cache restore hashes only incoming chunks and the final full snapshot");
+        SameSnapshot(check, trustedMixed, snapshot, "verified partial cache");
 
         var hot = MapSnapshotDeltaCodec.MakeTransfer(encoded, encoded.Content.Keys);
         check(hot.ChangedChunks.Count == 0, "fully cached transfer sends no changed chunks");
@@ -155,6 +161,12 @@ internal static class MapCodecChecks
         check(MapCacheStore.HashCalls == encoded.Content.Count + 1,
             "hot map verifies each unique cached chunk once plus final snapshot hash");
         SameSnapshot(check, restored, snapshot, "hot cache");
+        MapCacheStore.HashCalls = 0;
+        var trustedHot = MapSnapshotDeltaCodec.ReassembleFromVerifiedCache(hot, WorldId, MapId,
+            hash => cache.TryGetValue(hash, out var bytes) ? bytes : null);
+        check(MapCacheStore.HashCalls == 1,
+            "verified hot-map restore performs only the mandatory final snapshot SHA-256");
+        SameSnapshot(check, trustedHot, snapshot, "verified hot cache");
 
         var cachedHash = encoded.Manifest.Chunks[0].Hash;
         var badCachedChunk = (byte[])cache[cachedHash].Clone();
@@ -164,6 +176,12 @@ internal static class MapCodecChecks
             hash => hash == cachedHash ? badCachedChunk : cache[hash]); }
         catch (InvalidDataException) { corruptCacheRejected = true; }
         check(corruptCacheRejected, "repeated cached chunks still reject corrupt content");
+        corruptCacheRejected = false;
+        try { MapSnapshotDeltaCodec.ReassembleFromVerifiedCache(hot, WorldId, MapId,
+            hash => hash == cachedHash ? badCachedChunk : cache[hash]); }
+        catch (InvalidDataException) { corruptCacheRejected = true; }
+        check(corruptCacheRejected,
+            "even a broken verified-cache callback cannot bypass final map checksum");
 
         bool failed = false;
         try { MapSnapshotDeltaCodec.Reassemble(mixed, WorldId, MapId, _ => null); }

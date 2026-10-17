@@ -137,6 +137,15 @@ namespace FreeWorldMultiplayer
                 .Select(x => new MapCacheChunk { Hash = x.Key, Data = x.Value }).ToList() };
         }
         internal static MapSnapshot Reassemble(MapCacheTransfer transfer, string worldId, long mapId, Func<string, byte[]> read)
+        { return ReassembleCore(transfer, worldId, mapId, read, verifyReadChunks: true); }
+
+        // Only pass MapCacheStore.TryReadContent (or a wrapper around it):
+        // it verifies a disk chunk against its SHA-256 before returning bytes.
+        // The final full-snapshot digest remains mandatory even on this path.
+        internal static MapSnapshot ReassembleFromVerifiedCache(MapCacheTransfer transfer, string worldId, long mapId, Func<string, byte[]> read)
+        { return ReassembleCore(transfer, worldId, mapId, read, verifyReadChunks: false); }
+
+        private static MapSnapshot ReassembleCore(MapCacheTransfer transfer, string worldId, long mapId, Func<string, byte[]> read, bool verifyReadChunks)
         {
             if (transfer == null || transfer.ChangedChunks == null) throw new InvalidDataException("Missing map cache transfer.");
             ValidateManifest(transfer.Manifest, worldId, mapId);
@@ -175,10 +184,11 @@ namespace FreeWorldMultiplayer
                     byte[] data;
                     bool fromTransfer = changed.TryGetValue(reference.Hash, out data);
                     if (!fromTransfer) data = read == null ? null : read(reference.Hash);
-                    // Received chunks were verified above; verify each on-disk chunk
-                    // once before allowing later references to reuse these bytes.
+                    // Incoming chunks are verified above. Generic callers must
+                    // verify disk bytes here; the verified-cache entrypoint uses
+                    // MapCacheStore's own SHA-256 check rather than hashing twice.
                     if (data == null || data.Length != reference.Length ||
-                        (!fromTransfer && MapCacheStore.HashContent(data) != reference.Hash))
+                        (!fromTransfer && verifyReadChunks && MapCacheStore.HashContent(data) != reference.Hash))
                         throw new InvalidDataException("Required cached map chunk is unavailable: " + reference.Hash);
                     Buffer.BlockCopy(data, 0, bytes, writeOffset, data.Length);
                     written.Add(reference.Hash, new WrittenChunk { Offset = writeOffset, Length = data.Length });

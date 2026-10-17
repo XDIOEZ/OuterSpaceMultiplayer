@@ -144,7 +144,7 @@ internal static class Program
             var allCached = MapSnapshotDeltaCodec.MakeTransfer(encoded, encoded.Content.Keys);
             Check(allCached.ChangedChunks.Count == 0,
                 "hot map makes a transfer without duplicate content payload");
-            var hot = MapSnapshotDeltaCodec.Reassemble(
+            var hot = MapSnapshotDeltaCodec.ReassembleFromVerifiedCache(
                 new MapCacheTransfer { Manifest = manifest, ChangedChunks = allCached.ChangedChunks },
                 world, mapId, hash => store.TryReadContent(hash));
             Check(hot.Revision == snapshot.Revision && hot.MapId == mapId &&
@@ -184,9 +184,9 @@ internal static class Program
             Check(Rejects<InvalidDataException>(() => reopened.TryReadContent(firstHash)),
                 "corrupted persisted content never passes read checksum");
             Check(Rejects<InvalidDataException>(() =>
-                MapSnapshotDeltaCodec.Reassemble(allCached, world, mapId,
+                MapSnapshotDeltaCodec.ReassembleFromVerifiedCache(allCached, world, mapId,
                     hash => reopened.TryReadContent(hash))),
-                "corrupt hot content cannot enter a native map");
+                "verified-cache restore still rejects corrupt on-disk chunks");
             reopened.WriteContent(firstHash, original);
             Check(reopened.TryReadContent(firstHash).SequenceEqual(original),
                 "verified full content rewrites a corrupt cache entry safely");
