@@ -236,10 +236,15 @@ namespace FreeWorldMultiplayer
         private void TickCommunication(double seconds)
         {
             communicationTime += seconds;
-            foreach (ChatPending pending in pendingChats.Values.ToList())
-                if ((pending.Seconds -= seconds) <= 0) CompleteLocalChat(new ChatOutcome { ClientMessageId = pending.Message.ClientMessageId, Error = "等待送达回执超时，未确认对方收到。" });
-            if (IsHost) foreach (ChatRelay relay in chatDeliveries.Values.ToList())
-                if ((relay.Seconds -= seconds) <= 0) FinishChatRelay(relay, "对方未确认收到，消息送达超时。");
+            // The real-time room tick runs even when nobody is chatting.
+            // Keep snapshot iteration when callbacks can mutate the dictionary,
+            // but do not allocate empty Lists on every idle frame.
+            if (pendingChats.Count != 0)
+                foreach (ChatPending pending in pendingChats.Values.ToList())
+                    if ((pending.Seconds -= seconds) <= 0) CompleteLocalChat(new ChatOutcome { ClientMessageId = pending.Message.ClientMessageId, Error = "等待送达回执超时，未确认对方收到。" });
+            if (IsHost && chatDeliveries.Count != 0)
+                foreach (ChatRelay relay in chatDeliveries.Values.ToList())
+                    if ((relay.Seconds -= seconds) <= 0) FinishChatRelay(relay, "对方未确认收到，消息送达超时。");
             TickVisits(seconds);
         }
         private void DisconnectCommunication(string playerId, bool all)

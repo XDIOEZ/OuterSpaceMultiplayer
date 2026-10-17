@@ -150,13 +150,37 @@ namespace FreeWorldMultiplayer
         }
         private void TickVisits(double seconds)
         {
-            foreach (PlayerVisitUpdate update in localVisits.Values.ToList())
+            // Keep the original snapshot when an active consent may expire and
+            // invoke VisitChanged (whose listeners can add/remove visit records).
+            // Settled history stays in the UI for later viewing; its timers can
+            // be updated directly without allocating a List every idle frame.
+            if (localVisits.Count != 0)
             {
-                update.RemainingSeconds = Math.Max(0, update.RemainingSeconds - seconds);
-                if (update.RemainingSeconds == 0 && (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved))
-                { update.State = PlayerVisitState.Expired; update.Grant = null; update.Reason = "参观申请或赠送授权已超时。"; VisitChanged?.Invoke(JsonData.Clone(update)); }
+                bool mayNotify = false;
+                foreach (PlayerVisitUpdate update in localVisits.Values)
+                    if (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved)
+                    { mayNotify = true; break; }
+                if (!mayNotify)
+                {
+                    foreach (PlayerVisitUpdate update in localVisits.Values)
+                        update.RemainingSeconds = Math.Max(0, update.RemainingSeconds - seconds);
+                }
+                else
+                    foreach (PlayerVisitUpdate update in localVisits.Values.ToList())
+                    {
+                        update.RemainingSeconds = Math.Max(0, update.RemainingSeconds - seconds);
+                        if (update.RemainingSeconds == 0 && (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved))
+                        { update.State = PlayerVisitState.Expired; update.Grant = null; update.Reason = "参观申请或赠送授权已超时。"; VisitChanged?.Invoke(JsonData.Clone(update)); }
+                    }
             }
-            if (!IsHost) return;
+            if (!IsHost || hostVisits.Count == 0) return;
+            // Finished/blocked visits can remain in the host's bounded history.
+            // They have no ticking work; avoid snapshotting them indefinitely.
+            bool hasDeadline = false;
+            foreach (HostVisit visit in hostVisits.Values)
+                if ((visit.State == PlayerVisitState.Waiting || visit.State == PlayerVisitState.Approved)
+                    && visit.TransferId == null) { hasDeadline = true; break; }
+            if (!hasDeadline) return;
             foreach (HostVisit visit in hostVisits.Values.ToList())
                 if ((visit.State == PlayerVisitState.Waiting || visit.State == PlayerVisitState.Approved) && visit.TransferId == null)
                 {
