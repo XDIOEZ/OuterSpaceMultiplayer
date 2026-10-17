@@ -127,6 +127,18 @@ namespace FreeWorldMultiplayer
                 State = PlayerVisitState.Waiting, Seconds = seconds
             });
         }
+        public void AddStableHostVisit(string id, double seconds)
+        {
+            hostVisits.Add(id, new HostVisit
+            {
+                Request = new PlayerVisitRequest {
+                    RequestId = Guid.NewGuid().ToString("N"),
+                    RequesterPlayerId = "guest", RecipientPlayerId = "host",
+                    RequesterFleetId = 200, RecipientFleetId = 100
+                },
+                State = PlayerVisitState.Waiting, Seconds = seconds
+            });
+        }
         public PlayerVisitState HostVisitStatus(string id) { return hostVisits[id].State; }
         public double HostVisitSeconds(string id) { return hostVisits[id].Seconds; }
         public void AddSettledHistory(int localCount, int hostCount)

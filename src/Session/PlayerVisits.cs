@@ -18,6 +18,8 @@ namespace FreeWorldMultiplayer
         }
         private readonly Dictionary<string, HostVisit> hostVisits = new Dictionary<string, HostVisit>();
         private readonly Dictionary<string, PlayerVisitUpdate> localVisits = new Dictionary<string, PlayerVisitUpdate>();
+        private readonly VisitTickSnapshot<HostVisit> hostVisitTickSnapshot = new VisitTickSnapshot<HostVisit>();
+        private readonly VisitTickSnapshot<PlayerVisitUpdate> localVisitTickSnapshot = new VisitTickSnapshot<PlayerVisitUpdate>();
         public IList<PlayerVisitUpdate> GetPlayerVisits(string targetPlayerId)
         {
             return localVisits.Values.Where(x => x.Request.RequesterPlayerId == targetPlayerId || x.Request.RecipientPlayerId == targetPlayerId)
@@ -166,12 +168,19 @@ namespace FreeWorldMultiplayer
                         update.RemainingSeconds = Math.Max(0, update.RemainingSeconds - seconds);
                 }
                 else
-                    foreach (PlayerVisitUpdate update in localVisits.Values.ToList())
+                {
+                    var snapshot = localVisitTickSnapshot.Capture(localVisits);
+                    try
                     {
-                        update.RemainingSeconds = Math.Max(0, update.RemainingSeconds - seconds);
-                        if (update.RemainingSeconds == 0 && (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved))
-                        { update.State = PlayerVisitState.Expired; update.Grant = null; update.Reason = "参观申请或赠送授权已超时。"; VisitChanged?.Invoke(JsonData.Clone(update)); }
+                        foreach (PlayerVisitUpdate update in snapshot)
+                        {
+                            update.RemainingSeconds = Math.Max(0, update.RemainingSeconds - seconds);
+                            if (update.RemainingSeconds == 0 && (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved))
+                            { update.State = PlayerVisitState.Expired; update.Grant = null; update.Reason = "参观申请或赠送授权已超时。"; VisitChanged?.Invoke(JsonData.Clone(update)); }
+                        }
                     }
+                    finally { localVisitTickSnapshot.Release(snapshot); }
+                }
             }
             if (!IsHost || hostVisits.Count == 0) return;
             // Finished/blocked visits can remain in the host's bounded history.
@@ -181,21 +190,31 @@ namespace FreeWorldMultiplayer
                 if ((visit.State == PlayerVisitState.Waiting || visit.State == PlayerVisitState.Approved)
                     && visit.TransferId == null) { hasDeadline = true; break; }
             if (!hasDeadline) return;
-            foreach (HostVisit visit in hostVisits.Values.ToList())
-                if ((visit.State == PlayerVisitState.Waiting || visit.State == PlayerVisitState.Approved) && visit.TransferId == null)
-                {
-                    visit.Seconds -= seconds;
-                    if (visit.Seconds <= 0) EndVisit(visit, PlayerVisitState.Expired, "参观申请或赠送授权已超时。");
-                    else if (!VisitParticipantsOnline(visit)) EndVisit(visit, PlayerVisitState.Cancelled, "参观双方不再同时在线。");
-                }
+            var hostSnapshot = hostVisitTickSnapshot.Capture(hostVisits);
+            try
+            {
+                foreach (HostVisit visit in hostSnapshot)
+                    if ((visit.State == PlayerVisitState.Waiting || visit.State == PlayerVisitState.Approved) && visit.TransferId == null)
+                    {
+                        visit.Seconds -= seconds;
+                        if (visit.Seconds <= 0) EndVisit(visit, PlayerVisitState.Expired, "参观申请或赠送授权已超时。");
+                        else if (!VisitParticipantsOnline(visit)) EndVisit(visit, PlayerVisitState.Cancelled, "参观双方不再同时在线。");
+                    }
+            }
+            finally { hostVisitTickSnapshot.Release(hostSnapshot); }
         }
         private void DisconnectVisits(string playerId, bool all)
         {
             if (IsHost) foreach (HostVisit visit in hostVisits.Values.Where(x => x.State == PlayerVisitState.Waiting || x.State == PlayerVisitState.Approved).ToList())
                 if (all || visit.Request.RequesterPlayerId == playerId || visit.Request.RecipientPlayerId == playerId)
                     EndVisit(visit, PlayerVisitState.Cancelled, "玩家已离开或房间已关闭，赠送授权已撤销。");
-            if (all) foreach (PlayerVisitUpdate update in localVisits.Values)
-            { if (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved) { update.State = PlayerVisitState.Cancelled; update.Grant = null; update.Reason = "已离开房间。"; update.RemainingSeconds = 0; } }
+            if (all)
+            {
+                foreach (PlayerVisitUpdate update in localVisits.Values)
+                { if (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved) { update.State = PlayerVisitState.Cancelled; update.Grant = null; update.Reason = "已离开房间。"; update.RemainingSeconds = 0; } }
+                localVisitTickSnapshot.Reset();
+                hostVisitTickSnapshot.Reset();
+            }
         }
         private bool TouchesForeignMother(string actor, TransferRequest request)
         { return World.Players.Values.Any(x => x.PlayerId != actor && x.MotherShipMapId >= 0 && (x.MotherShipMapId == request.SourceMapId || x.MotherShipMapId == request.DestinationMapId)); }

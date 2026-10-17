@@ -13,6 +13,7 @@
     <Compile Include="../../src/Session/PlayerChat.cs" Link="PlayerChat.cs" />
     <Compile Include="../../src/Session/CommunicationRateLimiter.cs" Link="CommunicationRateLimiter.cs" />
     <Compile Include="../../src/Session/PlayerVisits.cs" Link="PlayerVisits.cs" />
+    <Compile Include="../../src/Session/VisitTickSnapshot.cs" Link="VisitTickSnapshot.cs" />
     <Compile Include="../../src/Core/PlayerCommunication.cs" Link="PlayerCommunication.cs" />
     <Compile Include="../../src/Core/PlayerFleetBattles.cs" Link="PlayerFleetBattles.cs" />
     <Reference Include="Newtonsoft.Json">

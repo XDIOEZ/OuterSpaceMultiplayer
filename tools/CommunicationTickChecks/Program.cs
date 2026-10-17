@@ -137,6 +137,61 @@ internal static class Program
             Check(nonHost.HostVisitSeconds("host-should-not-tick") == 2,
                 "guest cannot advance host-only visit deadlines");
 
+            // Unlike the idle case above, an active 5-minute consent used to
+            // allocate both full Values.ToList snapshots on EVERY tick.
+            const int activeFrames = 5000;
+            var activeHost = new MultiplayerSession { IsHost = true };
+            activeHost.AddLocalVisit("active-local", 3000);
+            activeHost.AddStableHostVisit("active-host", 3000);
+            long activeAllocated = AllocatedByTicks(() => activeHost.TestTick(0.016), activeFrames);
+            Check(activeAllocated == 0,
+                "active host visit/consent timers reuse both snapshots without managed allocations");
+            Check(Math.Abs(activeHost.LocalVisit("active-local").RemainingSeconds -
+                (3000 - (activeFrames + 100) * .016)) < 0.0001 &&
+                Math.Abs(activeHost.HostVisitSeconds("active-host") -
+                (3000 - (activeFrames + 100) * .016)) < 0.0001,
+                "actual production tick still advances both active clocks once per frame");
+            Check(activeHost.LocalVisit("active-local").State == PlayerVisitState.Waiting &&
+                activeHost.HostVisitStatus("active-host") == PlayerVisitState.Waiting,
+                "long-lived active consent is not expired or cancelled prematurely");
+            Console.WriteLine("INFO: " + activeFrames +
+                " production host ticks with active local and remote visits: allocated " +
+                activeAllocated + " B for visit snapshots after warmup");
+
+            // Real VisitChanged listener can synchronously reenter Tick and
+            // must not overwrite the outer visit timer snapshot.
+            var reentrantVisits = new MultiplayerSession { IsHost = false };
+            reentrantVisits.AddLocalVisit("outer-expiring", 0.1);
+            reentrantVisits.AddLocalVisit("other", 10);
+            bool nestedTick = false;
+            reentrantVisits.VisitChanged += update =>
+            {
+                if (update.Request.RequestId != "outer-expiring" || nestedTick) return;
+                nestedTick = true;
+                reentrantVisits.TestTick(0.25);
+            };
+            reentrantVisits.TestTick(0.1);
+            Check(nestedTick && reentrantVisits.LocalVisit("outer-expiring").State == PlayerVisitState.Expired,
+                "native visit notification can safely reenter the real production Tick");
+            Check(Math.Abs(reentrantVisits.LocalVisit("other").RemainingSeconds - 9.65) < 0.00001,
+                "nested tick preserves outer snapshot order and exact elapsed time");
+
+            var failingVisit = new MultiplayerSession { IsHost = false };
+            failingVisit.AddLocalVisit("fault", 0.1);
+            Action<PlayerVisitUpdate> brokenListener =
+                update => { throw new InvalidOperationException("test visit callback failure"); };
+            failingVisit.VisitChanged += brokenListener;
+            bool propagated = false;
+            try { failingVisit.TestTick(0.2); }
+            catch (InvalidOperationException error)
+            { propagated = error.Message == "test visit callback failure"; }
+            finally { failingVisit.VisitChanged -= brokenListener; }
+            Check(propagated, "visit notification exception propagates without losing the frame lease");
+            failingVisit.AddLocalVisit("after-fault", 10);
+            failingVisit.TestTick(0.4);
+            Check(Math.Abs(failingVisit.LocalVisit("after-fault").RemainingSeconds - 9.6) < 0.00001,
+                "next actual tick can reuse the snapshot after a failing UI notification");
+
             var rateHost = new MultiplayerSession { IsHost = true };
             for (int i = 0; i < 20; i++)
                 Check(rateHost.TestConsumeRate("guest", "battleFrame"),
