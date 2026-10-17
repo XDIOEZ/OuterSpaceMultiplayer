@@ -14,6 +14,9 @@ namespace FreeWorldMultiplayer
         internal GameBridge Bridge;
         internal string PlayerId, VisualKey;
         internal long FleetUid;
+        // Updated by the existing visibility refresh, never an owned/archived
+        // game entity. Per-frame presentation must not rescan OwnedFleets.
+        internal FWFleet BoundFleet;
         internal GalaxyNPCFleet Native;
         internal GalaxyFleetVisual Visual;
         internal IEnumerator<object> Build;
@@ -21,6 +24,10 @@ namespace FreeWorldMultiplayer
         private void Update() { if (Bridge != null) Bridge.PresentRemoteFleetProxy(this); }
         private void OnDestroy()
         {
+            // Scene teardown may destroy the shell without going through the
+            // explicit peer-removal path. Do not retain a native fleet then.
+            BoundFleet = null;
+            Bridge = null;
             if (Build != null) { Build.Dispose(); Build = null; }
             if (Visual != null) Visual.Dispose();
         }
@@ -115,6 +122,16 @@ namespace FreeWorldMultiplayer
                             throw;
                         }
                     }
+                    // A full galaxy baseline can replace the native fleet
+                    // instance under an unchanged UID. Rebind that exact
+                    // object and force visual/content reconciliation.
+                    if (!ReferenceEquals(proxy.BoundFleet, fleet) || proxy.PlayerId != player.Key)
+                    {
+                        proxy.BoundFleet = fleet;
+                        proxy.PlayerId = player.Key;
+                        proxy.VisualKey = null;
+                        proxy.ContentDirty = true;
+                    }
                 }
             }
             foreach (long uid in remoteFleetProxies.Keys.Where(uid => !visibleRemoteFleetIds.Contains(uid)).ToArray()) RemoveRemoteFleetProxy(uid);
@@ -147,8 +164,8 @@ namespace FreeWorldMultiplayer
         internal void PresentRemoteFleetProxy(RemotePlayerFleetProxyView proxy)
         {
             if (Context == null || disposed || !Online.Contains(proxy.PlayerId)) return;
-            FWFleet fleet = OwnedFleets(proxy.PlayerId).SingleOrDefault(f => f.getUID() == proxy.FleetUid);
-            if (fleet == null) return;
+            FWFleet fleet = proxy.BoundFleet;
+            if (fleet == null || fleet.getUID() != proxy.FleetUid || Context.OwnerOfEntity(proxy.FleetUid) != proxy.PlayerId) return;
             if (proxy.ContentDirty)
             {
                 string motherType;
@@ -198,6 +215,7 @@ namespace FreeWorldMultiplayer
             remoteFleetProxies.Remove(uid);
             if (proxy == null) return;
             proxy.Bridge = null;
+            proxy.BoundFleet = null;
             if (proxy.Native != null) proxy.Native.enabled = false;
             try { if (proxy.Build != null) { proxy.Build.Dispose(); proxy.Build = null; } }
             finally { UnityEngine.Object.Destroy(proxy.gameObject); }
