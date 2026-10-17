@@ -228,7 +228,8 @@ namespace FreeWorldMultiplayer
             {
                 EnsureStartupFinished();
                 if (Session == null || !Session.IsConnected || tickFailed) throw new InvalidOperationException("当前没有可操作的联机会话。");
-                Session.Submit(command);
+                string immediate = CommandSubmitStatus.ImmediateFeedback(Session.Submit(command));
+                if (immediate != null) Feedback = immediate;
             }, "提交操作失败。");
         }
         private void EnsureStartupFinished() { if (IsStarting) throw new InvalidOperationException("正在创建联机世界，请等待创建完成。"); }

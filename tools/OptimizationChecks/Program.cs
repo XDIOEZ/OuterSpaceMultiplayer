@@ -11,6 +11,14 @@ namespace FreeWorldMultiplayer
         public byte[] Data;
         public string Error;
     }
+    // Stand-in for the UI's result classification check; the actual
+    // CommandSubmitStatus is compiled directly from production source.
+    public sealed class CommandResult
+    {
+        public bool Success;
+        public bool Applied;
+        public string Error;
+    }
 }
 
 internal static class Program
@@ -93,6 +101,7 @@ internal static class Program
             RuntimeRevisionChecks.Run(Check);
             FleetMotionChecks.Run(Check);
             MapCodecChecks.Run(Check);
+            CommandSubmitStatusChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;
         }
