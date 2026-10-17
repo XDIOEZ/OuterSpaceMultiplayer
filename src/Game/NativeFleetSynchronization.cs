@@ -60,6 +60,7 @@ namespace FreeWorldMultiplayer
         private static readonly Dictionary<Type, FieldInfo[]> fleetSyncFields = new Dictionary<Type, FieldInfo[]>();
         private static readonly Func<string, string, FleetValue> NewFleetWireField =
             (name, encoded) => new FleetValue { Name = name, NativeValue = encoded };
+        private static readonly Func<FWAirShip, long> NativeFleetShipUid = ship => ship.getUID();
         private readonly Dictionary<long, FleetSample> fleetSamples = new Dictionary<long, FleetSample>();
         private readonly FleetSamplePresenceBuffer fleetSamplePresence = new FleetSamplePresenceBuffer();
         private readonly Dictionary<long, NativeWire.CachedValue> transitValues = new Dictionary<long, NativeWire.CachedValue>();
@@ -324,11 +325,20 @@ namespace FreeWorldMultiplayer
         {
             if (ships == null) throw new InvalidOperationException("Fleet ship content is null.");
             var ids = new HashSet<long>();
+            // The read-only pre-apply pass previously did two full
+            // SingleOrDefault scans for each incoming ship. Index only dense
+            // deltas and keep the original source precedence and malformed
+            // native-list exception behavior.
+            var existing = NativeFleetShipLookup<FWAirShip>.ShouldIndex(ships.Count)
+                ? new NativeFleetShipLookup<FWAirShip>(owner.galaxyBlock.airShipList, fleet.ships, NativeFleetShipUid)
+                : null;
             foreach (FWAirShip ship in ships)
             {
                 if (ship == null || !ids.Add(ship.getUID())) throw new InvalidOperationException("Fleet ship content has a missing or duplicated identity.");
-                FWAirShip current = owner.galaxyBlock.airShipList.SingleOrDefault(s => s.getUID() == ship.getUID())
-                    ?? fleet.ships.SingleOrDefault(s => s.getUID() == ship.getUID());
+                FWAirShip current = existing == null
+                    ? owner.galaxyBlock.airShipList.SingleOrDefault(s => s.getUID() == ship.getUID())
+                        ?? fleet.ships.SingleOrDefault(s => s.getUID() == ship.getUID())
+                    : existing.Find(ship.getUID());
                 if (current != null && current.GetType() != ship.GetType()) throw new InvalidOperationException("Fleet ship content changed its native type.");
             }
         }
