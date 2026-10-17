@@ -85,7 +85,8 @@ namespace FreeWorldMultiplayer
         private static readonly Func<WeaponController, string> ReplicaFighterWeaponSlot =
             weapon => weapon.GetComponentInParent<WeaponSlot>().slotId;
         internal bool CanRunPlayerBattleFighterSimulation { get { return !HasNativePlayerBattle || CanRunPlayerBattle; } }
-        private static string FighterWingKey(long carrier, int wing) { return carrier + "/" + wing; }
+        private static BattleFighterWingIdentity FighterWingKey(long carrier, int wing)
+        { return new BattleFighterWingIdentity(carrier, wing); }
         private static BattleFighterReplicaIdentity FighterReplicaKey(BattleFighterState fighter)
         { return new BattleFighterReplicaIdentity(fighter.Carrier, fighter.Wing, fighter.Slot, fighter.RuntimeId); }
         internal void MarkPlayerBattleFighterEnding(FighterShip fighter)
@@ -198,7 +199,7 @@ namespace FreeWorldMultiplayer
         {
             if (state == null || state.Schema != 1 || state.Sequence <= 0 || state.Wings == null || state.Fighters == null || state.Wings.Count > 4096 || state.Fighters.Count > 8192)
                 throw new InvalidOperationException("玩家舰战舰载机快照结构无效。");
-            var wings = new Dictionary<string, BattleFighterWing>(StringComparer.Ordinal);
+            var wings = new Dictionary<BattleFighterWingIdentity, BattleFighterWing>();
             foreach (BattleFighterWing wing in state.Wings)
             {
                 if (wing == null || wing.Carrier < 0 || wing.Index < 0 || wing.Index > 255 || String.IsNullOrEmpty(wing.Bay) || wing.Bay.Length > 128
@@ -225,7 +226,7 @@ namespace FreeWorldMultiplayer
                 BattleFighterWing wing;
                 if (fighter == null || fighter.RuntimeId < 0 || !ids.Add(FighterReplicaKey(fighter))
                     || !(slotMembership == null
-                        ? occupied.Add(FighterWingKey(fighter.Carrier, fighter.Wing) + "/" + fighter.Slot)
+                        ? occupied.Add(FighterWingKey(fighter.Carrier, fighter.Wing).ToString() + "/" + fighter.Slot)
                         : slotMembership.TryRegister(fighter.Carrier, fighter.Wing, fighter.Slot, fighter.RuntimeId))
                     || !wings.TryGetValue(FighterWingKey(fighter.Carrier, fighter.Wing), out wing) || wing.Bay != fighter.Bay
                     || !(slotMembership == null
@@ -330,16 +331,16 @@ namespace FreeWorldMultiplayer
         {
             BattleFightersState state = NativeWire.Parse<BattleFightersState>(encoded); ValidateFightersState(state);
             if (!IsPlayerBattleReplica || state.Sequence <= appliedPlayerBattleFighterSequence) return;
-            var wings = new Dictionary<string, FighterWingRuntime>(StringComparer.Ordinal);
-            Dictionary<string, NativeFighterSlotLookup<FighterSlot>> nativeSlots = null;
+            var wings = new Dictionary<BattleFighterWingIdentity, FighterWingRuntime>();
+            Dictionary<BattleFighterWingIdentity, NativeFighterSlotLookup<FighterSlot>> nativeSlots = null;
             foreach (BattleFighterWing value in state.Wings)
             {
                 NativeFighterSlotLookup<FighterSlot> slotLookup;
-                string key = FighterWingKey(value.Carrier, value.Index);
+                BattleFighterWingIdentity key = FighterWingKey(value.Carrier, value.Index);
                 wings.Add(key, ResolveReplicaWing(value, out slotLookup));
                 if (slotLookup != null)
                 {
-                    if (nativeSlots == null) nativeSlots = new Dictionary<string, NativeFighterSlotLookup<FighterSlot>>(StringComparer.Ordinal);
+                    if (nativeSlots == null) nativeSlots = new Dictionary<BattleFighterWingIdentity, NativeFighterSlotLookup<FighterSlot>>();
                     nativeSlots.Add(key, slotLookup);
                 }
             }
@@ -354,7 +355,7 @@ namespace FreeWorldMultiplayer
             double interval = playerBattleFighterReceipt == 0 ? 0 : Math.Min(0.25, Math.Max(0.01, now - playerBattleFighterReceipt));
             foreach (BattleFighterWing value in state.Wings)
             {
-                string wingKey = FighterWingKey(value.Carrier, value.Index);
+                BattleFighterWingIdentity wingKey = FighterWingKey(value.Carrier, value.Index);
                 FighterWingRuntime wing = wings[wingKey];
                 NativeFighterSlotLookup<FighterSlot> slotLookup;
                 if (nativeSlots == null || !nativeSlots.TryGetValue(wingKey, out slotLookup)) slotLookup = null;
