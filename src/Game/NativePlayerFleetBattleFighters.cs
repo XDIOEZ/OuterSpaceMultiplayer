@@ -66,7 +66,8 @@ namespace FreeWorldMultiplayer
             internal float FromAngle, ToAngle;
             internal double Start, Duration;
         }
-        private readonly Dictionary<string, BattleFighterReplica> playerBattleFighters = new Dictionary<string, BattleFighterReplica>(StringComparer.Ordinal);
+        private readonly Dictionary<BattleFighterReplicaIdentity, BattleFighterReplica> playerBattleFighters =
+            new Dictionary<BattleFighterReplicaIdentity, BattleFighterReplica>();
         private readonly HashSet<FighterShip> endingPlayerBattleFighters = new HashSet<FighterShip>();
         // FleetManager removes a dying/retreating carrier before its native wing presentation
         // finishes. Retain only the already-proven scene reference/asset identity during that
@@ -85,8 +86,8 @@ namespace FreeWorldMultiplayer
             weapon => weapon.GetComponentInParent<WeaponSlot>().slotId;
         internal bool CanRunPlayerBattleFighterSimulation { get { return !HasNativePlayerBattle || CanRunPlayerBattle; } }
         private static string FighterWingKey(long carrier, int wing) { return carrier + "/" + wing; }
-        private static string FighterReplicaKey(BattleFighterState fighter)
-        { return fighter.Carrier + "/" + fighter.Wing + "/" + fighter.Slot + "/" + fighter.RuntimeId; }
+        private static BattleFighterReplicaIdentity FighterReplicaKey(BattleFighterState fighter)
+        { return new BattleFighterReplicaIdentity(fighter.Carrier, fighter.Wing, fighter.Slot, fighter.RuntimeId); }
         internal void MarkPlayerBattleFighterEnding(FighterShip fighter)
         { if (HasNativePlayerBattle && !IsPlayerBattleReplica && fighter != null) endingPlayerBattleFighters.Add(fighter); }
         internal void MarkPlayerBattleWingEnding(FighterWingRuntime wing)
@@ -213,7 +214,7 @@ namespace FreeWorldMultiplayer
                         || slot.Fighter >= 0 && slot.Status != (int)SlotStatus.Active)
                         throw new InvalidOperationException("玩家舰载机槽位状态无效。");
             }
-            var ids = new HashSet<string>(StringComparer.Ordinal);
+            var ids = new HashSet<BattleFighterReplicaIdentity>();
             // For densely populated fighter frames, resolve each active slot
             // directly instead of scanning all fighters once per wing slot.
             // Keep the old tiny-frame path without building an extra index.
@@ -316,7 +317,7 @@ namespace FreeWorldMultiplayer
                 FighterSlot slot = wing.slots.Single(s => s.slotIndex == value.Slot);
                 slot.ship = fighter;
                 if (FighterManager.Instance != null) FighterManager.Instance.Register(fighter); // Native UI/selection registry only.
-                instance.name = "MultiplayerFighter." + FighterReplicaKey(value);
+                instance.name = "MultiplayerFighter." + FighterReplicaKey(value).ToString();
                 return new BattleFighterReplica { Ship = fighter, Wing = wing, Slot = slot, Engines = fighter.GetComponentsInChildren<EngineController>(true) };
             }
             catch
@@ -342,10 +343,13 @@ namespace FreeWorldMultiplayer
                     nativeSlots.Add(key, slotLookup);
                 }
             }
-            var present = new HashSet<string>(state.Fighters.Select(FighterReplicaKey), StringComparer.Ordinal);
+            var present = new HashSet<BattleFighterReplicaIdentity>();
+            foreach (BattleFighterState value in state.Fighters) present.Add(FighterReplicaKey(value));
             // Remove the previous generation before assigning a reused bay/slot to its new
             // runtime fighter. A returned/dead craft can never keep the new craft's slot.
-            foreach (string key in playerBattleFighters.Keys.Where(k => !present.Contains(k)).ToArray()) RemoveReplicaFighter(key);
+            var stale = BattleFighterReplicaPruner.FindMissing(playerBattleFighters, present);
+            if (stale != null)
+                foreach (BattleFighterReplicaIdentity key in stale) RemoveReplicaFighter(key);
             double now = Time.timeAsDouble;
             double interval = playerBattleFighterReceipt == 0 ? 0 : Math.Min(0.25, Math.Max(0.01, now - playerBattleFighterReceipt));
             foreach (BattleFighterWing value in state.Wings)
@@ -368,7 +372,7 @@ namespace FreeWorldMultiplayer
             }
             foreach (BattleFighterState value in state.Fighters)
             {
-                string key = FighterReplicaKey(value); BattleFighterReplica replica;
+                BattleFighterReplicaIdentity key = FighterReplicaKey(value); BattleFighterReplica replica;
                 if (!playerBattleFighters.TryGetValue(key, out replica) || replica.Ship == null)
                 {
                     replica = CreateReplicaFighter(value, wings[FighterWingKey(value.Carrier, value.Wing)]);
@@ -437,7 +441,7 @@ namespace FreeWorldMultiplayer
                 foreach (EngineController engine in replica.Engines) if (engine != null) engine.UpdateLogic();
             }
         }
-        private void RemoveReplicaFighter(string key)
+        private void RemoveReplicaFighter(BattleFighterReplicaIdentity key)
         {
             BattleFighterReplica replica;
             if (!playerBattleFighters.TryGetValue(key, out replica)) return;
@@ -451,7 +455,7 @@ namespace FreeWorldMultiplayer
         private void ClearPlayerBattleFighters()
         {
             var errors = new List<Exception>();
-            foreach (string key in playerBattleFighters.Keys.ToArray()) try { RemoveReplicaFighter(key); } catch (Exception error) { errors.Add(error); }
+            foreach (BattleFighterReplicaIdentity key in playerBattleFighters.Keys.ToArray()) try { RemoveReplicaFighter(key); } catch (Exception error) { errors.Add(error); }
             // Removed replica carriers are not returned to the pool while their fighters
             // still reference their native wing configuration. Release only these explicitly
             // retained shells here, even when BattleContext has already been cleared.
