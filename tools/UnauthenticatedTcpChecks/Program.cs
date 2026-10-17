@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using FreeWorldMultiplayer;
 
@@ -76,12 +77,20 @@ internal static class Program
                 {
                     client.Connect(IPAddress.Loopback, port);
                     string peer = WaitFor(host, TransportEventKind.Connected).PeerId;
-                    byte[] handshake = new byte[1024];
-                    handshake[0] = (byte)'{'; handshake[1] = (byte)'}';
+                    byte[] handshake = Encoding.UTF8.GetBytes(
+                        "{\"Version\":6,\"Kind\":\"hello\",\"Payload\":{\"CredentialId\":\"synthetic\",\"Nickname\":\"test\"}}");
                     SendPayload(client.GetStream(), handshake);
                     TransportEvent hello = WaitFor(host, TransportEventKind.Message, peer);
-                    Check(hello.Data.Length == handshake.Length && hello.Data[0] == (byte)'{',
-                        "legitimate small pre-auth frame is delivered byte-identically");
+                    Check(hello.Data.Length == handshake.Length &&
+                        Encoding.UTF8.GetString(hello.Data).Contains("\"Kind\":\"hello\""),
+                        "small legal hello JSON envelope is delivered byte-identically");
+                    byte[] authentication = Encoding.UTF8.GetBytes(
+                        "{\"Version\":6,\"Kind\":\"auth\",\"Payload\":{\"CredentialId\":\"synthetic\",\"Proof\":\"test-proof\"}}");
+                    SendPayload(client.GetStream(), authentication);
+                    TransportEvent auth = WaitFor(host, TransportEventKind.Message, peer);
+                    Check(auth.Data.Length == authentication.Length &&
+                        Encoding.UTF8.GetString(auth.Data).Contains("\"Kind\":\"auth\""),
+                        "small legal auth JSON envelope is delivered before admission is upgraded");
                     host.MarkAuthenticated(peer);
                     byte[] mapPayload = new byte[1024 * 1024];
                     mapPayload[0] = 42; mapPayload[mapPayload.Length - 1] = 7;
