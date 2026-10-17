@@ -76,6 +76,8 @@ namespace FreeWorldMultiplayer
         private GameObject playerBattleFighterRoot;
         private long playerBattleFighterSequence, appliedPlayerBattleFighterSequence;
         private double playerBattleFighterReceipt;
+        private static readonly Func<WeaponController, string> ReplicaFighterWeaponSlot =
+            weapon => weapon.GetComponentInParent<WeaponSlot>().slotId;
         internal bool CanRunPlayerBattleFighterSimulation { get { return !HasNativePlayerBattle || CanRunPlayerBattle; } }
         private static string FighterWingKey(long carrier, int wing) { return carrier + "/" + wing; }
         private static string FighterReplicaKey(BattleFighterState fighter)
@@ -338,9 +340,17 @@ namespace FreeWorldMultiplayer
                     ShieldEntity entity = NativeWire.Get(fighter.ShieldManager, "_entity") as ShieldEntity;
                     if (entity != null) { entity.transform.localRotation = Quaternion.Euler(0, 0, value.ShieldAngle); entity.SetVisible(value.ShieldVisible); entity.UpdateShape(value.ShieldArc); }
                 }
+                // Each SingleOrDefault used to walk every weapon and resolve its
+                // Unity parent slot for each received visual. Multi-weapon
+                // fighters index this exact frame's native components once.
+                var weaponSlots = value.Weapons.Count > 1
+                    ? new BattleWeaponSlotIndex<WeaponController>(fighter.WeaponManager.AllWeapons, ReplicaFighterWeaponSlot)
+                    : null;
                 foreach (BattleWeaponEffect visual in value.Weapons)
                 {
-                    WeaponController weapon = fighter.WeaponManager.AllWeapons.SingleOrDefault(w => w != null && w.GetComponentInParent<WeaponSlot>().slotId == visual.Slot);
+                    WeaponController weapon = weaponSlots == null
+                        ? fighter.WeaponManager.AllWeapons.SingleOrDefault(w => w != null && w.GetComponentInParent<WeaponSlot>().slotId == visual.Slot)
+                        : weaponSlots.SingleOrDefault(visual.Slot);
                     if (weapon == null || weapon.weaponData == null || weapon.weaponData.id != visual.Resource) throw new InvalidOperationException("本机舰载机武器插槽资源不一致。");
                     if (weapon.rotatingPart != null) weapon.rotatingPart.localRotation = Quaternion.Euler(0, 0, visual.Angle);
                     NativeWire.Set(weapon, "CurrentAmmo", visual.Ammo);
