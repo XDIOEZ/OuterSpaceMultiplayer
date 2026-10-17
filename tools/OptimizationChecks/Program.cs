@@ -102,6 +102,7 @@ internal static class Program
             FleetMotionChecks.Run(Check);
             MapCodecChecks.Run(Check);
             CommandSubmitStatusChecks.Run(Check);
+            DeferredCommandReplyChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;
         }

@@ -77,10 +77,12 @@ namespace FreeWorldMultiplayer
                 case "command":
                     GameCommand command = JsonData.Payload<GameCommand>(message.Payload);
                     command.PlayerId = playerId; command.SessionId = SessionId;
-                    commandReplyPeers[TransactionKey(command)] = peer;
                     if (command.Kind == CommandKind.FleetCommand)
                         FleetCommandTrace.Emit("host.received", command.CommandId, command.EntityId, true, "queued");
                     CommandResult result = ExecuteHostCommand(command);
+                    string replyKey = TransactionKey(command);
+                    DeferredCommandReplyMap.Update(commandReplyPeers, replyKey, peer, result,
+                        pendingExecutions.ContainsKey(replyKey));
                     TraceHostFleetResult(command, result);
                     Send(peer, "result", result);
                     break;
@@ -271,6 +273,7 @@ namespace FreeWorldMultiplayer
         private void RemovePeer(string peer)
         {
             challenges.Remove(peer);
+            DeferredCommandReplyMap.RemoveForPeer(commandReplyPeers, peer);
             string playerId;
             if (!peers.TryGetValue(peer, out playerId)) return;
             peers.Remove(peer); playerPeers.Remove(playerId);
