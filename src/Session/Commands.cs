@@ -222,6 +222,9 @@ namespace FreeWorldMultiplayer
         }
         private void ChangeRelation(string actor, string target, Relation desired)
         {
+            // Validate before FindRelationship(create:true), any native call or broadcast.
+            // Json.NET accepts undefined integer values for enum fields.
+            RelationValidation.RequireDefined(desired);
             if (actor == target || !World.Players.ContainsKey(target)) throw new InvalidOperationException("无效的关系目标。");
             RelationshipRecord pair = FindRelationship(actor, target, true);
             if (desired == Relation.Friendly)

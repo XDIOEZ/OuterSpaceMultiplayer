@@ -160,6 +160,7 @@ namespace FreeWorldMultiplayer
         public void Save(WorldState world)
         {
             if (world == null || world.Snapshot == null) throw new InvalidDataException("Cannot save a world without the native world snapshot.");
+            RelationValidation.ValidateSavedRelations(world.Relationships);
             string dir = WorldDirectory(world.WorldId);
             Directory.CreateDirectory(dir);
             // If Load had to use active.json.bak, the current active.json is not a
@@ -255,6 +256,10 @@ namespace FreeWorldMultiplayer
                     var world = JsonData.Read<WorldState>(Encoding.UTF8.GetString(bytes));
                     if (world == null || world.SchemaVersion != 1 || world.WorldId != worldId || world.SaveGeneration != pointer.Generation)
                         throw new InvalidDataException("Save generation metadata mismatch.");
+                    // A legacy generation containing an unknown enum cannot be
+                    // treated as neutral by the UI but non-friendly by permissions.
+                    // Prefer a valid backup; never silently change its relationship.
+                    RelationValidation.ValidateSavedRelations(world.Relationships);
                     if (name.EndsWith(".bak", StringComparison.Ordinal)) LastLoadWarning = "当前存档代不可读，已恢复上一完整代 " + pointer.Generation + "：" + primaryError?.Message;
                     lastLoadedPointer = pointer;
                     return world;

@@ -25,6 +25,15 @@ namespace FreeWorldMultiplayer
     {
         public string NativeJson;
     }
+    public enum Relation { Neutral, Friendly, Hostile }
+    public sealed class RelationshipRecord
+    {
+        public string PlayerA;
+        public string PlayerB;
+        public Relation Relation;
+        public bool FriendlyConsentA;
+        public bool FriendlyConsentB;
+    }
     public sealed class WorldState
     {
         public int SchemaVersion = 1;
@@ -32,6 +41,7 @@ namespace FreeWorldMultiplayer
         public string Name;
         public long SaveGeneration;
         public WorldSnapshot Snapshot;
+        public List<RelationshipRecord> Relationships = new List<RelationshipRecord>();
         public Dictionary<string, CommandResult> Transactions =
             new Dictionary<string, CommandResult>();
     }

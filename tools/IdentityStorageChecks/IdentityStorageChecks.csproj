@@ -9,12 +9,14 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="RecoveryPointerChecks.cs" />
+    <Compile Include="RelationValidationChecks.cs" />
     <Compile Include="WorldStubs.cs" />
     <!-- Compile the real in-progress production identity/settings/save sources. -->
     <!-- These Core owner files remain untracked/dirty: no silent handoff. -->
     <Compile Include="../../src/Core/IdentityStore.cs" Link="IdentityStore.cs" />
     <Compile Include="../../src/Core/ModSettings.cs" Link="ModSettings.cs" />
     <Compile Include="../../src/Core/Storage.cs" Link="Storage.cs" />
+    <Compile Include="../../src/Core/RelationValidation.cs" Link="RelationValidation.cs" />
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(MSBuildBinPath)/Newtonsoft.Json.dll</HintPath>
     </Reference>
