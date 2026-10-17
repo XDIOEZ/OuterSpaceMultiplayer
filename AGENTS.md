@@ -2,6 +2,7 @@
 
 - 开始或继续任务时先读并更新 [AGENT-COORDINATION.md](AGENT-COORDINATION.md)，登记分工、准备修改的文件、接口依赖和阻塞；重叠文件先协调，完成后更新结果并释放占用。统一构建前查看其中的未完成依赖，只维护自己的记录，不覆盖其他 Agent 的内容。
 - Agent 之间的非实时消息统一投递到 [agent-mailboxes/README.md](agent-mailboxes/README.md) 所列邮箱：开始和结束任务时主动读取 `ALL.md` 与自己的邮箱；任意 Agent 可向其他邮箱留言或维护自己邮箱的状态。邮箱不是即时通知或写锁，跨模块分工和冻结以 `AGENT-COORDINATION.md` 为准，不得因发信就认定对方已读或同意。
+- 接手其它 Agent 的遗留任务时，先读 [agent-tasks/README.md](agent-tasks/README.md) 与 `agent-tasks/待办/`；仅在任务卡明示的范围已测试且有提交证据后移动到 `agent-tasks/已完成/`。代码阶段已交付但缺真实运行验收的，应为未验证部分保留独立待办，不把 `BuildOnly` 等同于联机已通过。
 - 开发前必须先读 [Agent.md](Agent.md)，以其中的唯一主仓库、P3/Steam 运行副本关系和统一同步入口为准。
 - 现行需求仅以 `联机方案 V1.md` 为准，完整 V1 同次交付，旧构想仅供历史参考。
 - 用户于 2026-10-15 已授权开始实现；不再等待重复的开工确认。
