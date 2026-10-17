@@ -64,6 +64,36 @@ internal static class MapCodecChecks
             "encoder hashes each original chunk slice and one full snapshot");
         check(encoded.Content.All(chunk => MapCacheStore.HashContent(chunk.Value) == chunk.Key),
             "encoded unique chunks retain the same SHA256 as their original slices");
+        check(MatchesLegacySerializedBytes(encoded, snapshot),
+            "large cached map bytes, SHA and cuts match legacy UTF-16-to-UTF-8 serialization exactly");
+        var trickyMap = Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"note\":\"雪\\n\\t\\\\\\\"🌍\",\"ratio\":1.25}"));
+        var special = new MapSnapshot
+        {
+            MapId = MapId,
+            Revision = 43,
+            EntityOwners = new Dictionary<long, string> { { 100L, "玩家 🌍\\towner" } },
+            NativeJson = new JObject
+            {
+                ["Map"] = trickyMap,
+                ["Terrain"] = JValue.CreateNull(),
+                ["Heroes"] = new JArray(tiny),
+                ["Animals"] = new JArray(),
+                ["DepartedHeroes"] = new JArray(),
+                ["DepartedAnimals"] = new JArray(),
+                ["Loot"] = new JArray(new JObject { ["memo"] = "a\\r\\n特殊字符☃", ["value"] = 0.00012 }),
+                ["Landings"] = new JArray(new JObject
+                {
+                    ["Expedition"] = tiny,
+                    ["Heroes"] = new JArray(tiny),
+                    ["Animals"] = new JArray()
+                })
+            }.ToString(Formatting.None)
+        };
+        var specialEncoded = MapSnapshotDeltaCodec.Encode(WorldId, special);
+        check(MatchesLegacySerializedBytes(specialEncoded, special),
+            "unicode, escapes, floating point and nested landing bytes retain legacy cache identity");
+        SameSnapshot(check, MapSnapshotDeltaCodec.Reassemble(MapSnapshotDeltaCodec.MakeTransfer(specialEncoded, null),
+            WorldId, MapId, null), special, "unicode and nested landing serialization");
         Console.WriteLine("INFO: synthetic map avoids " + (previousChunkCopyBytes - uniqueChunkCopyBytes)
             + " bytes of duplicate transient chunk arrays");
 
@@ -140,7 +170,60 @@ internal static class MapCodecChecks
         check(JToken.DeepEquals(JToken.Parse(actual.NativeJson), JToken.Parse(expected.NativeJson)),
             name + " native checkpoint");
         check(actual.EntityOwners.Count == expected.EntityOwners.Count
-            && actual.EntityOwners[100L] == "player", name + " owner registry");
+            && expected.EntityOwners.All(entry =>
+                actual.EntityOwners.TryGetValue(entry.Key, out var playerId) && playerId == entry.Value),
+            name + " owner registry");
+    }
+
+    // This is intentionally the PRE-optimization construction: an entire
+    // compact UTF-16 JSON string converted into one exact-length UTF-8 array.
+    // Do not reuse the production stream encoder when testing byte identity.
+    private static bool MatchesLegacySerializedBytes(MapSnapshotDeltaCodec.Encoded encoded, MapSnapshot snapshot)
+    {
+        var checkpoint = JObject.Parse(snapshot.NativeJson);
+        ExpandLegacyString(checkpoint, "Map");
+        foreach (string name in new[] { "Heroes", "Animals", "DepartedHeroes", "DepartedAnimals" })
+            ExpandLegacyList(checkpoint[name]);
+        foreach (JObject landing in (JArray)checkpoint["Landings"])
+        {
+            ExpandLegacyString(landing, "Expedition");
+            ExpandLegacyList(landing["Heroes"]); ExpandLegacyList(landing["Animals"]);
+        }
+        var oldPayload = new JObject
+        {
+            ["Schema"] = MapSnapshotDeltaCodec.Schema,
+            ["WorldId"] = WorldId,
+            ["MapId"] = snapshot.MapId,
+            ["Revision"] = snapshot.Revision,
+            ["EntityOwners"] = JObject.FromObject(snapshot.EntityOwners, JsonSerializer.Create(JsonData.Settings)),
+            ["Checkpoint"] = checkpoint
+        };
+        byte[] legacyBytes = Encoding.UTF8.GetBytes(oldPayload.ToString(Formatting.None));
+        if (encoded.Manifest.TotalLength != legacyBytes.Length
+            || encoded.Manifest.SnapshotHash != MapCacheStore.HashContent(legacyBytes))
+            return false;
+        int offset = 0;
+        foreach (MapCacheChunkReference chunk in encoded.Manifest.Chunks)
+        {
+            byte[] bytes;
+            if (!encoded.Content.TryGetValue(chunk.Hash, out bytes) || bytes.Length != chunk.Length
+                || offset + chunk.Length > legacyBytes.Length) return false;
+            for (int i = 0; i < bytes.Length; i++)
+                if (bytes[i] != legacyBytes[offset + i]) return false;
+            offset += bytes.Length;
+        }
+        return offset == legacyBytes.Length;
+    }
+
+    private static void ExpandLegacyString(JObject parent, string name)
+    {
+        parent[name] = Encoding.UTF8.GetString(Convert.FromBase64String((string)parent[name]));
+    }
+    private static void ExpandLegacyList(JToken list)
+    {
+        var items = (JArray)list;
+        for (int i = 0; i < items.Count; i++)
+            items[i] = Encoding.UTF8.GetString(Convert.FromBase64String((string)items[i]));
     }
 
     // The previous production algorithm, deliberately independent of the new

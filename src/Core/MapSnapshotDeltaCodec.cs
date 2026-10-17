@@ -89,21 +89,31 @@ namespace FreeWorldMultiplayer
             TransformCheckpoint(checkpoint, true);
             var payload = new JObject { ["Schema"] = Schema, ["WorldId"] = worldId, ["MapId"] = snapshot.MapId,
                 ["Revision"] = snapshot.Revision, ["EntityOwners"] = JObject.FromObject(snapshot.EntityOwners, JsonSerializer.Create(JsonData.Settings)), ["Checkpoint"] = checkpoint };
-            byte[] bytes = Utf8.GetBytes(payload.ToString(Formatting.None));
-            if (bytes.Length == 0 || bytes.Length > MaxSnapshotBytes) throw new InvalidDataException("Expanded map cache payload exceeds 128 MiB.");
-            var result = new Encoded { Manifest = new MapCacheManifest { WorldId = worldId, MapId = snapshot.MapId,
-                TotalLength = bytes.Length, SnapshotHash = MapCacheStore.HashContent(bytes) } };
-            int start = 0; ulong rolling = 0;
-            for (int i = 0; i < bytes.Length; ++i)
+            // Write JSON directly to UTF-8 instead of materializing a second
+            // full-sized UTF-16 string, then allocating and filling a UTF-8 copy.
+            // The memory stream's backing array is read-only until all chunks
+            // have been hashed/copied, so we can use its length without ToArray().
+            using (var buffer = new MemoryStream())
             {
-                unchecked { rolling = (rolling << 1) + RollingByteHashes[bytes[i]]; }
-                int length = i - start + 1;
-                if (length < MinChunk || (rolling & 16383) != 0 && length < MaxChunk && i + 1 != bytes.Length) continue;
-                AddChunk(result, bytes, start, length); start = i + 1; rolling = 0;
+                using (var writer = new JsonTextWriter(new StreamWriter(buffer, Utf8, 8192, true)) { Formatting = Formatting.None })
+                    payload.WriteTo(writer);
+                if (buffer.Length == 0 || buffer.Length > MaxSnapshotBytes) throw new InvalidDataException("Expanded map cache payload exceeds 128 MiB.");
+                int total = (int)buffer.Length;
+                byte[] bytes = buffer.GetBuffer();
+                var result = new Encoded { Manifest = new MapCacheManifest { WorldId = worldId, MapId = snapshot.MapId,
+                    TotalLength = total, SnapshotHash = MapCacheStore.HashContent(bytes, 0, total) } };
+                int start = 0; ulong rolling = 0;
+                for (int i = 0; i < total; ++i)
+                {
+                    unchecked { rolling = (rolling << 1) + RollingByteHashes[bytes[i]]; }
+                    int length = i - start + 1;
+                    if (length < MinChunk || (rolling & 16383) != 0 && length < MaxChunk && i + 1 != total) continue;
+                    AddChunk(result, bytes, start, length); start = i + 1; rolling = 0;
+                }
+                if (start < total) AddChunk(result, bytes, start, total - start);
+                ValidateManifest(result.Manifest, worldId, snapshot.MapId);
+                return result;
             }
-            if (start < bytes.Length) AddChunk(result, bytes, start, bytes.Length - start);
-            ValidateManifest(result.Manifest, worldId, snapshot.MapId);
-            return result;
         }
         private static void AddChunk(Encoded encoded, byte[] all, int offset, int count)
         {
