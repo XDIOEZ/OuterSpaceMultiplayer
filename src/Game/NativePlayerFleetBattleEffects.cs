@@ -71,6 +71,10 @@ namespace FreeWorldMultiplayer
         }
         private static readonly FieldInfo effectBeamEmitters = NativeWire.Field(typeof(BeamBehavior), "emitters");
         private static readonly Func<BattleEffectPose, long> BattleEffectPoseId = pose => pose.Id;
+        private static readonly Func<BattleEffectEvent, int> PreflightEventKind = item => item.Kind;
+        private static readonly Func<BattleEffectEvent, BattleEffectPose> PreflightEventPose = item => item.Pose;
+        private static readonly Action<GameBridge, BattleEffectPose> PreflightProjectile = CheckProjectileResource;
+        private static readonly Action<GameBridge, BattleEffectPose> PreflightVfx = CheckVfxResource;
         private readonly Dictionary<BaseProjectile, BattleEffectPose> battleEffectProjectiles = new Dictionary<BaseProjectile, BattleEffectPose>();
         private readonly Dictionary<GameObject, BattleVfxSource> battleEffectVfx = new Dictionary<GameObject, BattleVfxSource>();
         // Capture also removes despawned native instances during enumeration.
@@ -201,7 +205,9 @@ namespace FreeWorldMultiplayer
                 || state.Projectiles.Count > 16000 || state.Vfx.Count > 16000 || state.Events.Count > 32000 || state.Weapons.Count > 8192)
                 throw new InvalidOperationException("玩家舰战表现快照结构或数量无效。");
             var ids = new HashSet<long>();
-            foreach (BattleEffectPose pose in state.Projectiles.Concat(state.Vfx))
+            foreach (BattleEffectPose pose in state.Projectiles)
+            { ValidateEffectPose(pose); if (!ids.Add(pose.Id)) throw new InvalidOperationException("玩家舰战表现实例编号重复。"); }
+            foreach (BattleEffectPose pose in state.Vfx)
             { ValidateEffectPose(pose); if (!ids.Add(pose.Id)) throw new InvalidOperationException("玩家舰战表现实例编号重复。"); }
             long previous = 0;
             foreach (BattleEffectEvent item in state.Events)
@@ -226,6 +232,14 @@ namespace FreeWorldMultiplayer
                 battleEffectWeapons.Add(id, data);
             }
             return data;
+        }
+        private static void CheckProjectileResource(GameBridge bridge, BattleEffectPose pose)
+        { bridge.ResolveEffectWeapon(pose.Resource); }
+        private static void CheckVfxResource(GameBridge bridge, BattleEffectPose pose)
+        {
+            GameObject prefab;
+            if (VFXManager.Instance == null || !VFXManager.Instance.TryGetVFXPrefab(pose.Resource, out prefab))
+                throw new InvalidOperationException("本机缺少已登记战斗特效：" + pose.Resource);
         }
         private WeaponController ResolveEffectController(BattleWeaponEffect value)
         {
@@ -344,9 +358,8 @@ namespace FreeWorldMultiplayer
             ValidateEffectLimits(state);
             if (!IsPlayerBattleReplica || state.Sequence <= appliedBattleEffectsSequence) return;
             // Resolve every fixed native resource/weapon before changing any visual object.
-            foreach (BattleEffectPose pose in state.Projectiles.Concat(state.Events.Where(e => e.Kind != 3).Select(e => e.Pose))) ResolveEffectWeapon(pose.Resource);
-            foreach (BattleEffectPose pose in state.Vfx.Concat(state.Events.Where(e => e.Kind == 3).Select(e => e.Pose)))
-            { GameObject prefab; if (VFXManager.Instance == null || !VFXManager.Instance.TryGetVFXPrefab(pose.Resource, out prefab)) throw new InvalidOperationException("本机缺少已登记战斗特效：" + pose.Resource); }
+            BattleEffectResourcePreflight.Check(this, state.Projectiles, state.Vfx, state.Events,
+                PreflightEventKind, PreflightEventPose, PreflightProjectile, PreflightVfx);
             var weapons = battleWeaponBindings.Rent();
             try
             {
