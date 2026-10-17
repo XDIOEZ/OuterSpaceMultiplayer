@@ -208,9 +208,11 @@ namespace FreeWorldMultiplayer
                     || float.IsNaN(wing.ReserveProgress) || float.IsInfinity(wing.ReserveProgress) || wing.ReserveProgress < 0 || wing.ReserveProgress > 1)
                     throw new InvalidOperationException("玩家舰载机联队身份或补充状态无效。");
                 wings.Add(FighterWingKey(wing.Carrier, wing.Index), wing);
-                var slots = new HashSet<int>();
+                // Fixed native slot IDs occupy only 0..255. Do not allocate
+                // a new HashSet<int> for every wing on every battle frame.
+                var slots = new BattleFighterSlotBitSet();
                 foreach (BattleFighterSlot slot in wing.Slots)
-                    if (slot == null || !slots.Add(slot.Index) || slot.Index < 0 || slot.Index > 255 || slot.Status < 0 || slot.Status > 3
+                    if (slot == null || !slots.TryAdd(slot.Index) || slot.Index < 0 || slot.Index > 255 || slot.Status < 0 || slot.Status > 3
                         || float.IsNaN(slot.Progress) || float.IsInfinity(slot.Progress) || slot.Progress < 0 || slot.Progress > 1
                         || float.IsNaN(slot.Remaining) || float.IsInfinity(slot.Remaining) || slot.Remaining < 0 || slot.Fighter < -1
                         || slot.Fighter >= 0 && slot.Status != (int)SlotStatus.Active)
