@@ -85,6 +85,8 @@ namespace FreeWorldMultiplayer
         private readonly BattleEffectFrameSnapshot<long, BattleEffectReplica> battleEffectFrameSnapshot =
             new BattleEffectFrameSnapshot<long, BattleEffectReplica>();
         private readonly BattleEffectPresenceBuffer battleEffectPresence = new BattleEffectPresenceBuffer();
+        private readonly BattleWeaponBindingBuffer<BattleWeaponEffect, WeaponController> battleWeaponBindings =
+            new BattleWeaponBindingBuffer<BattleWeaponEffect, WeaponController>();
         private readonly Dictionary<string, WeaponData> battleEffectWeapons = new Dictionary<string, WeaponData>(StringComparer.Ordinal);
         // The receive/update loop consults cached weapon controllers for
         // every wire weapon. Use the same exact 64-bit + ordinal slot identity
@@ -345,58 +347,62 @@ namespace FreeWorldMultiplayer
             foreach (BattleEffectPose pose in state.Projectiles.Concat(state.Events.Where(e => e.Kind != 3).Select(e => e.Pose))) ResolveEffectWeapon(pose.Resource);
             foreach (BattleEffectPose pose in state.Vfx.Concat(state.Events.Where(e => e.Kind == 3).Select(e => e.Pose)))
             { GameObject prefab; if (VFXManager.Instance == null || !VFXManager.Instance.TryGetVFXPrefab(pose.Resource, out prefab)) throw new InvalidOperationException("本机缺少已登记战斗特效：" + pose.Resource); }
-            var weapons = new List<Tuple<BattleWeaponEffect, WeaponController>>();
-            foreach (BattleWeaponEffect value in state.Weapons)
-            {
-                WeaponController weapon = ResolveEffectController(value);
-                if (weapon == null) continue;
-                BeamBehavior beam = weapon.GetComponent<BeamBehavior>();
-                if ((beam == null ? 0 : EffectEmitters(beam).Count) != value.Beams.Count) throw new InvalidOperationException("双方原生光束发射器数量不一致。");
-                weapons.Add(Tuple.Create(value, weapon));
-            }
-            EnsureBattleEffectsRoot(); applyingBattleEffects = true;
-            HashSet<long> present = null;
+            var weapons = battleWeaponBindings.Rent();
             try
             {
-                double now = Time.timeAsDouble;
-                double interval = lastBattleEffectsReceipt == 0 ? 0 : Math.Min(0.25, Math.Max(0.01, now - lastBattleEffectsReceipt));
-                present = battleEffectPresence.Capture(state.Projectiles, state.Vfx, BattleEffectPoseId);
-                foreach (BattleEffectEvent item in state.Events)
+                foreach (BattleWeaponEffect value in state.Weapons)
                 {
-                    if (item.Serial <= appliedBattleEffectEvent) continue;
-                    if (item.Kind == 1 || item.Kind == 3) ApplyEffectPose(item.Pose, item.Kind == 3, 0);
-                    else ApplyEffectPose(item.Pose, false, 0.1);
-                    appliedBattleEffectEvent = item.Serial;
-                }
-                foreach (BattleEffectPose pose in state.Projectiles) ApplyEffectPose(pose, false, interval);
-                foreach (BattleEffectPose pose in state.Vfx) ApplyEffectPose(pose, true, interval);
-                foreach (var pair in battleEffectReplicas) if (!present.Contains(pair.Key) && pair.Value.Expires < 0) pair.Value.Expires = now + 0.12;
-                foreach (var pair in weapons)
-                {
-                    BattleWeaponEffect value = pair.Item1; WeaponController weapon = pair.Item2;
-                    if (weapon.rotatingPart != null) weapon.rotatingPart.localRotation = Quaternion.Euler(0, 0, value.Angle);
-                    NativeWire.Set(weapon, "CurrentAmmo", value.Ammo); // HUD only; no ConsumeAmmo or fire evaluation.
+                    WeaponController weapon = ResolveEffectController(value);
+                    if (weapon == null) continue;
                     BeamBehavior beam = weapon.GetComponent<BeamBehavior>();
-                    if (beam == null) continue;
-                    IList emitters = EffectEmitters(beam);
-                    for (int i = 0; i < value.Beams.Count; i++)
-                    {
-                        BattleBeamLine incoming = value.Beams[i]; object emitter = emitters[i];
-                        LineRenderer line = (LineRenderer)NativeWire.Get(emitter, "line");
-                        Vector3 start = new Vector3(incoming.X, incoming.Y, incoming.Z), end = new Vector3(incoming.EndX, incoming.EndY, incoming.EndZ);
-                        line.SetPosition(0, start); line.SetPosition(1, end); line.startWidth = incoming.Width; line.endWidth = incoming.EndWidth; line.enabled = incoming.Enabled;
-                        SetBeamParticle(emitter, "chargeVFXObj", incoming.Charge, start);
-                        SetBeamParticle(emitter, "startVFXObj", incoming.Muzzle, start);
-                        SetBeamParticle(emitter, "endVFXHullObj", incoming.Hit, end);
-                    }
+                    if ((beam == null ? 0 : EffectEmitters(beam).Count) != value.Beams.Count) throw new InvalidOperationException("双方原生光束发射器数量不一致。");
+                    weapons.Add(new KeyValuePair<BattleWeaponEffect, WeaponController>(value, weapon));
                 }
-                appliedBattleEffectsSequence = state.Sequence; lastBattleEffectsReceipt = now;
+                EnsureBattleEffectsRoot(); applyingBattleEffects = true;
+                HashSet<long> present = null;
+                try
+                {
+                    double now = Time.timeAsDouble;
+                    double interval = lastBattleEffectsReceipt == 0 ? 0 : Math.Min(0.25, Math.Max(0.01, now - lastBattleEffectsReceipt));
+                    present = battleEffectPresence.Capture(state.Projectiles, state.Vfx, BattleEffectPoseId);
+                    foreach (BattleEffectEvent item in state.Events)
+                    {
+                        if (item.Serial <= appliedBattleEffectEvent) continue;
+                        if (item.Kind == 1 || item.Kind == 3) ApplyEffectPose(item.Pose, item.Kind == 3, 0);
+                        else ApplyEffectPose(item.Pose, false, 0.1);
+                        appliedBattleEffectEvent = item.Serial;
+                    }
+                    foreach (BattleEffectPose pose in state.Projectiles) ApplyEffectPose(pose, false, interval);
+                    foreach (BattleEffectPose pose in state.Vfx) ApplyEffectPose(pose, true, interval);
+                    foreach (var pair in battleEffectReplicas) if (!present.Contains(pair.Key) && pair.Value.Expires < 0) pair.Value.Expires = now + 0.12;
+                    foreach (var pair in weapons)
+                    {
+                        BattleWeaponEffect value = pair.Key; WeaponController weapon = pair.Value;
+                        if (weapon.rotatingPart != null) weapon.rotatingPart.localRotation = Quaternion.Euler(0, 0, value.Angle);
+                        NativeWire.Set(weapon, "CurrentAmmo", value.Ammo); // HUD only; no ConsumeAmmo or fire evaluation.
+                        BeamBehavior beam = weapon.GetComponent<BeamBehavior>();
+                        if (beam == null) continue;
+                        IList emitters = EffectEmitters(beam);
+                        for (int i = 0; i < value.Beams.Count; i++)
+                        {
+                            BattleBeamLine incoming = value.Beams[i]; object emitter = emitters[i];
+                            LineRenderer line = (LineRenderer)NativeWire.Get(emitter, "line");
+                            Vector3 start = new Vector3(incoming.X, incoming.Y, incoming.Z), end = new Vector3(incoming.EndX, incoming.EndY, incoming.EndZ);
+                            line.SetPosition(0, start); line.SetPosition(1, end); line.startWidth = incoming.Width; line.endWidth = incoming.EndWidth; line.enabled = incoming.Enabled;
+                            SetBeamParticle(emitter, "chargeVFXObj", incoming.Charge, start);
+                            SetBeamParticle(emitter, "startVFXObj", incoming.Muzzle, start);
+                            SetBeamParticle(emitter, "endVFXHullObj", incoming.Hit, end);
+                        }
+                    }
+                    appliedBattleEffectsSequence = state.Sequence; lastBattleEffectsReceipt = now;
+                }
+                finally
+                {
+                    try { if (present != null) battleEffectPresence.Release(present); }
+                    finally { applyingBattleEffects = false; }
+                }
             }
-            finally
-            {
-                try { if (present != null) battleEffectPresence.Release(present); }
-                finally { applyingBattleEffects = false; }
-            }
+            finally { battleWeaponBindings.Release(weapons); }
         }
         internal void UpdatePlayerBattleEffects()
         {
@@ -452,6 +458,7 @@ namespace FreeWorldMultiplayer
             battleEffectReplicas.Clear(); battleEffectProjectiles.Clear(); battleEffectVfx.Clear(); battleEffectEvents.Clear();
             battleEffectFrameSnapshot.Reset();
             battleEffectPresence.Reset();
+            battleWeaponBindings.Reset();
             battleProjectileCaptureSnapshot.Reset();
             battleVfxCaptureSnapshot.Reset();
             battleEffectShellPool.Clear(); battleEffectShellKeys.Clear(); battleEffectWeapons.Clear(); battleEffectControllers.Clear(); battleEffectVfxLeases.Clear();
