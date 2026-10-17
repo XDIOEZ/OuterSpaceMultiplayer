@@ -225,9 +225,10 @@ namespace FreeWorldMultiplayer
                     || fighter.Cells == null || fighter.Cells.Count > 100000 || fighter.Cells.Values.Any(v => float.IsNaN(v) || v < 0 || v > 1)
                     || new[] { fighter.X, fighter.Y, fighter.Z, fighter.Angle, fighter.Vx, fighter.Vy, fighter.Throttle, fighter.Flux, fighter.HardFlux, fighter.ArmorRatio, fighter.ShieldAngle, fighter.ShieldArc }.Any(v => float.IsNaN(v) || float.IsInfinity(v)))
                     throw new InvalidOperationException("玩家舰载机身份、母舰槽位或伤损状态不一致。");
-                // Reuse the exact effects DTO validation, including slot/resource bounds and
-                // beam finite values. Runtime fighter IDs never enter the asset owner registry.
-                ValidateEffectLimits(new BattleEffectsState { Sequence = state.Sequence, Weapons = fighter.Weapons });
+                // Reuse the very same effects weapon/beam validation without
+                // allocating unrelated projectile/VFX/event DTO lists for
+                // every fighter on every host/replica checkpoint.
+                ValidateBattleWeaponEffects(fighter.Weapons);
                 if (fighter.Weapons.Any(w => w.Ship != fighter.RuntimeId)) throw new InvalidOperationException("舰载机武器引用另一架战机。");
             }
             foreach (BattleFighterWing wing in state.Wings)

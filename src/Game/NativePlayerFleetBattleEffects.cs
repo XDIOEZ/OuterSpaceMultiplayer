@@ -186,17 +186,7 @@ namespace FreeWorldMultiplayer
                 if (item.Kind != 2 && item.Serial != item.Pose.Id || item.Kind == 2 && item.Serial <= item.Pose.Id) throw new InvalidOperationException("舰战表现事件和实例编号不一致。");
                 previous = item.Serial;
             }
-            var weaponSlots = new HashSet<string>(StringComparer.Ordinal);
-            foreach (BattleWeaponEffect value in state.Weapons)
-            {
-                if (value == null || value.Beams == null || value.Beams.Count > 128 || String.IsNullOrEmpty(value.Slot) || value.Slot.Length > 128
-                    || String.IsNullOrEmpty(value.Resource) || value.Resource.Length > 128 || float.IsNaN(value.Angle) || float.IsInfinity(value.Angle)
-                    || !weaponSlots.Add(value.Ship + ":" + value.Slot)) throw new InvalidOperationException("舰战武器表现字段或插槽身份无效。");
-                foreach (BattleBeamLine line in value.Beams)
-                    if (line == null || !BattleEffectFiniteFields.ValidBeam(line.X, line.Y, line.Z,
-                        line.EndX, line.EndY, line.EndZ, line.Width, line.EndWidth))
-                        throw new InvalidOperationException("舰战光束端点或宽度无效。");
-            }
+            ValidateBattleWeaponEffects(state.Weapons);
         }
         private static void ValidatePlayerBattleEffects(string encoded)
         { ValidateEffectLimits(NativeWire.Parse<BattleEffectsState>(encoded)); }

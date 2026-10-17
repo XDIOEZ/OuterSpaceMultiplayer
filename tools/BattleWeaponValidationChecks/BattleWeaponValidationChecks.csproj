@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The two linked files are the actual production validators, not copies. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="Stubs.cs" />
+    <Compile Include="../../src/Game/NativeBattleWeaponValidation.cs" Link="NativeBattleWeaponValidation.cs" />
+    <Compile Include="../../src/Game/BattleEffectFiniteFields.cs" Link="BattleEffectFiniteFields.cs" />
+  </ItemGroup>
+</Project>
