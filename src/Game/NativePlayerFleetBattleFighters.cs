@@ -84,6 +84,7 @@ namespace FreeWorldMultiplayer
         private static readonly Func<FighterSlot, int> NativeReplicaSlotIndex = value => value.slotIndex;
         private static readonly Func<WeaponController, string> ReplicaFighterWeaponSlot =
             weapon => weapon.GetComponentInParent<WeaponSlot>().slotId;
+        private static readonly Func<BattleWeaponEffect, long> FighterWeaponShipId = weapon => weapon.Ship;
         internal bool CanRunPlayerBattleFighterSimulation { get { return !HasNativePlayerBattle || CanRunPlayerBattle; } }
         private static BattleFighterWingIdentity FighterWingKey(long carrier, int wing)
         { return new BattleFighterWingIdentity(carrier, wing); }
@@ -244,7 +245,8 @@ namespace FreeWorldMultiplayer
                 // allocating unrelated projectile/VFX/event DTO lists for
                 // every fighter on every host/replica checkpoint.
                 ValidateBattleWeaponEffects(fighter.Weapons);
-                if (fighter.Weapons.Any(w => w.Ship != fighter.RuntimeId)) throw new InvalidOperationException("舰载机武器引用另一架战机。");
+                if (BattleFighterWeaponOwnership.ContainsForeignShip(fighter.Weapons, fighter.RuntimeId, FighterWeaponShipId))
+                    throw new InvalidOperationException("舰载机武器引用另一架战机。");
             }
             foreach (BattleFighterWing wing in state.Wings)
                 foreach (BattleFighterSlot slot in wing.Slots)
