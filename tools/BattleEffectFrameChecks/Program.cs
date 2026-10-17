@@ -61,6 +61,39 @@ internal static class Program
         finally { frame.Release(captured); }
         return visited;
     }
+    // Source-equivalent of the pre-optimization projectile/VFX capture. The
+    // same loop runs once for projectiles and then once for VFX; inactive
+    // native instances are removed from their dictionary during the walk.
+    private static List<int> OldCapture(Dictionary<int, Effect> live, Action<int> onVisit = null)
+    {
+        var present = new List<int>();
+        foreach (var pair in live.ToArray())
+        {
+            if (onVisit != null) onVisit(pair.Key);
+            if (pair.Value.Expired) { live.Remove(pair.Key); continue; }
+            present.Add(pair.Key);
+        }
+        return present;
+    }
+    // Run the exact production snapshot helper from CapturePlayerBattleEffects
+    // with the same iteration/removal order. Only Unity poses are stubbed.
+    private static List<int> NewCapture(Dictionary<int, Effect> live,
+        BattleEffectFrameSnapshot<int, Effect> frame, Action<int> onVisit = null)
+    {
+        var present = new List<int>();
+        var snapshot = frame.Capture(live);
+        try
+        {
+            foreach (var pair in snapshot)
+            {
+                if (onVisit != null) onVisit(pair.Key);
+                if (pair.Value.Expired) { live.Remove(pair.Key); continue; }
+                present.Add(pair.Key);
+            }
+        }
+        finally { frame.Release(snapshot); }
+        return present;
+    }
     private static Dictionary<int, Effect> Make(int n)
     {
         var result = new Dictionary<int, Effect>();
@@ -185,6 +218,124 @@ internal static class Program
             buffer.Reset();
             Check(afterReset.Capacity == 0,
                 "normal scene shutdown returns the backing storage to the runtime");
+
+            // The authoritative capture path has two independently mutable
+            // dictionaries. It snapshots projectiles first, then VFX; native
+            // callbacks may add VFX while capturing the earlier dictionary.
+            var oldProjectiles = Make(48);
+            var newProjectiles = Make(48);
+            var oldVfx = Make(18);
+            var newVfx = Make(18);
+            var projectileCapture = new BattleEffectFrameSnapshot<int, Effect>();
+            var vfxCapture = new BattleEffectFrameSnapshot<int, Effect>();
+            Action<int> originalProjectileCallback = id =>
+            {
+                if (id == 0) oldVfx.Add(500, new Effect(500));
+            };
+            Action<int> newProjectileCallback = id =>
+            {
+                if (id == 0) newVfx.Add(500, new Effect(500));
+            };
+            var originalProjectiles = OldCapture(oldProjectiles, originalProjectileCallback);
+            var optimizedProjectiles = NewCapture(newProjectiles, projectileCapture, newProjectileCallback);
+            var originalVfx = OldCapture(oldVfx);
+            var optimizedVfx = NewCapture(newVfx, vfxCapture);
+            Check(originalProjectiles.SequenceEqual(optimizedProjectiles) &&
+                originalVfx.SequenceEqual(optimizedVfx),
+                "authoritative projectile and VFX capture retain old ordering and contents");
+            Check(oldProjectiles.Keys.SequenceEqual(newProjectiles.Keys) &&
+                oldVfx.Keys.SequenceEqual(newVfx.Keys),
+                "both native dictionaries remove inactive entries exactly as before");
+            Check(optimizedVfx.Contains(500),
+                "VFX born during projectile capture appears in the subsequent VFX snapshot");
+            Check(originalProjectiles.Count == 41 && originalVfx.Count == 16,
+                "mixed expired instances do not enter the full native effect checkpoint");
+
+            var originalVfxMutation = Make(12);
+            var newVfxMutation = Make(12);
+            Action<int> oldVfxCallback = id =>
+            {
+                if (id == 0)
+                {
+                    originalVfxMutation.Remove(4);
+                    originalVfxMutation.Add(900, new Effect(900));
+                }
+            };
+            Action<int> newVfxCallback = id =>
+            {
+                if (id == 0)
+                {
+                    newVfxMutation.Remove(4);
+                    newVfxMutation.Add(900, new Effect(900));
+                }
+            };
+            var previousVfxCapture = OldCapture(originalVfxMutation, oldVfxCallback);
+            var currentVfxCapture = NewCapture(newVfxMutation, vfxCapture, newVfxCallback);
+            Check(previousVfxCapture.SequenceEqual(currentVfxCapture),
+                "native VFX spawn/despawn callback keeps the pre-capture snapshot intact");
+            Check(!currentVfxCapture.Contains(900) &&
+                newVfxMutation.ContainsKey(900) && newVfxMutation.Keys.SequenceEqual(originalVfxMutation.Keys),
+                "VFX created during its own capture appears on the next frame, not midway");
+            Check(OldCapture(originalVfxMutation).SequenceEqual(NewCapture(newVfxMutation, vfxCapture)),
+                "next VFX capture sees prior callback updates");
+
+            var captureFailure = Make(4);
+            Check(Throws<InvalidOperationException>(() => NewCapture(captureFailure, projectileCapture,
+                id => { if (id == 0) throw new InvalidOperationException("native pose read failed"); })),
+                "native pose read error is propagated without leaking the capture lease");
+            var recovered = projectileCapture.Capture(captureFailure);
+            Check(recovered.Count == captureFailure.Count,
+                "failed capture leaves the production buffer immediately reusable");
+            projectileCapture.Release(recovered);
+            Check(recovered.Count == 0,
+                "failed snapshot does not retain native projectile object references");
+            Check(Throws<InvalidOperationException>(() => NewCapture(newVfxMutation, vfxCapture,
+                id => { if (id == 1) throw new InvalidOperationException("native VFX pose read failed"); })),
+                "native VFX capture exception is propagated without leaving a snapshot leased");
+            var recoveredVfx = vfxCapture.Capture(newVfxMutation);
+            Check(recoveredVfx.Count == newVfxMutation.Count,
+                "VFX capture also releases the reusable snapshot after an exceptional frame");
+            vfxCapture.Release(recoveredVfx);
+
+            var largeProjectileFrame = projectileCapture.Capture(Make(150));
+            var largeVfxFrame = vfxCapture.Capture(Make(90));
+            Check(largeProjectileFrame.Capacity >= 150 && largeVfxFrame.Capacity >= 90,
+                "independent capture buffers can each grow for bursty battle scenes");
+            projectileCapture.Release(largeProjectileFrame);
+            vfxCapture.Release(largeVfxFrame);
+            projectileCapture.Reset(); vfxCapture.Reset();
+            Check(largeProjectileFrame.Capacity == 0 && largeVfxFrame.Capacity == 0,
+                "ending the battle releases both large native capture backing arrays");
+
+            const int liveProjectiles = 320, liveVfx = 96, captureFrames = 1000;
+            var stableProjectiles = new Dictionary<int, Effect>();
+            var stableVfx = new Dictionary<int, Effect>();
+            for (int i = 0; i < liveProjectiles; i++)
+                stableProjectiles.Add(i, new Effect(i));
+            for (int i = 0; i < liveVfx; i++)
+                stableVfx.Add(i, new Effect(i));
+            Action legacyCapture = () =>
+            {
+                GC.KeepAlive(stableProjectiles.ToArray());
+                GC.KeepAlive(stableVfx.ToArray());
+            };
+            Action optimizedCapture = () =>
+            {
+                var projectiles = projectileCapture.Capture(stableProjectiles);
+                try { if (projectiles.Count != liveProjectiles) throw new Exception("Missing projectile"); }
+                finally { projectileCapture.Release(projectiles); }
+                var vfx = vfxCapture.Capture(stableVfx);
+                try { if (vfx.Count != liveVfx) throw new Exception("Missing VFX"); }
+                finally { vfxCapture.Release(vfx); }
+            };
+            long oldCaptureAllocated = Allocated(legacyCapture, captureFrames);
+            long newCaptureAllocated = Allocated(optimizedCapture, captureFrames);
+            Check(oldCaptureAllocated > 0 && newCaptureAllocated == 0,
+                "repeated authoritative capture avoids two native dictionary snapshot arrays");
+            Console.WriteLine("INFO: " + captureFrames + " synthetic host captures with " +
+                liveProjectiles + " projectiles and " + liveVfx + " VFX: old ToArray " +
+                oldCaptureAllocated + " B, two reused production buffers " +
+                newCaptureAllocated + " B (managed snapshot allocations only)");
 
             const int effects = 256, frames = 1000;
             var stable = Make(effects);

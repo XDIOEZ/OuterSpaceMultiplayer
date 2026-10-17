@@ -72,6 +72,13 @@ namespace FreeWorldMultiplayer
         private static readonly FieldInfo effectBeamEmitters = NativeWire.Field(typeof(BeamBehavior), "emitters");
         private readonly Dictionary<BaseProjectile, BattleEffectPose> battleEffectProjectiles = new Dictionary<BaseProjectile, BattleEffectPose>();
         private readonly Dictionary<GameObject, BattleVfxSource> battleEffectVfx = new Dictionary<GameObject, BattleVfxSource>();
+        // Capture also removes despawned native instances during enumeration.
+        // Keep independent, reusable snapshots so each dictionary stays
+        // mutation-safe without allocating a new array for every host frame.
+        private readonly BattleEffectFrameSnapshot<BaseProjectile, BattleEffectPose> battleProjectileCaptureSnapshot =
+            new BattleEffectFrameSnapshot<BaseProjectile, BattleEffectPose>();
+        private readonly BattleEffectFrameSnapshot<GameObject, BattleVfxSource> battleVfxCaptureSnapshot =
+            new BattleEffectFrameSnapshot<GameObject, BattleVfxSource>();
         private readonly List<BattleEffectEvent> battleEffectEvents = new List<BattleEffectEvent>();
         private readonly Dictionary<long, BattleEffectReplica> battleEffectReplicas = new Dictionary<long, BattleEffectReplica>();
         private readonly BattleEffectFrameSnapshot<long, BattleEffectReplica> battleEffectFrameSnapshot =
@@ -121,16 +128,26 @@ namespace FreeWorldMultiplayer
         private string CapturePlayerBattleEffects()
         {
             var state = new BattleEffectsState { Sequence = checked(battleEffectsSequence + 1) };
-            foreach (var pair in battleEffectProjectiles.ToArray())
+            var projectiles = battleProjectileCaptureSnapshot.Capture(battleEffectProjectiles);
+            try
             {
-                if (pair.Key == null || !pair.Key.gameObject.activeInHierarchy) { battleEffectProjectiles.Remove(pair.Key); continue; }
-                state.Projectiles.Add(ReadEffectPose(pair.Value.Id, pair.Value.Resource, pair.Key.transform, pair.Value.Team));
+                foreach (var pair in projectiles)
+                {
+                    if (pair.Key == null || !pair.Key.gameObject.activeInHierarchy) { battleEffectProjectiles.Remove(pair.Key); continue; }
+                    state.Projectiles.Add(ReadEffectPose(pair.Value.Id, pair.Value.Resource, pair.Key.transform, pair.Value.Team));
+                }
             }
-            foreach (var pair in battleEffectVfx.ToArray())
+            finally { battleProjectileCaptureSnapshot.Release(projectiles); }
+            var vfx = battleVfxCaptureSnapshot.Capture(battleEffectVfx);
+            try
             {
-                if (pair.Key == null || !pair.Key.activeInHierarchy) { battleEffectVfx.Remove(pair.Key); continue; }
-                state.Vfx.Add(ReadEffectPose(pair.Value.Pose.Id, pair.Value.Pose.Resource, pair.Key.transform));
+                foreach (var pair in vfx)
+                {
+                    if (pair.Key == null || !pair.Key.activeInHierarchy) { battleEffectVfx.Remove(pair.Key); continue; }
+                    state.Vfx.Add(ReadEffectPose(pair.Value.Pose.Id, pair.Value.Pose.Resource, pair.Key.transform));
+                }
             }
+            finally { battleVfxCaptureSnapshot.Release(vfx); }
             foreach (BaseShip ship in FleetManager.Instance.GetAllShips().Values)
             {
                 if (ship == null || ship.WeaponManager == null) continue;
@@ -414,6 +431,8 @@ namespace FreeWorldMultiplayer
                 try { ReleaseBattleEffect(value); } catch (Exception error) { errors.Add(error); }
             battleEffectReplicas.Clear(); battleEffectProjectiles.Clear(); battleEffectVfx.Clear(); battleEffectEvents.Clear();
             battleEffectFrameSnapshot.Reset();
+            battleProjectileCaptureSnapshot.Reset();
+            battleVfxCaptureSnapshot.Reset();
             battleEffectShellPool.Clear(); battleEffectShellKeys.Clear(); battleEffectWeapons.Clear(); battleEffectControllers.Clear(); battleEffectVfxLeases.Clear();
             if (battleEffectsRoot != null)
             {
