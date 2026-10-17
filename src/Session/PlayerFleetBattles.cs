@@ -17,6 +17,8 @@ namespace FreeWorldMultiplayer
             internal int Characters;
         }
         private const int BattleFrameMaxCharacters = 8 * 1024 * 1024;
+        private static readonly Func<PlayerFleetBattleFrame, int> PendingBattleFrameLength =
+            frame => frame.NativeJson.Length;
         private readonly Dictionary<string, BattleFrameWindow> pendingBattleFrames = new Dictionary<string, BattleFrameWindow>();
         private readonly Dictionary<string, long> battleInputSequences = new Dictionary<string, long>();
         private readonly HashSet<string> battleResyncPending = new HashSet<string>();
@@ -329,8 +331,8 @@ namespace FreeWorldMultiplayer
         {
             BattleFrameWindow window;
             if (!pendingBattleFrames.TryGetValue(battleId, out window)) return;
-            foreach (long key in window.Frames.Keys.Where(x => x <= revision).ToList())
-            { window.Characters -= window.Frames[key].NativeJson.Length; window.Frames.Remove(key); }
+            BattleFrameWindowPruner.DiscardThrough(window.Frames, revision,
+                PendingBattleFrameLength, ref window.Characters);
             if (window.Frames.Count == 0) pendingBattleFrames.Remove(battleId);
         }
         private void ReceiveBattleStop(PlayerFleetBattleReference reference)
