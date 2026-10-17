@@ -64,11 +64,37 @@ internal static class Program
         }
     }
 
+    // The immediate pre-optimization production implementation: validation
+    // already shared by effects and fighters, but using an allocated string
+    // key for every (ship, slot) in a multi-weapon frame.
+    private static void PreviousSharedValidator(List<Weapon> weapons)
+    {
+        if (weapons == null || weapons.Count > 8192)
+            throw new InvalidOperationException("玩家舰战表现快照结构或数量无效。");
+        if (weapons.Count == 0) return;
+        var slotKeys = weapons.Count > 1 ? new HashSet<string>(StringComparer.Ordinal) : null;
+        foreach (Weapon value in weapons)
+        {
+            if (value == null || value.Beams == null || value.Beams.Count > 128
+                || String.IsNullOrEmpty(value.Slot) || value.Slot.Length > 128
+                || String.IsNullOrEmpty(value.Resource) || value.Resource.Length > 128
+                || float.IsNaN(value.Angle) || float.IsInfinity(value.Angle)
+                || slotKeys != null && !slotKeys.Add(value.Ship + ":" + value.Slot))
+                throw new InvalidOperationException("舰战武器表现字段或插槽身份无效。");
+            foreach (Beam line in value.Beams)
+                if (line == null || !BattleEffectFiniteFields.ValidBeam(line.X, line.Y, line.Z,
+                    line.EndX, line.EndY, line.EndZ, line.Width, line.EndWidth))
+                    throw new InvalidOperationException("舰战光束端点或宽度无效。");
+        }
+    }
+
     private static void Equal(List<Weapon> weapons, string reason)
     {
         string old = Outcome(() => LegacyValidateFighter(weapons));
+        string oldShared = Outcome(() => PreviousSharedValidator(weapons));
         string current = Outcome(() => GameBridge.CheckWeaponWire(weapons));
         Check(old == current, reason + " old=" + old + " new=" + current);
+        Check(oldShared == current, reason + " previous shared=" + oldShared + " new=" + current);
     }
     private static Weapon Valid(long ship = 1, string slot = "main", string resource = "laser")
     {
@@ -100,6 +126,26 @@ internal static class Program
             Equal(new List<Weapon> { Valid(1, "left"), Valid(2, "left") },
                 "two separate ships with identical slot names");
             Equal(new List<Weapon> { Valid(), Valid() }, "duplicate ship and slot");
+            Equal(new List<Weapon> {
+                Valid(long.MinValue, "艦橋"), Valid(long.MaxValue, "艦橋"),
+                Valid(0, "艦橋"), Valid(1L << 32, "艦橋")
+            }, "distinct complete 64-bit ship identities must not collide");
+            Equal(new List<Weapon> {
+                Valid(1, "Main"), Valid(1, "main"),
+                Valid(1, "\u00e9"), Valid(1, "e\u0301"),
+                Valid(1, "left:right"), Valid(1, "left"), Valid(2, "left:right")
+            }, "ordinal slot identity preserves case Unicode normalization and colons");
+            Equal(new List<Weapon> { Valid(-1, "主炮:α"), Valid(-1, "主炮:α") },
+                "duplicate negative ship ID with Unicode colon slot is still rejected");
+            var hashCollisionA = new BattleWeaponSlotKey(0, "primary");
+            var hashCollisionB = new BattleWeaponSlotKey((1L << 32) | 1, "primary");
+            var collidingKeys = new HashSet<BattleWeaponSlotKey> { hashCollisionA, hashCollisionB };
+            Check(hashCollisionA.GetHashCode() == hashCollisionB.GetHashCode() &&
+                !hashCollisionA.Equals(hashCollisionB) && collidingKeys.Count == 2,
+                "intentional lower/higher 32-bit hash collision does not merge different native ship IDs");
+            Check(new BattleWeaponSlotKey(17, "A").Equals(new BattleWeaponSlotKey(17, "A")) &&
+                !new BattleWeaponSlotKey(17, "A").Equals(new BattleWeaponSlotKey(17, "a")),
+                "composite key equality is exact and case-sensitive");
             Equal(new List<Weapon> { null }, "null weapon element");
             var overLimit = new List<Weapon>();
             for (int i = 0; i < 8193; i++) overLimit.Add(Valid(1, "slot-" + i));
@@ -181,6 +227,68 @@ internal static class Program
                 }
                 Equal(frame, "random wire fighter frame " + i);
             }
+
+            // Wider randomized multi-ship snapshots cover 64-bit identity
+            // boundaries, intentional duplicate slots, Unicode and unusual
+            // separator characters. Compare both pre-optimization
+            // implementations' exception category AND text on every sample.
+            string[] labels = { "left", "LEFT", "left:right", "右舷",
+                "\u00e9", "e\u0301", "主炮/α", "laser\\port", "space slot" };
+            long[] shipIds = { 0, 1, -1, long.MinValue, long.MaxValue,
+                1L << 32, (1L << 32) + 1, -(1L << 32) };
+            var wideRandom = new Random(20261019);
+            byte[] nativeIdBytes = new byte[8];
+            for (int batch = 0; batch < 6000; batch++)
+            {
+                var weapons = new List<Weapon>();
+                int n = wideRandom.Next(0, 45);
+                for (int i = 0; i < n; i++)
+                {
+                    wideRandom.NextBytes(nativeIdBytes);
+                    long uid = wideRandom.Next(0, 3) == 0
+                        ? BitConverter.ToInt64(nativeIdBytes, 0)
+                        : shipIds[wideRandom.Next(shipIds.Length)];
+                    string slot = labels[wideRandom.Next(labels.Length)];
+                    var weapon = Valid(uid, slot, "resource-" + wideRandom.Next(0, 4));
+                    if (wideRandom.Next(0, 17) == 0 && weapons.Count != 0)
+                    {
+                        Weapon previous = weapons[wideRandom.Next(weapons.Count)];
+                        weapon.Ship = previous.Ship;
+                        weapon.Slot = previous.Slot;
+                    }
+                    if (wideRandom.Next(0, 20) == 0) weapon.Angle = float.NaN;
+                    if (wideRandom.Next(0, 20) == 0) weapon.Resource = "";
+                    if (wideRandom.Next(0, 10) == 0)
+                    {
+                        weapon.Beams.Add(ValidBeam());
+                        if (wideRandom.Next(0, 5) == 0) weapon.Beams[0].EndWidth = -1;
+                    }
+                    weapons.Add(weapon);
+                }
+                Equal(weapons, "randomized multi-ship wire identity " + batch);
+            }
+
+            // Measure the EXACT old shared validation against the linked new
+            // production helper: do not compare to the much older full-state
+            // wrapper, which contained unrelated extra allocations.
+            const int ships = 16, slotsPerShip = 32, denseFrames = 450;
+            var dense = new List<Weapon>(ships * slotsPerShip);
+            for (int ship = 0; ship < ships; ship++)
+                for (int slot = 0; slot < slotsPerShip; slot++)
+                    dense.Add(Valid(long.MaxValue - ship, "turret-" + slot));
+            string legacyDense = Outcome(() => PreviousSharedValidator(dense));
+            string currentDense = Outcome(() => GameBridge.CheckWeaponWire(dense));
+            Check(legacyDense == "accepted" && currentDense == legacyDense,
+                "512-weapon dense multi-ship frame passes unchanged validation");
+            long oldDenseBytes = Measure(() => PreviousSharedValidator(dense), denseFrames);
+            long newDenseBytes = Measure(() => GameBridge.CheckWeaponWire(dense), denseFrames);
+            Check(oldDenseBytes > newDenseBytes &&
+                oldDenseBytes - newDenseBytes > 1000000,
+                "struct identity saves temporary key strings in dense production validation");
+            Console.WriteLine("INFO: " + denseFrames + " snapshots × " + dense.Count +
+                " weapons across " + ships + " ships: old string identity " +
+                oldDenseBytes + " B, production composite identity " + newDenseBytes +
+                " B (managed allocation after warmup)");
 
             // Previous check created four empty lists, one wrapper object,
             // a HashSet for poses and one for weapon slots, even when a
