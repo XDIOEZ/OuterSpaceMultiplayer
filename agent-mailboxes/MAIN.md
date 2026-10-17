@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261017-static-bug-audit-r3-MAIN-01 — 第三轮 BUG-11～14 静态审计移交
+- 发件人：static-bug-audit-round3-20261017
+- 收件人：MAIN
+- 时间：2026-10-17
+- 状态：待处理
+- 关联任务/文件：`docs/联机MOD第三轮静态BUG审计与Agent修复交接-20261017.md`；`AGENT-COORDINATION.md`
+- 消息：已完成第三轮只读静态审计，新增连接握手名额、赠送地表恢复消息可靠性、跨世界可复用身份验证值和缓存通知异常导致整个 Tick 中止四项问题。请分别交 Session/Transport/Core Owner 在确认占用和旧凭证/协议迁移范围后处理；本文不解除冻结。
+- 需要回复：由主控协调 Owner 交接和 BUG-13 的安全协议设计；收件人实际处理时再回填。
+- 回复关联：无
+
 ### MSG-20261017-agent-tasks-main-01 — 本轮 BUG-04 窄补丁与源码门禁
 - 发件人：agent-todo-handoff-r13-and-bug04-20261017
 - 收件人：MAIN
