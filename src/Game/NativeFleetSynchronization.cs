@@ -227,6 +227,12 @@ namespace FreeWorldMultiplayer
         private void ApplyFleetFrame(FleetSyncFrame sync)
         {
             if (!ValidateFleetFrameHeader(sync)) return;
+            // Pose-heavy frames used to rescan the same player's OwnedFleets for
+            // every content/pose validation and again for pose application.
+            // Index only dense frames; small deltas keep their allocation-free
+            // linear lookup and identical validation behavior.
+            var frameIndex = FleetFrameIndex<FWFleet>.ShouldIndex(sync.Content.Count, sync.Poses.Count)
+                ? new FleetFrameIndex<FWFleet>(OwnedFleets, fleet => fleet.getUID()) : null;
             var staged = new List<Tuple<FleetContent, FWFleet, Dictionary<string, object>, bool>>();
             var ids = new HashSet<long>();
             foreach (FleetContent content in sync.Content)
@@ -236,7 +242,8 @@ namespace FreeWorldMultiplayer
                     throw new InvalidOperationException("Fleet content ownership is missing or duplicated.");
                 Type type = content.Kind == 0 ? typeof(FWFleet) : content.Kind == 1 ? typeof(FWCaravanFleet) : null;
                 if (type == null) throw new InvalidOperationException("Unsupported owned fleet kind.");
-                FWFleet fleet = OwnedFleets(content.PlayerId).SingleOrDefault(f => f.getUID() == content.FleetId);
+                FWFleet fleet = frameIndex == null ? OwnedFleets(content.PlayerId).SingleOrDefault(f => f.getUID() == content.FleetId)
+                    : frameIndex.SingleOrDefault(content.PlayerId, content.FleetId);
                 bool created = fleet == null;
                 if (created)
                 {
@@ -269,7 +276,9 @@ namespace FreeWorldMultiplayer
                     || !FWPlayerLocationGuard.IsPhysicalGalaxyId(pose.GalaxyId) || !owner.galaxyBlock.knownGalaxies.Any(g => g.id == pose.GalaxyId)
                     || float.IsNaN(pose.X) || float.IsInfinity(pose.X) || float.IsNaN(pose.Y) || float.IsInfinity(pose.Y)
                     || float.IsNaN(pose.Angle) || float.IsInfinity(pose.Angle) || pose.WorldTimeMM < 0
-                    || !OwnedFleets(pose.PlayerId).Any(f => f.getUID() == pose.FleetId) && !staged.Any(s => s.Item4 && s.Item1.FleetId == pose.FleetId && s.Item1.PlayerId == pose.PlayerId)) throw new InvalidOperationException("Invalid authoritative fleet pose.");
+                    || !(frameIndex == null ? OwnedFleets(pose.PlayerId).Any(f => f.getUID() == pose.FleetId) : frameIndex.Contains(pose.PlayerId, pose.FleetId))
+                        && !staged.Any(s => s.Item4 && s.Item1.FleetId == pose.FleetId && s.Item1.PlayerId == pose.PlayerId))
+                    throw new InvalidOperationException("Invalid authoritative fleet pose.");
             }
             foreach (var stage in staged) if (stage.Item4 && !sync.Poses.Any(p => p.FleetId == stage.Item1.FleetId)) throw new InvalidOperationException("New fleet replica has no physical galaxy pose.");
             var removed = new HashSet<long>(sync.Removed);
@@ -277,7 +286,7 @@ namespace FreeWorldMultiplayer
             if (sync.Full)
             {
                 foreach (var player in Players)
-                    foreach (FWFleet fleet in OwnedFleets(player.Key))
+                    foreach (FWFleet fleet in frameIndex == null ? OwnedFleets(player.Key) : frameIndex.All(player.Key))
                         if (!ids.Contains(fleet.getUID())) removed.Add(fleet.getUID());
                 if (staged.Any(stage => !poseIds.Contains(stage.Item1.FleetId))) throw new InvalidOperationException("A complete galaxy baseline is missing a fleet pose.");
             }
@@ -298,6 +307,7 @@ namespace FreeWorldMultiplayer
                 {
                     FleetPose pose = sync.Poses.Single(p => p.FleetId == stage.Item1.FleetId);
                     Players[stage.Item1.PlayerId].galaxyBlock.knownGalaxies.Single(g => g.id == pose.GalaxyId).galaxyFleetList.Add(stage.Item2);
+                    if (frameIndex != null) frameIndex.RegisterCreated(stage.Item1.PlayerId, stage.Item1.FleetId, stage.Item2);
                     ownedFleetIndexFrame = -1;
                 }
                 string playerId = stage.Item1.PlayerId;
@@ -309,7 +319,8 @@ namespace FreeWorldMultiplayer
             }
             foreach (FleetPose pose in sync.Poses)
             {
-                FWFleet fleet = OwnedFleets(pose.PlayerId).Single(f => f.getUID() == pose.FleetId);
+                FWFleet fleet = frameIndex == null ? OwnedFleets(pose.PlayerId).Single(f => f.getUID() == pose.FleetId)
+                    : frameIndex.Single(pose.PlayerId, pose.FleetId);
                 if (fleet.pos == null) fleet.pos = new FWGalaxyPos();
                 fleet.pos.galaxyId = pose.GalaxyId; fleet.pos.gx = pose.X; fleet.pos.gy = pose.Y; fleet.pos.angle = pose.Angle; fleet.status = pose.Status;
                 Players[pose.PlayerId].elapsedMM = pose.WorldTimeMM;
