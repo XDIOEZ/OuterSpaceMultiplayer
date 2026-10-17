@@ -201,12 +201,18 @@ namespace FreeWorldMultiplayer
                         throw new InvalidOperationException("玩家舰载机槽位状态无效。");
             }
             var ids = new HashSet<string>(StringComparer.Ordinal);
-            var occupied = new HashSet<string>(StringComparer.Ordinal);
+            // For densely populated fighter frames, resolve each active slot
+            // directly instead of scanning all fighters once per wing slot.
+            // Keep the old tiny-frame path without building an extra index.
+            var slotMembership = state.Fighters.Count >= 8 ? new BattleFighterSlotMembership() : null;
+            var occupied = slotMembership == null ? new HashSet<string>(StringComparer.Ordinal) : null;
             foreach (BattleFighterState fighter in state.Fighters)
             {
                 BattleFighterWing wing;
                 if (fighter == null || fighter.RuntimeId < 0 || !ids.Add(FighterReplicaKey(fighter))
-                    || !occupied.Add(FighterWingKey(fighter.Carrier, fighter.Wing) + "/" + fighter.Slot)
+                    || !(slotMembership == null
+                        ? occupied.Add(FighterWingKey(fighter.Carrier, fighter.Wing) + "/" + fighter.Slot)
+                        : slotMembership.TryRegister(fighter.Carrier, fighter.Wing, fighter.Slot, fighter.RuntimeId))
                     || !wings.TryGetValue(FighterWingKey(fighter.Carrier, fighter.Wing), out wing) || wing.Bay != fighter.Bay
                     || !wing.Slots.Any(s => s.Index == fighter.Slot && s.Fighter == fighter.RuntimeId)
                     || fighter.Hull < 0 || fighter.MaxHull <= 0 || fighter.Hull > fighter.MaxHull || fighter.ArmorRatio < 0 || fighter.ArmorRatio > 1
@@ -221,7 +227,9 @@ namespace FreeWorldMultiplayer
             }
             foreach (BattleFighterWing wing in state.Wings)
                 foreach (BattleFighterSlot slot in wing.Slots)
-                    if (slot.Fighter >= 0 && !state.Fighters.Any(f => f.Carrier == wing.Carrier && f.Wing == wing.Index && f.Slot == slot.Index && f.RuntimeId == slot.Fighter))
+                    if (slot.Fighter >= 0 && !(slotMembership == null
+                        ? state.Fighters.Any(f => f.Carrier == wing.Carrier && f.Wing == wing.Index && f.Slot == slot.Index && f.RuntimeId == slot.Fighter)
+                        : slotMembership.Matches(wing.Carrier, wing.Index, slot.Index, slot.Fighter)))
                         throw new InvalidOperationException("活动舰载机槽位缺少完整表现状态。");
         }
         private void ValidatePlayerBattleFighters(string encoded)
