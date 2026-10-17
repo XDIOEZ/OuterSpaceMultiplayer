@@ -222,7 +222,8 @@ internal static class Program
             first.Transactions["synthetic-txn"].Saved && first.Snapshot.NativeJson ==
             "synthetic-native-checkpoint", "first complete world reloads with native and transaction data");
         Check(SaveStore.ListWorlds(storeRoot).Any(w => w.WorldId == id &&
-            w.SaveGeneration == 1), "synthetic saved world appears in the independent multiplayer list");
+            w.SaveGeneration == 1 && String.IsNullOrEmpty(w.Error) && w.Name == "first-complete"),
+            "complete world is selectable in the independent multiplayer list");
 
         world.Name = "second-complete";
         world.Transactions["new-transaction"] = new CommandResult { Applied = true };
@@ -236,22 +237,43 @@ internal static class Program
         Check(File.Exists(latest) && File.Exists(previous) &&
             File.Exists(Path.Combine(directory, "active.json.bak")),
             "successful second generation retains an immediately preceding complete save");
+        Check(SaveStore.ListWorlds(storeRoot).Any(w => w.WorldId == id &&
+            w.SaveGeneration == 2 && w.Name == "second-complete" &&
+            String.IsNullOrEmpty(w.Error)), "valid newest generation is listed as selectable");
 
         File.WriteAllText(latest, "corrupted synthetic generation", Encoding.UTF8);
         WorldState fallback = store.Load(id);
         Check(fallback.SaveGeneration == 1 && fallback.Name == "first-complete" &&
             !String.IsNullOrWhiteSpace(store.LastLoadWarning),
             "corrupted active generation falls back to last complete generation with warning");
+        Check(SaveStore.ListWorlds(storeRoot).Any(w => w.WorldId == id &&
+            w.SaveGeneration == 1 && w.Name.Contains("first-complete") &&
+            w.Name.Contains("备份可恢复") && String.IsNullOrEmpty(w.Error)),
+            "invalid current generation is still selectable through verified backup");
         string pointer = Path.Combine(directory, "active.json");
         string pointerBytes = File.ReadAllText(pointer, Encoding.UTF8);
         File.WriteAllText(pointer, "{damaged-pointer", Encoding.UTF8);
         Check(store.Load(id).SaveGeneration == 1 &&
             File.ReadAllText(pointer, Encoding.UTF8).Contains("{damaged-pointer"),
             "broken active pointer does not rewrite or erase the older complete generation");
+        Check(SaveStore.ListWorlds(storeRoot).Any(w => w.WorldId == id &&
+            w.SaveGeneration == 1 && String.IsNullOrEmpty(w.Error) &&
+            w.Name.Contains("备份可恢复")),
+            "broken current pointer is recovered in the continue-world list");
+        string brokenPointerBytes = File.ReadAllText(pointer, Encoding.UTF8);
+        File.Delete(pointer);
+        Check(SaveStore.ListWorlds(storeRoot).Any(w => w.WorldId == id &&
+            w.SaveGeneration == 1 && String.IsNullOrEmpty(w.Error)),
+            "missing active pointer does not hide a valid backup from the UI");
+        Check(!File.Exists(pointer), "read-only list does not silently repair missing active index");
+        File.WriteAllText(pointer, brokenPointerBytes, Encoding.UTF8);
         Check(File.Exists(previous), "fallback path retains the older world checkpoint on disk");
         File.WriteAllText(Path.Combine(directory, "active.json.bak"), "{also-damaged", Encoding.UTF8);
         Check(Rejects<InvalidDataException>(() => store.Load(id)),
             "both invalid pointers fail closed instead of loading an invented world");
+        Check(SaveStore.ListWorlds(storeRoot).Any(w => w.WorldId == id &&
+            !String.IsNullOrWhiteSpace(w.Error)),
+            "unrecoverable world remains visible but disabled in continue-world list");
 
         // Simulate an interrupted pointer commit using a directory occupying
         // the filename: the failed operation may leave an orphan generation.

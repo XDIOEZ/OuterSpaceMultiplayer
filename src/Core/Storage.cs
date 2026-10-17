@@ -120,6 +120,7 @@ namespace FreeWorldMultiplayer
     public sealed class SaveStore
     {
         private readonly string root;
+        private SavePointer lastLoadedPointer;
         public string LastLoadWarning { get; private set; }
         public string LastCleanupWarning { get; private set; }
         public SaveStore(string storageRoot) { root = Path.GetFullPath(Path.Combine(storageRoot, "worlds")); }
@@ -136,14 +137,23 @@ namespace FreeWorldMultiplayer
             if (!Directory.Exists(store.root)) return worlds;
             foreach (string dir in Directory.GetDirectories(store.root))
             {
-                string path = Path.Combine(dir, "active.json");
-                if (!File.Exists(path)) continue;
+                // An interrupted atomic pointer replace can leave only the .bak pointer.
+                // The list must not block a world that Load can safely recover.
+                if (!File.Exists(Path.Combine(dir, "active.json")) &&
+                    !File.Exists(Path.Combine(dir, "active.json.bak"))) continue;
+                string id = Path.GetFileName(dir);
                 try
                 {
-                    SavePointer pointer = JsonData.Read<SavePointer>(File.ReadAllText(path, Encoding.UTF8));
-                    worlds.Add(new WorldSummary { WorldId = pointer.WorldId, Name = pointer.Name, SaveGeneration = pointer.Generation, SavedAtUtc = pointer.SavedAtUtc });
+                    // Reuse the authoritative, read-only pointer / generation / checksum
+                    // validation. Merely parsing active.json can report a broken world as usable.
+                    WorldState world = store.Load(id);
+                    bool recovered = !String.IsNullOrWhiteSpace(store.LastLoadWarning);
+                    worlds.Add(new WorldSummary { WorldId = id,
+                        Name = (world.Name ?? id) + (recovered ? "（备份可恢复）" : ""),
+                        SaveGeneration = world.SaveGeneration,
+                        SavedAtUtc = store.lastLoadedPointer.SavedAtUtc });
                 }
-                catch (Exception ex) { worlds.Add(new WorldSummary { WorldId = Path.GetFileName(dir), Name = Path.GetFileName(dir), Error = "存档索引损坏：" + ex.Message }); }
+                catch (Exception ex) { worlds.Add(new WorldSummary { WorldId = id, Name = id, Error = "存档不可恢复：" + ex.Message }); }
             }
             return worlds.OrderByDescending(x => x.SavedAtUtc, StringComparer.Ordinal).ToList();
         }
@@ -202,6 +212,7 @@ namespace FreeWorldMultiplayer
         public WorldState Load(string worldId)
         {
             LastLoadWarning = null;
+            lastLoadedPointer = null;
             string dir = WorldDirectory(worldId);
             Exception primaryError = null;
             foreach (string name in new[] { "active.json", "active.json.bak" })
@@ -218,6 +229,7 @@ namespace FreeWorldMultiplayer
                     if (world == null || world.SchemaVersion != 1 || world.WorldId != worldId || world.SaveGeneration != pointer.Generation)
                         throw new InvalidDataException("Save generation metadata mismatch.");
                     if (name.EndsWith(".bak", StringComparison.Ordinal)) LastLoadWarning = "当前存档代不可读，已恢复上一完整代 " + pointer.Generation + "：" + primaryError?.Message;
+                    lastLoadedPointer = pointer;
                     return world;
                 }
                 catch (Exception ex) { if (primaryError == null) primaryError = ex; }
