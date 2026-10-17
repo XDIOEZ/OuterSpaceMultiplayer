@@ -89,34 +89,6 @@ namespace FreeWorldMultiplayer
             if (field.Name == "serializedThings") return fleet.peekThings();
             return field.GetValue(fleet);
         }
-        private string CaptureTransitValue(FWBaseBean bean)
-        {
-            long uid = NativeWire.Uid(bean);
-            sampledTransitIds.Add(uid);
-            NativeWire.CachedValue previous;
-            transitValues.TryGetValue(uid, out previous);
-            NativeWire.CachedValue value = NativeWire.CaptureValue(bean, previous);
-            transitValues[uid] = value;
-            return value.Encoded;
-        }
-        private TransitState CaptureCachedTransit(string playerId)
-        {
-            FWGameData data = Players[playerId];
-            var state = new TransitState { PlayerId = playerId };
-            if (data.expeditionSeq.Count == 0) return state;
-            var heroes = new HashSet<long>(); var animals = new HashSet<long>();
-            foreach (FWExpedition expedition in data.expeditionSeq)
-            {
-                state.Expeditions.Add(CaptureTransitValue(expedition));
-                foreach (long uid in expedition.roleUidList) heroes.Add(uid);
-                foreach (long uid in expedition.animalUidList) animals.Add(uid);
-            }
-            foreach (FWHeroBean hero in data.heros)
-                if (heroes.Contains(hero.getUID()) && hero.starMapId < 0 && hero.fleetUid < 0) state.Heroes.Add(CaptureTransitValue(hero));
-            foreach (FWAnimalBean animal in data.animals)
-                if (animals.Contains(animal.getUID()) && animal.starMapId < 0 && animal.fleetUid < 0) state.Animals.Add(CaptureTransitValue(animal));
-            return state;
-        }
         private static bool SameTransit(TransitState first, TransitState second)
         {
             return first != null && second != null && first.Expeditions.SequenceEqual(second.Expeditions)
