@@ -104,6 +104,7 @@ internal static class Program
             CommandSubmitStatusChecks.Run(Check);
             DeferredCommandReplyChecks.Run(Check);
             MapCacheExpiryChecks.Run(Check);
+            OptionalPeerNoticeChecks.Run(Check);
             Console.WriteLine("PASS: " + checks + " optimization logic checks");
             return 0;
         }

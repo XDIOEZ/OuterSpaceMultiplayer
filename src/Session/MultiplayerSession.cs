@@ -193,7 +193,14 @@ namespace FreeWorldMultiplayer
                     }
                     Error("联机消息拒绝：" + ex.Message);
                     if (IsHost && item != null && item.PeerId != null && peers.ContainsKey(item.PeerId))
-                        Send(item.PeerId, "error", ex.Message);
+                    {
+                        string rejectedPeer = item.PeerId;
+                        // An advisory refusal reply can fail on a full or closed
+                        // transport queue. Never let that secondary error stop host ticks.
+                        OptionalPeerNotice.SendOrDisconnect(
+                            () => Send(rejectedPeer, "error", ex.Message),
+                            () => transport.Disconnect(rejectedPeer, "拒绝消息的错误提示发送失败；隔离拥塞连接。"));
+                    }
                     if (IsHost && item != null && item.PeerId != null && !peers.ContainsKey(item.PeerId)) transport.Disconnect(item.PeerId, "握手失败");
                 }
             }
