@@ -50,6 +50,27 @@ namespace FreeWorldMultiplayer
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
         private static readonly HashSet<string> CheckpointFields = new HashSet<string>(StringComparer.Ordinal)
             { "Map", "Terrain", "Heroes", "Animals", "DepartedHeroes", "DepartedAnimals", "Loot", "Landings" };
+        // SplitMix64's contribution depends only on the input byte, not on the
+        // previous rolling value. Precompute all 256 possibilities once instead
+        // of performing two 64-bit multiplications for every byte of a large map.
+        // Keep the exact constants/unchecked arithmetic to preserve old cuts and
+        // reuse already persisted content-addressed cache chunks.
+        private static readonly ulong[] RollingByteHashes = CreateRollingByteHashes();
+        private static ulong[] CreateRollingByteHashes()
+        {
+            var table = new ulong[256];
+            unchecked
+            {
+                for (int i = 0; i < table.Length; i++)
+                {
+                    ulong value = (ulong)i + 0x9E3779B97F4A7C15UL;
+                    value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9UL;
+                    value = (value ^ (value >> 27)) * 0x94D049BB133111EBUL;
+                    table[i] = value ^ (value >> 31);
+                }
+            }
+            return table;
+        }
         internal sealed class Encoded
         {
             internal MapCacheManifest Manifest;
@@ -75,7 +96,7 @@ namespace FreeWorldMultiplayer
             int start = 0; ulong rolling = 0;
             for (int i = 0; i < bytes.Length; ++i)
             {
-                unchecked { ulong value = (ulong)bytes[i] + 0x9E3779B97F4A7C15UL; value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9UL; value = (value ^ (value >> 27)) * 0x94D049BB133111EBUL; rolling = (rolling << 1) + (value ^ (value >> 31)); }
+                unchecked { rolling = (rolling << 1) + RollingByteHashes[bytes[i]]; }
                 int length = i - start + 1;
                 if (length < MinChunk || (rolling & 16383) != 0 && length < MaxChunk && i + 1 != bytes.Length) continue;
                 AddChunk(result, bytes, start, length); start = i + 1; rolling = 0;

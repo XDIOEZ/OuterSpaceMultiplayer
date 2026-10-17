@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using FreeWorldMultiplayer;
 using Newtonsoft.Json;
@@ -47,6 +48,14 @@ internal static class MapCodecChecks
         check(encoded.Manifest.TotalLength > 1024 * 1024, "large map codec payload");
         check(encoded.Manifest.Chunks.Count > 1, "large map splits into chunks");
         check(encoded.Manifest.Chunks.Count > encoded.Content.Count, "large repeated map has duplicate cache chunk references");
+        // Freeze the on-wire cache cut boundaries: the speedup must not force
+        // an existing guest to discard reusable chunks from its old manifest.
+        check(LegacyChunkBoundariesMatch(encoded), "optimized rolling hash preserves every legacy map chunk boundary");
+        var contributions = (ulong[])typeof(MapSnapshotDeltaCodec)
+            .GetField("RollingByteHashes", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+        check(contributions.Length == 256 && Enumerable.Range(0, 256)
+            .All(i => contributions[i] == LegacyByteHash((byte)i)),
+            "precomputed rolling contributions exactly match all 256 legacy byte values");
         long previousChunkCopyBytes = encoded.Manifest.Chunks.Sum(chunk => (long)chunk.Length);
         long uniqueChunkCopyBytes = encoded.Content.Values.Sum(data => (long)data.Length);
         check(previousChunkCopyBytes == encoded.Manifest.TotalLength && uniqueChunkCopyBytes < previousChunkCopyBytes,
@@ -132,5 +141,46 @@ internal static class MapCodecChecks
             name + " native checkpoint");
         check(actual.EntityOwners.Count == expected.EntityOwners.Count
             && actual.EntityOwners[100L] == "player", name + " owner registry");
+    }
+
+    // The previous production algorithm, deliberately independent of the new
+    // lookup table so a wrong constant or an off-by-one cut fails this test.
+    private static ulong LegacyByteHash(byte input)
+    {
+        unchecked
+        {
+            ulong value = (ulong)input + 0x9E3779B97F4A7C15UL;
+            value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9UL;
+            value = (value ^ (value >> 27)) * 0x94D049BB133111EBUL;
+            return value ^ (value >> 31);
+        }
+    }
+
+    private static bool LegacyChunkBoundariesMatch(MapSnapshotDeltaCodec.Encoded encoded)
+    {
+        var bytes = new byte[(int)encoded.Manifest.TotalLength];
+        int offset = 0;
+        foreach (MapCacheChunkReference chunk in encoded.Manifest.Chunks)
+        {
+            byte[] content = encoded.Content[chunk.Hash];
+            if (chunk.Length != content.Length) return false;
+            Buffer.BlockCopy(content, 0, bytes, offset, chunk.Length);
+            offset += chunk.Length;
+        }
+        if (offset != bytes.Length) return false;
+
+        int start = 0, index = 0;
+        ulong rolling = 0;
+        for (int i = 0; i < bytes.Length; ++i)
+        {
+            unchecked { rolling = (rolling << 1) + LegacyByteHash(bytes[i]); }
+            int length = i - start + 1;
+            if (length < 4096 || ((rolling & 16383) != 0 && length < 65536 && i + 1 != bytes.Length)) continue;
+            if (index == encoded.Manifest.Chunks.Count || encoded.Manifest.Chunks[index++].Length != length) return false;
+            start = i + 1; rolling = 0;
+        }
+        if (start < bytes.Length && (index == encoded.Manifest.Chunks.Count
+            || encoded.Manifest.Chunks[index++].Length != bytes.Length - start)) return false;
+        return index == encoded.Manifest.Chunks.Count;
     }
 }
