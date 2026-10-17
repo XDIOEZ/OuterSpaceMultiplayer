@@ -78,6 +78,7 @@ namespace FreeWorldMultiplayer
         private double playerBattleFighterReceipt;
         private static readonly Func<BattleFighterSlot, int> BattleDeclaredSlotIndex = value => value.Index;
         private static readonly Func<BattleFighterSlot, long> BattleDeclaredSlotFighter = value => value.Fighter;
+        private static readonly Func<FighterSlot, int> NativeReplicaSlotIndex = value => value.slotIndex;
         private static readonly Func<WeaponController, string> ReplicaFighterWeaponSlot =
             weapon => weapon.GetComponentInParent<WeaponSlot>().slotId;
         internal bool CanRunPlayerBattleFighterSimulation { get { return !HasNativePlayerBattle || CanRunPlayerBattle; } }
@@ -242,7 +243,7 @@ namespace FreeWorldMultiplayer
         { ValidateFightersState(NativeWire.Parse<BattleFightersState>(encoded)); }
         private static HashSet<long> PlayerBattleFighterCarrierIds(string encoded)
         { return new HashSet<long>(NativeWire.Parse<BattleFightersState>(encoded).Fighters.Select(f => f.Carrier)); }
-        private FighterWingRuntime ResolveReplicaWing(BattleFighterWing value)
+        private FighterWingRuntime ResolveReplicaWing(BattleFighterWing value, out NativeFighterSlotLookup<FighterSlot> slotLookup)
         {
             if (!nativeBattleShips.ContainsKey(value.Carrier)) throw new InvalidOperationException("舰载机投影引用本场外母舰。");
             BaseShip carrier = FindBattleShip(value.Carrier);
@@ -252,8 +253,16 @@ namespace FreeWorldMultiplayer
             FighterWingRuntime wing = carrier.WingManager.activeWings.SingleOrDefault(w => w.WingIndex == value.Index && w.Data != null && w.Data.zoneSlotId == value.Bay);
             if (wing == null || wing.Data.fighterShipVariant == null || wing.slots == null || wing.slots.Length != value.Slots.Count)
                 throw new InvalidOperationException("本机真实母舰机库和联队配置不一致。");
+            // Dense wing checkpoints used to rescan every native slot for
+            // every incoming slot during both validation and state apply.
+            // Keep sparse and malformed native arrays on the original path.
+            slotLookup = wing.slots.Length >= 8
+                ? NativeFighterSlotLookup<FighterSlot>.TryCreate(wing.slots, NativeReplicaSlotIndex)
+                : null;
             foreach (BattleFighterSlot slot in value.Slots)
-                if (!wing.slots.Any(s => s.slotIndex == slot.Index)) throw new InvalidOperationException("本机真实舰载机槽位配置不一致。");
+                if (!(slotLookup == null ? wing.slots.Any(s => s.slotIndex == slot.Index)
+                    : slotLookup.Contains(slot.Index)))
+                    throw new InvalidOperationException("本机真实舰载机槽位配置不一致。");
             return wing;
         }
         private static void DisableReplicaFighter(FighterShip fighter)
@@ -309,7 +318,18 @@ namespace FreeWorldMultiplayer
             BattleFightersState state = NativeWire.Parse<BattleFightersState>(encoded); ValidateFightersState(state);
             if (!IsPlayerBattleReplica || state.Sequence <= appliedPlayerBattleFighterSequence) return;
             var wings = new Dictionary<string, FighterWingRuntime>(StringComparer.Ordinal);
-            foreach (BattleFighterWing value in state.Wings) wings.Add(FighterWingKey(value.Carrier, value.Index), ResolveReplicaWing(value));
+            Dictionary<string, NativeFighterSlotLookup<FighterSlot>> nativeSlots = null;
+            foreach (BattleFighterWing value in state.Wings)
+            {
+                NativeFighterSlotLookup<FighterSlot> slotLookup;
+                string key = FighterWingKey(value.Carrier, value.Index);
+                wings.Add(key, ResolveReplicaWing(value, out slotLookup));
+                if (slotLookup != null)
+                {
+                    if (nativeSlots == null) nativeSlots = new Dictionary<string, NativeFighterSlotLookup<FighterSlot>>(StringComparer.Ordinal);
+                    nativeSlots.Add(key, slotLookup);
+                }
+            }
             var present = new HashSet<string>(state.Fighters.Select(FighterReplicaKey), StringComparer.Ordinal);
             // Remove the previous generation before assigning a reused bay/slot to its new
             // runtime fighter. A returned/dead craft can never keep the new craft's slot.
@@ -318,12 +338,17 @@ namespace FreeWorldMultiplayer
             double interval = playerBattleFighterReceipt == 0 ? 0 : Math.Min(0.25, Math.Max(0.01, now - playerBattleFighterReceipt));
             foreach (BattleFighterWing value in state.Wings)
             {
-                FighterWingRuntime wing = wings[FighterWingKey(value.Carrier, value.Index)];
+                string wingKey = FighterWingKey(value.Carrier, value.Index);
+                FighterWingRuntime wing = wings[wingKey];
+                NativeFighterSlotLookup<FighterSlot> slotLookup;
+                if (nativeSlots == null || !nativeSlots.TryGetValue(wingKey, out slotLookup)) slotLookup = null;
                 wing.currentReserves = value.Reserves; wing.reserveProgress = value.ReserveProgress;
                 wing.manager.currentCommand = (CarrierCommand)value.Command;
                 foreach (BattleFighterSlot valueSlot in value.Slots)
                 {
-                    FighterSlot slot = wing.slots.Single(s => s.slotIndex == valueSlot.Index);
+                    FighterSlot slot = slotLookup == null
+                        ? wing.slots.Single(s => s.slotIndex == valueSlot.Index)
+                        : slotLookup.Single(valueSlot.Index);
                     slot.status = (SlotStatus)valueSlot.Status; slot.progress = valueSlot.Progress; slot.remainingTime = valueSlot.Remaining;
                     if (valueSlot.Fighter < 0) slot.ship = null;
                 }
