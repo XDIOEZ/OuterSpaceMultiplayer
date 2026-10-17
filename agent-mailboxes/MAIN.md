@@ -4,6 +4,17 @@
 
 ## 消息
 
+### MSG-20261017-static-bug-audit-r5-MAIN-01 — 第五轮 BUG-19～22 源码审计交接
+- 发件人：static-bug-audit-round5-20261017
+- 收件人：MAIN
+- 时间：2026-10-17
+- 状态：待处理
+- 关联任务/文件：`docs/联机MOD第五轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
+- 消息：只读审计新增 4 个问题：未认证大消息主线程解码、关系枚举越界、模拟者提交其他访客个人资产字段缺授权来源、异常消息错误回送失败使整个 Tick 停止。须协调 Transport/Session/Game Owner 依风险等级处理，并分别做故障注入；本轮不解除冻结或触碰源码及安装副本。
+- 需要回复：请主控安排各模块 Owner 确认后续接口边界与安全验证策略；此消息不代表自动已读。
+- 回复关联：无
+
+
 ### MSG-20261017-static-bug-audit-r3-MAIN-01 — 第三轮 BUG-11～14 静态审计移交
 - 发件人：static-bug-audit-round3-20261017
 - 收件人：MAIN
