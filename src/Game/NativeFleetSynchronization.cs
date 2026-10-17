@@ -128,8 +128,8 @@ namespace FreeWorldMultiplayer
                 }
                 sampledTransit.Add(CaptureCachedTransit(player.Key));
             }
-            foreach (long uid in fleetSamples.Keys.Where(uid => !present.Contains(uid)).ToArray()) fleetSamples.Remove(uid);
-            foreach (long uid in transitValues.Keys.Where(uid => !sampledTransitIds.Contains(uid)).ToArray()) transitValues.Remove(uid);
+            FleetSampleCachePruner.RemoveMissing(fleetSamples, present);
+            FleetSampleCachePruner.RemoveMissing(transitValues, sampledTransitIds);
             fleetSampleFrame = Time.frameCount;
         }
         private GalaxySnapshot CaptureFleetFrame(string recipient)
