@@ -158,6 +158,89 @@ internal static class Program
                 " production host ticks with active local and remote visits: allocated " +
                 activeAllocated + " B for visit snapshots after warmup");
 
+            // Real pending and delivery ACKs can remain active for many game
+            // frames (including long latency or a briefly unreachable peer).
+            // Measure BOTH production TickCommunication snapshot paths while
+            // using stable, non-expiring timeouts, not empty dictionaries.
+            const int pendingCount = 8, deliveryCount = 64, activeChatFrames = 5000;
+            var activeChat = new MultiplayerSession { IsHost = true };
+            for (int i = 0; i < pendingCount; i++)
+                activeChat.AddPending("stable-chat-" + i, 3000);
+            for (int i = 0; i < deliveryCount; i++)
+                activeChat.AddDelivery("stable-relay-" + i, 3000);
+            long activeChatAllocated =
+                AllocatedByTicks(() => activeChat.TestTick(0.016), activeChatFrames);
+            Check(activeChatAllocated == 0,
+                "real active host chat/relay tick reuses both ACK timer value snapshots");
+            Check(activeChat.PendingCount == pendingCount &&
+                activeChat.DeliveryCount == deliveryCount,
+                "no active room ACK is prematurely expired or lost");
+            Check(Math.Abs(activeChat.PendingSeconds("stable-chat-0") -
+                (3000 - (activeChatFrames + 100) * .016)) < .0001 &&
+                Math.Abs(activeChat.DeliverySeconds("stable-relay-0") -
+                (3000 - (activeChatFrames + 100) * .016)) < .0001,
+                "both real ACK countdown clocks advance exactly once per frame");
+            Console.WriteLine("INFO: " + activeChatFrames +
+                " production ticks with " + pendingCount + " pending messages and " +
+                deliveryCount + " delivery ACKs: managed timer-snapshot allocations " +
+                activeChatAllocated + " B after warmup");
+            activeChat.TestDisconnectAllCommunication();
+            Check(activeChat.PendingCount == 0 && activeChat.DeliveryCount == 0,
+                "room exit clears both ACK windows and resets their reusable buffers");
+
+            var nestedPending = new MultiplayerSession { IsHost = false };
+            nestedPending.AddPending("outer-chat", 0.1);
+            nestedPending.AddPending("other-chat", 10);
+            bool nestedChatTick = false;
+            nestedPending.ChatChanged += msg =>
+            {
+                if (msg.ClientMessageId != "outer-chat" || nestedChatTick) return;
+                nestedChatTick = true;
+                nestedPending.AddPending("born-chat", 20);
+                nestedPending.TestTick(0.25);
+            };
+            nestedPending.TestTick(0.1);
+            Check(nestedChatTick && nestedPending.PendingCount == 2 &&
+                Math.Abs(nestedPending.PendingSeconds("other-chat") - 9.65) < .00001 &&
+                Math.Abs(nestedPending.PendingSeconds("born-chat") - 19.75) < .00001,
+                "reentrant real ChatChanged listener snapshots the newly added message only in its own tick");
+
+            var nestedDelivery = new MultiplayerSession { IsHost = true };
+            nestedDelivery.AddPending("client-first-delivery", 50);
+            nestedDelivery.AddDelivery("first-delivery", 0.1, senderLocal: true);
+            bool addedDuringDelivery = false;
+            nestedDelivery.ChatChanged += msg =>
+            {
+                if (msg.ClientMessageId != "client-first-delivery" || addedDuringDelivery) return;
+                addedDuringDelivery = true;
+                nestedDelivery.AddDelivery("born-delivery", 10);
+            };
+            nestedDelivery.TestTick(0.2);
+            Check(addedDuringDelivery && nestedDelivery.DeliveryCount == 1 &&
+                nestedDelivery.DeliverySeconds("born-delivery") == 10,
+                "delivery callback may add an ACK without advancing it in the current snapshot");
+            nestedDelivery.TestTick(0.3);
+            Check(Math.Abs(nestedDelivery.DeliverySeconds("born-delivery") - 9.7) < .00001,
+                "callback-added delivery is first advanced by the next real host tick");
+
+            var failingChat = new MultiplayerSession { IsHost = false };
+            failingChat.AddPending("fail-chat", 0.1);
+            failingChat.AddPending("after-fail", 10);
+            Action<RoomChatMessage> failListener = msg =>
+            { throw new InvalidOperationException("test chat UI callback failure"); };
+            failingChat.ChatChanged += failListener;
+            bool chatErrorPropagated = false;
+            try { failingChat.TestTick(0.2); }
+            catch (InvalidOperationException error)
+            { chatErrorPropagated = error.Message == "test chat UI callback failure"; }
+            finally { failingChat.ChatChanged -= failListener; }
+            Check(chatErrorPropagated &&
+                Math.Abs(failingChat.PendingSeconds("after-fail") - 10) < .00001,
+                "chat UI callback failure propagates without advancing later pending records");
+            failingChat.TestTick(0.3);
+            Check(Math.Abs(failingChat.PendingSeconds("after-fail") - 9.7) < .00001,
+                "a failed chat callback releases the snapshot for normal retry");
+
             // Real VisitChanged listener can synchronously reenter Tick and
             // must not overwrite the outer visit timer snapshot.
             var reentrantVisits = new MultiplayerSession { IsHost = false };

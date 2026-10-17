@@ -100,16 +100,19 @@ namespace FreeWorldMultiplayer
         public double PendingSeconds(string id) { return pendingChats[id].Seconds; }
         public RoomChatMessage ChatById(string id)
         { return chatHistory.Find(m => m.ClientMessageId == id); }
-        public void AddDelivery(string id, double seconds)
+        public void AddDelivery(string id, double seconds, bool senderLocal = false)
         {
             var relay = new ChatRelay
             {
-                Sender = "guest", Recipient = "host", Seconds = seconds,
+                Sender = senderLocal ? "host" : "guest", Recipient = "host", Seconds = seconds,
                 Message = new RoomChatMessage { ClientMessageId = "client-" + id, MessageId = id }
             };
             chatDeliveries.Add(id, relay);
             chatRelays.Add("guest:client-" + id, relay);
         }
+        public double DeliverySeconds(string id) { return chatDeliveries[id].Seconds; }
+        public void TestDisconnectAllCommunication()
+        { DisconnectCommunication(LocalPlayerId, true); }
         public void AddLocalVisit(string id, double seconds)
         {
             localVisits.Add(id, new PlayerVisitUpdate

@@ -26,6 +26,11 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<string, ChatPending> pendingChats = new Dictionary<string, ChatPending>();
         private readonly Dictionary<string, ChatRelay> chatRelays = new Dictionary<string, ChatRelay>();
         private readonly Dictionary<string, ChatRelay> chatDeliveries = new Dictionary<string, ChatRelay>();
+        // Pending ACKs are small but may stay active for many room ticks.
+        // Reuse the same proven, reentrancy-safe dictionary-value snapshot as
+        // visit timers; callbacks can remove/add chat records mid-iteration.
+        private readonly VisitTickSnapshot<ChatPending> pendingChatTickSnapshot = new VisitTickSnapshot<ChatPending>();
+        private readonly VisitTickSnapshot<ChatRelay> deliveryChatTickSnapshot = new VisitTickSnapshot<ChatRelay>();
         private readonly Dictionary<string, long> senderChatSequences = new Dictionary<string, long>();
         private readonly CommunicationRateLimiter communicationRateLimiter = new CommunicationRateLimiter();
 
@@ -232,11 +237,25 @@ namespace FreeWorldMultiplayer
             // Keep snapshot iteration when callbacks can mutate the dictionary,
             // but do not allocate empty Lists on every idle frame.
             if (pendingChats.Count != 0)
-                foreach (ChatPending pending in pendingChats.Values.ToList())
-                    if ((pending.Seconds -= seconds) <= 0) CompleteLocalChat(new ChatOutcome { ClientMessageId = pending.Message.ClientMessageId, Error = "等待送达回执超时，未确认对方收到。" });
+            {
+                var pendingSnapshot = pendingChatTickSnapshot.Capture(pendingChats);
+                try
+                {
+                    foreach (ChatPending pending in pendingSnapshot)
+                        if ((pending.Seconds -= seconds) <= 0) CompleteLocalChat(new ChatOutcome { ClientMessageId = pending.Message.ClientMessageId, Error = "等待送达回执超时，未确认对方收到。" });
+                }
+                finally { pendingChatTickSnapshot.Release(pendingSnapshot); }
+            }
             if (IsHost && chatDeliveries.Count != 0)
-                foreach (ChatRelay relay in chatDeliveries.Values.ToList())
-                    if ((relay.Seconds -= seconds) <= 0) FinishChatRelay(relay, "对方未确认收到，消息送达超时。");
+            {
+                var deliverySnapshot = deliveryChatTickSnapshot.Capture(chatDeliveries);
+                try
+                {
+                    foreach (ChatRelay relay in deliverySnapshot)
+                        if ((relay.Seconds -= seconds) <= 0) FinishChatRelay(relay, "对方未确认收到，消息送达超时。");
+                }
+                finally { deliveryChatTickSnapshot.Release(deliverySnapshot); }
+            }
             TickVisits(seconds);
         }
         private void DisconnectCommunication(string playerId, bool all)
@@ -254,6 +273,11 @@ namespace FreeWorldMultiplayer
             if (all) foreach (ChatPending pending in pendingChats.Values.ToList())
                 CompleteLocalChat(new ChatOutcome { ClientMessageId = pending.Message.ClientMessageId, Error = "已离开房间，消息未确认送达。" });
             DisconnectVisits(playerId, all);
+            if (all)
+            {
+                pendingChatTickSnapshot.Reset();
+                deliveryChatTickSnapshot.Reset();
+            }
         }
     }
 }
