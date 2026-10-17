@@ -164,7 +164,7 @@ namespace FreeWorldMultiplayer
             long fleet = actor == record.AttackerPlayerId ? record.AttackerFleetId : record.DefenderFleetId;
             if (input.FleetId != fleet || OwnerOfEntity(fleet) != actor || input.ShipId < 0 || OwnerOfEntity(input.ShipId) != actor
                 || input.NativeJson == null || input.NativeJson.Length > 16384
-                || !new[] { "Pilot", "Seat", "Vent", "Shield", "System", "Group", "AutoFire", "Autopilot", "Wing", "Target", "IssueMoveOrder", "AppendMoveWaypoint", "IssueRetreatOrder", "IssueAttackOrder", "IssueDefendOrder", "IssueCaptureOrder", "ClearOrder" }.Contains(input.Operation))
+                || !BattleInputAllowedOperations.Contains(input.Operation))
                 throw new MessageRejectionException("只能控制本战中本人真实舰队的舰船。");
             string key = record.BattleId + ":" + actor; long sequence;
             if (input.Sequence <= 0 || battleInputSequences.TryGetValue(key, out sequence) && input.Sequence <= sequence) return;
