@@ -17,7 +17,7 @@ namespace FreeWorldMultiplayer
 
         // Read the fingerprint embedded in the DLL that Unity actually loaded,
         // not the disk package or a potentially stale runtime BUILD-INFO file.
-        // build.ps1 emits "V1.19+<64 hex SourceRevision>" in this attribute.
+        // build.ps1 emits "V<MOD version>+<64 hex SourceRevision>" in this attribute.
         internal static string LoadedSourceRevision
         {
             get
