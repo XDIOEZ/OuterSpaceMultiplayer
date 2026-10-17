@@ -60,6 +60,7 @@ namespace FreeWorldMultiplayer
         private static readonly Dictionary<Type, FieldInfo[]> fleetSyncFields = new Dictionary<Type, FieldInfo[]>();
         private static readonly Func<string, string, FleetValue> NewFleetWireField =
             (name, encoded) => new FleetValue { Name = name, NativeValue = encoded };
+        private static readonly Func<FieldInfo, string> NativeFleetFieldName = field => field.Name;
         private static readonly Func<FWAirShip, long> NativeFleetShipUid = ship => ship.getUID();
         private static readonly Action<FWAirShip, FWAirShip> NativeFleetShipCopy =
             (source, destination) => NativeWire.Copy(source, destination);
@@ -242,9 +243,17 @@ namespace FreeWorldMultiplayer
                     throw new InvalidOperationException("Fleet content changed its native type or primary identity.");
                 var decoded = new Dictionary<string, object>();
                 FieldInfo[] fields = FleetFields(type);
+                // Keep tiny partial deltas on the original LINQ path. Dense
+                // content snapshots reuse one exact ordinal name index for
+                // every field in this record and discard it before native writes.
+                var fieldLookup = content.Fields != null &&
+                    FleetContentFieldLookup<FieldInfo>.ShouldIndex(content.Fields.Count, fields.Length)
+                    ? new FleetContentFieldLookup<FieldInfo>(fields, NativeFleetFieldName) : null;
                 foreach (FleetValue value in content.Fields)
                 {
-                    FieldInfo field = fields.SingleOrDefault(f => f.Name == value.Name);
+                    FieldInfo field = fieldLookup == null
+                        ? fields.SingleOrDefault(f => f.Name == value.Name)
+                        : fieldLookup.Find(value.Name);
                     if (field == null || decoded.ContainsKey(value.Name)) throw new InvalidOperationException("Fleet delta references an unknown or duplicated field.");
                     object incoming = NativeWire.Unpack(value.NativeValue, field.FieldType);
                     if (value.Name == "uid" && (long)incoming != content.FleetId || value.Name == "ownerId" && (int)incoming != owner.userId)
