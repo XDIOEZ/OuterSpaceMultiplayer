@@ -162,6 +162,13 @@ namespace FreeWorldMultiplayer
             if (world == null || world.Snapshot == null) throw new InvalidDataException("Cannot save a world without the native world snapshot.");
             string dir = WorldDirectory(world.WorldId);
             Directory.CreateDirectory(dir);
+            // If Load had to use active.json.bak, the current active.json is not a
+            // trustworthy predecessor. File.Replace would otherwise overwrite the
+            // only good .bak with that damaged pointer and cleanup would delete its
+            // generation. Restore the already verified fallback as the active
+            // pointer *before* starting a new save; a failure still leaves a
+            // complete, selectable old generation.
+            RestoreRecoveredPointerBeforeSave(world, dir);
             long oldGeneration = world.SaveGeneration;
             long generation = checked(oldGeneration + 1);
             // A failed previous write may leave an uncommitted generation file; never overwrite it.
@@ -204,6 +211,26 @@ namespace FreeWorldMultiplayer
             }
         }
         private static string FileName(long generation) { return "generation_" + generation.ToString("D16", CultureInfo.InvariantCulture) + ".json"; }
+        private void RestoreRecoveredPointerBeforeSave(WorldState world, string dir)
+        {
+            if (lastLoadedPointer == null || String.IsNullOrWhiteSpace(LastLoadWarning)
+                || lastLoadedPointer.WorldId != world.WorldId
+                || lastLoadedPointer.Generation != world.SaveGeneration) return;
+            string backupPath = Path.Combine(dir, "active.json.bak");
+            byte[] pointerBytes = File.ReadAllBytes(backupPath);
+            SavePointer pointer = JsonData.Read<SavePointer>(Encoding.UTF8.GetString(pointerBytes));
+            if (pointer == null || pointer.WorldId != world.WorldId || pointer.Generation != world.SaveGeneration
+                || pointer.File != FileName(pointer.Generation) || !CryptoData.Equal(pointer.Sha256, lastLoadedPointer.Sha256))
+                throw new InvalidDataException("Recovered backup pointer has changed; refusing to replace its only valid generation.");
+            // Detect a newly damaged backup before touching either pointer. This
+            // additional read is only paid on the first save following recovery.
+            byte[] generationBytes = File.ReadAllBytes(Path.Combine(dir, pointer.File));
+            string digest;
+            using (var sha = SHA256.Create()) digest = Convert.ToBase64String(sha.ComputeHash(generationBytes));
+            if (!CryptoData.Equal(digest, pointer.Sha256))
+                throw new InvalidDataException("Recovered generation checksum changed before save; refusing to overwrite its pointer.");
+            AtomicFile.Write(Path.Combine(dir, "active.json"), pointerBytes);
+        }
         private static SavePointer TryPointer(string path)
         {
             try { return File.Exists(path) ? JsonData.Read<SavePointer>(File.ReadAllText(path, Encoding.UTF8)) : null; }

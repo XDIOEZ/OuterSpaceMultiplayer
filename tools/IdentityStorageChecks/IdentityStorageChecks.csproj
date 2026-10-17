@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="RecoveryPointerChecks.cs" />
     <Compile Include="WorldStubs.cs" />
     <!-- Compile the real in-progress production identity/settings/save sources. -->
     <!-- These Core owner files remain untracked/dirty: no silent handoff. -->

@@ -320,6 +320,7 @@ internal static class Program
             IdentityChecks(root);
             SettingsChecks(root);
             SaveChecks(root);
+            RecoveryPointerChecks.Run(root, Check);
             Console.WriteLine("PASS: " + checks +
                 " production IdentityStore / ModSettingsStore / SaveStore checks");
             Console.WriteLine("SYNTHETIC_FIXTURE=" + root);
