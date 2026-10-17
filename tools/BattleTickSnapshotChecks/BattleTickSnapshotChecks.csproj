@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- Real wire DTOs contain fields populated by the game, not this isolated runner. -->
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile the exact two-phase battle Tick snapshot helper and real DTOs. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Session/BattleTickRecordSnapshot.cs" Link="BattleTickRecordSnapshot.cs" />
+    <Compile Include="../../src/Core/PlayerFleetBattles.cs" Link="PlayerFleetBattles.cs" />
+  </ItemGroup>
+</Project>

@@ -11,6 +11,7 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<string, HashSet<string>> battleReady = new Dictionary<string, HashSet<string>>();
         private readonly Dictionary<string, HashSet<string>> battleQuiescent = new Dictionary<string, HashSet<string>>();
         private readonly Dictionary<string, double> battleDeadlines = new Dictionary<string, double>();
+        private readonly BattleTickRecordSnapshot battleTickRecords = new BattleTickRecordSnapshot();
         private sealed class BattleFrameWindow
         {
             internal readonly Dictionary<long, PlayerFleetBattleFrame> Frames = new Dictionary<long, PlayerFleetBattleFrame>();
@@ -264,8 +265,14 @@ namespace FreeWorldMultiplayer
         private void StopNonHostileBattles()
         {
             if (!IsHost || World == null || World.FleetBattles == null) return;
-            foreach (var battle in World.FleetBattles.Values.Where(x => x.Stage != PlayerFleetBattleStage.Finished && x.Stage != PlayerFleetBattleStage.Blocked).ToList())
-                if (GetRelation(battle.AttackerPlayerId, battle.DefenderPlayerId) != Relation.Hostile) EndNonHostileBattle(battle);
+            var active = battleTickRecords.Capture(World.FleetBattles, true);
+            try
+            {
+                foreach (PlayerFleetBattleRecord battle in active)
+                    if (GetRelation(battle.AttackerPlayerId, battle.DefenderPlayerId) != Relation.Hostile)
+                        EndNonHostileBattle(battle);
+            }
+            finally { battleTickRecords.Release(active); }
         }
         private void EndNonHostileBattle(PlayerFleetBattleRecord battle)
         {
@@ -405,8 +412,11 @@ namespace FreeWorldMultiplayer
             // every frame of a room with no active battle.
             if (!FleetBattleTickGate.HasWork(World.FleetBattles, IsHost, battleDeadlines.Count)) return;
             StopNonHostileBattles();
-            foreach (PlayerFleetBattleRecord record in World.FleetBattles.Values.ToList())
+            var snapshot = battleTickRecords.Capture(World.FleetBattles, false);
+            try
             {
+                foreach (PlayerFleetBattleRecord record in snapshot)
+                {
                 if (IsHost && battleDeadlines.ContainsKey(record.BattleId))
                 {
                     battleDeadlines[record.BattleId] -= seconds;
@@ -479,10 +489,13 @@ namespace FreeWorldMultiplayer
                     if (IsHost) InterruptBattle(record, "舰战运行失败：" + error);
                     else Send("host", "battle.ready", new PlayerFleetBattleReady { BattleId = record.BattleId, AuthorityEpoch = record.AuthorityEpoch, Success = false, Error = error.GetType().Name });
                 }
+                }
             }
+            finally { battleTickRecords.Release(snapshot); }
         }
         private void DisconnectPlayerFleetBattles(string player, bool all)
         {
+            if (all) battleTickRecords.Reset();
             if (World == null || World.FleetBattles == null) return;
             foreach (var record in World.FleetBattles.Values.Where(x => x.Stage != PlayerFleetBattleStage.Finished && (all || IsBattleParticipant(x, player))).ToList())
             {
