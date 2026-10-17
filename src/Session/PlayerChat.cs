@@ -20,7 +20,6 @@ namespace FreeWorldMultiplayer
             internal ChatOutcome Outcome;
             internal double Seconds = 10;
         }
-        private sealed class CommunicationRate { internal double Tokens = 4, Last; }
         private double communicationTime;
         private long outgoingChatSequence, incomingChatSequence, hostChatSequence;
         private readonly List<RoomChatMessage> chatHistory = new List<RoomChatMessage>();
@@ -28,7 +27,7 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<string, ChatRelay> chatRelays = new Dictionary<string, ChatRelay>();
         private readonly Dictionary<string, ChatRelay> chatDeliveries = new Dictionary<string, ChatRelay>();
         private readonly Dictionary<string, long> senderChatSequences = new Dictionary<string, long>();
-        private readonly Dictionary<string, CommunicationRate> communicationRates = new Dictionary<string, CommunicationRate>();
+        private readonly CommunicationRateLimiter communicationRateLimiter = new CommunicationRateLimiter();
 
         private static bool CommunicationId(string id)
         { return id != null && id.Length == 32 && id.All(c => c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'); }
@@ -57,14 +56,7 @@ namespace FreeWorldMultiplayer
         { ValidateCommunicationTarget(playerId, fleetUid); PlayerCommunicationRequested?.Invoke(playerId, fleetUid); }
         private bool ConsumeCommunicationRate(string playerId, string category)
         {
-            string key = playerId + ":" + category;
-            double capacity = category == "battle" ? 120 : category == "battleFrame" ? 20 : category == "visit" ? 2 : 4;
-            double refill = category == "battle" ? 60 : category == "battleFrame" ? 20 : category == "visit" ? 0.1 : 1;
-            CommunicationRate rate;
-            if (!communicationRates.TryGetValue(key, out rate)) communicationRates[key] = rate = new CommunicationRate { Last = communicationTime, Tokens = capacity };
-            rate.Tokens = Math.Min(capacity, rate.Tokens + (communicationTime - rate.Last) * refill); rate.Last = communicationTime;
-            if (rate.Tokens < 1) return false;
-            rate.Tokens -= 1; return true;
+            return communicationRateLimiter.Consume(playerId, category, communicationTime);
         }
         private bool TrySendCommunication(string playerId, string kind, object payload)
         {
@@ -256,7 +248,7 @@ namespace FreeWorldMultiplayer
                 if (playerId != null)
                 {
                     senderChatSequences.Remove(playerId);
-                    foreach (string key in communicationRates.Keys.Where(x => x.StartsWith(playerId + ":", StringComparison.Ordinal)).ToList()) communicationRates.Remove(key);
+                    communicationRateLimiter.ForgetPlayer(playerId);
                 }
             }
             if (all) foreach (ChatPending pending in pendingChats.Values.ToList())

@@ -82,6 +82,12 @@ namespace FreeWorldMultiplayer
         // Test adapters are declared in this fake boundary, while TickCommunication
         // and TickVisits execute the linked, unmodified production method bodies.
         public void TestTick(double seconds) { TickCommunication(seconds); }
+        // Exercise the real production PlayerChat entrypoint, not only the
+        // linked limiter helper, including host tick and disconnect wiring.
+        public bool TestConsumeRate(string playerId, string category)
+        { return ConsumeCommunicationRate(playerId, category); }
+        public void TestDisconnectRate(string playerId)
+        { DisconnectCommunication(playerId, false); }
         public double TestClock { get { return communicationTime; } }
         public int PendingCount { get { return pendingChats.Count; } }
         public int DeliveryCount { get { return chatDeliveries.Count; } }

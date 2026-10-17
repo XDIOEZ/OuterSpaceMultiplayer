@@ -137,7 +137,29 @@ internal static class Program
             Check(nonHost.HostVisitSeconds("host-should-not-tick") == 2,
                 "guest cannot advance host-only visit deadlines");
 
-            Console.WriteLine("PASS: " + checks + " production communication and visit tick checks");
+            var rateHost = new MultiplayerSession { IsHost = true };
+            for (int i = 0; i < 20; i++)
+                Check(rateHost.TestConsumeRate("guest", "battleFrame"),
+                    "host battle-frame input consumes exact original 20 tokens");
+            Check(!rateHost.TestConsumeRate("guest", "battleFrame"),
+                "host rejects battle-frame input after original category budget");
+            Check(rateHost.TestConsumeRate("guest", "chat"),
+                "same player retains independent chat token bucket");
+            Check(rateHost.TestConsumeRate("host", "battleFrame"),
+                "another player retains independent frame token bucket");
+            rateHost.TestTick(0.05);
+            Check(rateHost.TestConsumeRate("guest", "battleFrame"),
+                "production idle Tick advances rate-limit refill time");
+            rateHost.TestDisconnectRate("guest");
+            for (int i = 0; i < 20; i++)
+                Check(rateHost.TestConsumeRate("guest", "battleFrame"),
+                    "real disconnect clears all categories for the former guest");
+            Check(!rateHost.TestConsumeRate("guest", "battleFrame"),
+                "same player is again rate-limited after its fresh reconnect budget");
+            Check(rateHost.TestConsumeRate("host", "battleFrame"),
+                "disconnect cannot replenish or invalidate the host's own limiter");
+
+            Console.WriteLine("PASS: " + checks + " production communication/visit tick and rate checks");
             return 0;
         }
         catch (Exception exception)
