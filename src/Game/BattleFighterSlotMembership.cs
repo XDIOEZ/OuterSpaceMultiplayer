@@ -9,6 +9,22 @@ namespace FreeWorldMultiplayer
     // the dictionary preserves its exact carrier/wing/slot/runtime-UID match.
     internal sealed class BattleFighterSlotMembership
     {
+        private struct WingKey : IEquatable<WingKey>
+        {
+            internal readonly long Carrier;
+            internal readonly int Wing;
+            internal WingKey(long carrier, int wing)
+            { Carrier = carrier; Wing = wing; }
+            public bool Equals(WingKey other)
+            { return Carrier == other.Carrier && Wing == other.Wing; }
+            public override bool Equals(object value)
+            { return value is WingKey && Equals((WingKey)value); }
+            public override int GetHashCode()
+            {
+                unchecked { return ((int)(Carrier ^ (Carrier >> 32)) * 397) ^ Wing; }
+            }
+        }
+
         private struct SlotKey : IEquatable<SlotKey>
         {
             internal readonly long Carrier;
@@ -34,6 +50,31 @@ namespace FreeWorldMultiplayer
         }
 
         private readonly Dictionary<SlotKey, long> fighters = new Dictionary<SlotKey, long>();
+        // A validated wing may have up to 256 slots, but we only index wings
+        // actually referenced by a fighter. Empty/unused wings cost nothing.
+        // Per-frame indexes are never retained across native fighter respawns.
+        private readonly HashSet<WingKey> indexedWings = new HashSet<WingKey>();
+        private readonly Dictionary<SlotKey, long> declaredSlots = new Dictionary<SlotKey, long>();
+
+        internal bool DeclaredSlotMatches<TSlot>(long carrier, int wing,
+            IEnumerable<TSlot> slots, int slot, long runtimeId,
+            Func<TSlot, int> indexOf, Func<TSlot, long> fighterOf)
+        {
+            if (slots == null) throw new ArgumentNullException(nameof(slots));
+            if (indexOf == null) throw new ArgumentNullException(nameof(indexOf));
+            if (fighterOf == null) throw new ArgumentNullException(nameof(fighterOf));
+            if (indexedWings.Add(new WingKey(carrier, wing)))
+            {
+                // The caller has already rejected null and duplicate slot
+                // identities. Do not weaken that validation or copy native
+                // Unity components into this transient wire-state index.
+                foreach (TSlot candidate in slots)
+                    declaredSlots.Add(new SlotKey(carrier, wing, indexOf(candidate)), fighterOf(candidate));
+            }
+            long declared;
+            return declaredSlots.TryGetValue(new SlotKey(carrier, wing, slot), out declared)
+                && declared == runtimeId;
+        }
 
         // Same uniqueness check as the previous occupied HashSet of
         // "carrier/wing/slot", including different runtime IDs in one slot.

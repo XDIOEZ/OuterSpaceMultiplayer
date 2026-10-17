@@ -76,6 +76,8 @@ namespace FreeWorldMultiplayer
         private GameObject playerBattleFighterRoot;
         private long playerBattleFighterSequence, appliedPlayerBattleFighterSequence;
         private double playerBattleFighterReceipt;
+        private static readonly Func<BattleFighterSlot, int> BattleDeclaredSlotIndex = value => value.Index;
+        private static readonly Func<BattleFighterSlot, long> BattleDeclaredSlotFighter = value => value.Fighter;
         private static readonly Func<WeaponController, string> ReplicaFighterWeaponSlot =
             weapon => weapon.GetComponentInParent<WeaponSlot>().slotId;
         internal bool CanRunPlayerBattleFighterSimulation { get { return !HasNativePlayerBattle || CanRunPlayerBattle; } }
@@ -214,7 +216,10 @@ namespace FreeWorldMultiplayer
                         ? occupied.Add(FighterWingKey(fighter.Carrier, fighter.Wing) + "/" + fighter.Slot)
                         : slotMembership.TryRegister(fighter.Carrier, fighter.Wing, fighter.Slot, fighter.RuntimeId))
                     || !wings.TryGetValue(FighterWingKey(fighter.Carrier, fighter.Wing), out wing) || wing.Bay != fighter.Bay
-                    || !wing.Slots.Any(s => s.Index == fighter.Slot && s.Fighter == fighter.RuntimeId)
+                    || !(slotMembership == null
+                        ? wing.Slots.Any(s => s.Index == fighter.Slot && s.Fighter == fighter.RuntimeId)
+                        : slotMembership.DeclaredSlotMatches(fighter.Carrier, fighter.Wing, wing.Slots,
+                            fighter.Slot, fighter.RuntimeId, BattleDeclaredSlotIndex, BattleDeclaredSlotFighter))
                     || fighter.Hull < 0 || fighter.MaxHull <= 0 || fighter.Hull > fighter.MaxHull || fighter.ArmorRatio < 0 || fighter.ArmorRatio > 1
                     || fighter.Flux < 0 || fighter.HardFlux < 0 || fighter.HardFlux > fighter.Flux || fighter.ShieldArc < 0 || fighter.ShieldArc > 360
                     || fighter.Cells == null || fighter.Cells.Count > 100000 || fighter.Cells.Values.Any(v => float.IsNaN(v) || v < 0 || v > 1)
