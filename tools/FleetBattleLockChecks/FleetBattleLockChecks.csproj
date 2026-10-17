@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <!-- The full production DTO file includes wire-only fields this isolated
+         lookup test does not initialize. Those fields are not test fixtures. -->
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile the same record DTO and lookup helper used by MultiplayerSession. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Session/FleetBattleLockProbe.cs" Link="FleetBattleLockProbe.cs" />
+    <Compile Include="../../src/Core/PlayerFleetBattles.cs" Link="PlayerFleetBattles.cs" />
+  </ItemGroup>
+</Project>

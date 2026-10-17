@@ -25,10 +25,10 @@ namespace FreeWorldMultiplayer
         private long nextBattleInput;
         private bool IsBattleParticipant(PlayerFleetBattleRecord battle, string player) => battle.AttackerPlayerId == player || battle.DefenderPlayerId == player;
         public PlayerFleetBattleRecord GetFleetBattleLock(long fleetUid)
-        { return World == null || World.FleetBattles == null ? null : World.FleetBattles.Values.FirstOrDefault(x => x.Stage != PlayerFleetBattleStage.Finished && (x.AttackerFleetId == fleetUid || x.DefenderFleetId == fleetUid)); }
+        { return FleetBattleLockProbe.FindFleet(World == null ? null : World.FleetBattles, fleetUid); }
         public bool IsPlayerFleetBattleLocked(long fleetUid) => GetFleetBattleLock(fleetUid) != null;
         private bool PlayerHasFleetBattle(string playerId)
-        { return World != null && World.FleetBattles != null && World.FleetBattles.Values.Any(x => x.Stage != PlayerFleetBattleStage.Finished && IsBattleParticipant(x, playerId)); }
+        { return FleetBattleLockProbe.HasParticipant(World == null ? null : World.FleetBattles, playerId); }
         public void RequestPlayerFleetAttack(string playerId, long fleetUid)
         {
             ValidateCommunicationTarget(playerId, fleetUid);
