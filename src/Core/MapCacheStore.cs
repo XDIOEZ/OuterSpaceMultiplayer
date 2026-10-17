@@ -61,7 +61,21 @@ namespace FreeWorldMultiplayer
         {
             if (content == null) throw new ArgumentNullException(nameof(content));
             using (var sha = SHA256.Create())
-                return BitConverter.ToString(sha.ComputeHash(content, offset, count)).Replace("-", "").ToLowerInvariant();
+            {
+                byte[] digest = sha.ComputeHash(content, offset, count);
+                // BitConverter.ToString + Replace + ToLowerInvariant allocates
+                // three temporary strings for every cached map chunk. Emit the
+                // same 64 lowercase hex characters directly using one buffer.
+                const string hex = "0123456789abcdef";
+                var chars = new char[digest.Length * 2];
+                for (int i = 0; i < digest.Length; i++)
+                {
+                    byte b = digest[i];
+                    chars[2 * i] = hex[b >> 4];
+                    chars[2 * i + 1] = hex[b & 15];
+                }
+                return new string(chars);
+            }
         }
         private static bool IsHash(string value)
         {

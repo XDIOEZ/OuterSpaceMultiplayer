@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using FreeWorldMultiplayer;
 using Newtonsoft.Json.Linq;
 
@@ -19,6 +20,22 @@ internal static class Program
     {
         try { action(); return false; }
         catch (T) { return true; }
+    }
+
+    // Independent reference formatter matching the previous production code.
+    // Keep it in the tests so the optimized hex writer cannot validate itself.
+    private static string LegacyHashContent(byte[] content, int offset, int count)
+    {
+        using (var sha = SHA256.Create())
+            return BitConverter.ToString(sha.ComputeHash(content, offset, count)).Replace("-", "").ToLowerInvariant();
+    }
+
+    private static long MeasureHashAllocations(Func<string> action)
+    {
+        for (int i = 0; i < 20; i++) action(); // JIT and crypto initialization outside measurement.
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++) action();
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 
     private static MapSnapshot Example(long mapId)
@@ -59,6 +76,29 @@ internal static class Program
             const string world = "synthetic-world-a";
             const long mapId = 1000001000004L;
             const string scope = "synthetic-steam-target";
+            Check(MapCacheStore.HashContent(new byte[0]) ==
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "empty SHA256 retains the standard lowercase hexadecimal digest");
+            Check(MapCacheStore.HashContent(Encoding.ASCII.GetBytes("abc")) ==
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                "nonempty SHA256 retains the standard lowercase hexadecimal digest");
+            var rangeFixture = new byte[8192];
+            new Random(12345).NextBytes(rangeFixture);
+            bool legacyEquivalent = true;
+            foreach (int count in new[] { 0, 1, 31, 32, 33, 64, 1024, 4088 })
+                legacyEquivalent &= MapCacheStore.HashContent(rangeFixture, 7, count)
+                    == LegacyHashContent(rangeFixture, 7, count);
+            Check(legacyEquivalent, "bounded slices match the previous SHA256 text formatter exactly");
+            var everyByte = new byte[256];
+            for (int i = 0; i < everyByte.Length; i++) everyByte[i] = (byte)i;
+            Check(MapCacheStore.HashContent(everyByte) == LegacyHashContent(everyByte, 0, everyByte.Length),
+                "all 256 byte values produce identical cache content addresses");
+            long legacyAllocated = MeasureHashAllocations(() => LegacyHashContent(rangeFixture, 7, 128));
+            long optimizedAllocated = MeasureHashAllocations(() => MapCacheStore.HashContent(rangeFixture, 7, 128));
+            Check(optimizedAllocated < legacyAllocated,
+                "direct hex formatting allocates fewer bytes than three-string legacy formatting");
+            Console.WriteLine("INFO: 1000 synthetic SHA256 hash formats allocated " + legacyAllocated
+                + " bytes before and " + optimizedAllocated + " bytes after (managed allocations only)");
             byte[] slice = Encoding.UTF8.GetBytes("repeated-chunk-地图");
             byte[] padded = new byte[slice.Length + 11];
             Buffer.BlockCopy(slice, 0, padded, 5, slice.Length);
