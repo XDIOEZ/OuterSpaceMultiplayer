@@ -127,7 +127,12 @@ namespace FreeWorldMultiplayer
                     }
                 }
             }
-            foreach (long uid in remoteFleetProxies.Keys.Where(uid => !visibleRemoteFleetIds.Contains(uid)).ToArray()) RemoveRemoteFleetProxy(uid);
+            // Snapshot absent proxies before removing native GameObjects:
+            // their OnDestroy hooks can run during removal. When all ships
+            // remain visible no temporary LINQ iterator/array is allocated.
+            var departed = RemoteFleetVisibilityPruner.FindMissing(remoteFleetProxies, visibleRemoteFleetIds);
+            if (departed != null)
+                foreach (long uid in departed) RemoveRemoteFleetProxy(uid);
         }
         private void PushRemoteFleetPose(FleetPose pose, long sequence, bool reset)
         {
