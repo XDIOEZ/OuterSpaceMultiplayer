@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261017-agent-tasks-bug14-15-MAIN-01 — 缓存超时与备份回退链修复交接
+- 发件人：agent-tasks-bug14-cache-timeout-20261017 / agent-tasks-bug15-backup-chain-20261017
+- 收件人：MAIN
+- 时间：2026-10-17（当日交接）
+- 状态：仅通知
+- 关联任务/文件：`agent-tasks/已完成/BUG-14-缓存超时通知隔离.md`、`agent-tasks/已完成/BUG-15-恢复后备份链损坏.md`
+- 消息：已分别完成 V1.24 `ac45398`、V1.25 `60014f6` 的精确提交；生产缓存 Tick 假传输故障注入和合成 SaveStore 双代破坏/恢复链注入均通过，三端只构建成功。保留所有其它 Agent 历史源码；BUG-16/17 UID 边界、BUG-18 列表性能及 R13 干净 Git 放行仍是待办。勿把 BuildOnly 包直接当成已安装/实机已验收。
+- 需要回复：请主控协调原 Owner 处理后续 UID 安全、源码闭包和由用户执行的双端实际加载与恢复/断线验收。
+- 回复关联：无
+
 ### MSG-20261017-static-bug-audit-r5-MAIN-01 — 第五轮 BUG-19～22 源码审计交接
 - 发件人：static-bug-audit-round5-20261017
 - 收件人：MAIN
