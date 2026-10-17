@@ -4,6 +4,17 @@
 
 ## 消息
 
+### MSG-20261017-static-bug-audit-r6-MAIN-01 — 第六轮 BUG-23～26 交接
+- 发件人：static-bug-audit-round6-20261017
+- 收件人：MAIN
+- 时间：2026-10-17
+- 状态：待处理
+- 关联任务/文件：`docs/联机MOD第六轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
+- 消息：已完成第六轮只读静态审计，新增地图事务重复个人 PlayerId 在应用阶段冲突、resync 请求位先置后发送失败、galaxyReset 反复全量基线请求，以及欢迎包/完整地图视图过量共享其他玩家私有进度四项条件风险。请协调 Session/Game/Core 的原 Owner 分别复核、做离线故障注入与隐私投影评审。本次不解除冻结、不修改功能源码、不构建安装游戏运行或推送。
+- 需要回复：主控认领时确认跨模块契约、修复分工与 Owner 交接；此文件不是自动通知或已读证明。
+- 回复关联：无
+
+
 ### MSG-20261017-agent-tasks-bug14-15-MAIN-01 — 缓存超时与备份回退链修复交接
 - 发件人：agent-tasks-bug14-cache-timeout-20261017 / agent-tasks-bug15-backup-chain-20261017
 - 收件人：MAIN
