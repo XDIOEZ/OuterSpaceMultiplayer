@@ -84,7 +84,11 @@ namespace FreeWorldMultiplayer
         private readonly BattleEffectFrameSnapshot<long, BattleEffectReplica> battleEffectFrameSnapshot =
             new BattleEffectFrameSnapshot<long, BattleEffectReplica>();
         private readonly Dictionary<string, WeaponData> battleEffectWeapons = new Dictionary<string, WeaponData>(StringComparer.Ordinal);
-        private readonly Dictionary<string, WeaponController> battleEffectControllers = new Dictionary<string, WeaponController>(StringComparer.Ordinal);
+        // The receive/update loop consults cached weapon controllers for
+        // every wire weapon. Use the same exact 64-bit + ordinal slot identity
+        // as the shared wire validator, without allocating "UID:slot" strings.
+        private readonly Dictionary<BattleWeaponSlotKey, WeaponController> battleEffectControllers =
+            new Dictionary<BattleWeaponSlotKey, WeaponController>();
         private readonly Dictionary<string, Stack<GameObject>> battleEffectShellPool = new Dictionary<string, Stack<GameObject>>(StringComparer.Ordinal);
         private readonly Dictionary<GameObject, string> battleEffectShellKeys = new Dictionary<GameObject, string>();
         private readonly Dictionary<GameObject, long> battleEffectVfxLeases = new Dictionary<GameObject, long>();
@@ -223,16 +227,25 @@ namespace FreeWorldMultiplayer
         {
             BaseShip ship = FindBattleShip(value.Ship);
             if (ship == null) return null; // A recorded destroyed/departed ship has no live weapon shell.
-            string key = value.Ship + ":" + value.Slot;
+            var key = new BattleWeaponSlotKey(value.Ship, value.Slot);
             WeaponController weapon;
             if (!battleEffectControllers.TryGetValue(key, out weapon) || weapon == null)
             {
-                weapon = ship.WeaponManager.AllWeapons.SingleOrDefault(w => w != null && w.GetComponentInParent<WeaponSlot>().slotId == value.Slot);
-                if (weapon == null) throw new InvalidOperationException("本机缺少本场舰船武器插槽：" + key);
+                weapon = FindEffectControllerOnMiss(ship, value.Slot);
+                if (weapon == null) throw new InvalidOperationException("本机缺少本场舰船武器插槽：" + value.Ship + ":" + value.Slot);
                 battleEffectControllers[key] = weapon;
             }
-            if (weapon.weaponData == null || weapon.weaponData.id != value.Resource) throw new InvalidOperationException("玩家舰战武器插槽资源不一致：" + key);
+            if (weapon.weaponData == null || weapon.weaponData.id != value.Resource)
+                throw new InvalidOperationException("玩家舰战武器插槽资源不一致：" + value.Ship + ":" + value.Slot);
             return weapon;
+        }
+        private static WeaponController FindEffectControllerOnMiss(BaseShip ship, string slot)
+        {
+            // Keep the original SingleOrDefault duplicate-slot semantics.
+            // Move this capturing LINQ predicate off the per-frame cache-hit
+            // path: on older .NET/Mono compilers the closure is allocated at
+            // method entry even if the cache-hit branch is not entered.
+            return ship.WeaponManager.AllWeapons.SingleOrDefault(w => w != null && w.GetComponentInParent<WeaponSlot>().slotId == slot);
         }
         private void EnsureBattleEffectsRoot()
         {

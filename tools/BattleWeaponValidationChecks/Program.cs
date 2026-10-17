@@ -310,7 +310,8 @@ internal static class Program
             Console.WriteLine("INFO: " + frames + " stable checkpoints × " + fightersPerFrame
                 + " unarmed fighters: previous validator " + before
                 + " B vs linked production weapon validator " + after + " B managed allocations");
-            Console.WriteLine("PASS: " + checks + " production shared weapon/beam validation checks");
+            checks += ControllerCacheChecks.Run();
+            Console.WriteLine("PASS: " + checks + " production shared weapon/beam and controller identity checks");
             return 0;
         }
         catch (Exception error)

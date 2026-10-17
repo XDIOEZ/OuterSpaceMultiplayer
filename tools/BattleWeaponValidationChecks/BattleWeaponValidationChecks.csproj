@@ -9,6 +9,7 @@
   <ItemGroup>
     <!-- The two linked files are the actual production validators, not copies. -->
     <Compile Include="Program.cs" />
+    <Compile Include="ControllerCacheChecks.cs" />
     <Compile Include="Stubs.cs" />
     <Compile Include="../../src/Game/NativeBattleWeaponValidation.cs" Link="NativeBattleWeaponValidation.cs" />
     <Compile Include="../../src/Game/BattleEffectFiniteFields.cs" Link="BattleEffectFiniteFields.cs" />
