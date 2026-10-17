@@ -72,6 +72,8 @@ namespace FreeWorldMultiplayer
         // finishes. Retain only the already-proven scene reference/asset identity during that
         // native lifetime; this contains no copied fleet, inventory or authoritative state.
         private readonly Dictionary<long, BaseShip> playerBattleFighterCarriers = new Dictionary<long, BaseShip>();
+        private readonly BattleEffectFrameSnapshot<long, BaseShip> fighterCarrierCaptureSnapshot =
+            new BattleEffectFrameSnapshot<long, BaseShip>();
         private readonly HashSet<BaseShip> retainedReplicaFighterCarriers = new HashSet<BaseShip>();
         private GameObject playerBattleFighterRoot;
         private long playerBattleFighterSequence, appliedPlayerBattleFighterSequence;
@@ -96,7 +98,7 @@ namespace FreeWorldMultiplayer
             if (!HasNativePlayerBattle || carrier == null || carrier.WingManager == null || !carrier.WingManager.HasActiveWings) return;
             long uid = BattleSourceUid(carrier);
             if (!nativeBattleShips.ContainsKey(uid)) throw new InvalidOperationException("舰载机母舰没有本场真实舰船身份。");
-            foreach (long old in playerBattleFighterCarriers.Where(p => p.Key != uid && ReferenceEquals(p.Value, carrier)).Select(p => p.Key).ToArray()) playerBattleFighterCarriers.Remove(old);
+            NativeFighterCarrierAliases.RemoveOldIds(playerBattleFighterCarriers, uid, carrier);
             playerBattleFighterCarriers[uid] = carrier;
         }
         private void RetainReplicaFighterCarrier(BaseShip carrier)
@@ -116,64 +118,72 @@ namespace FreeWorldMultiplayer
             var observed = new HashSet<FighterShip>();
             var currentCarriers = new HashSet<BaseShip>(FleetManager.Instance.GetAllShips().Values);
             foreach (BaseShip carrier in currentCarriers) RememberPlayerBattleFighterCarrier(carrier);
-            foreach (var retained in playerBattleFighterCarriers.ToArray())
+            var retainedCarriers = fighterCarrierCaptureSnapshot.Capture(playerBattleFighterCarriers);
+            try
             {
-                BaseShip carrier = retained.Value;
-                if (carrier == null) { playerBattleFighterCarriers.Remove(retained.Key); continue; }
-                if (carrier.WingManager == null) throw new InvalidOperationException("已登记母舰丢失原生联队管理器。");
-                long carrierUid = retained.Key;
-                if (!nativeBattleShips.ContainsKey(carrierUid)) throw new InvalidOperationException("舰载机母舰不属于本场真实参战名单。");
-                foreach (FighterWingRuntime wing in carrier.WingManager.activeWings)
+                // A native wing/scene callback can remove a carrier while
+                // we inspect its registered shell. Snapshot first, then
+                // update the dictionary exactly as the old ToArray path did.
+                foreach (var retained in retainedCarriers)
                 {
-                    if (wing == null || wing.Data == null || wing.slots == null) throw new InvalidOperationException("原生舰载机联队缺少配置或槽位。");
-                    var summary = new BattleFighterWing { Carrier = carrierUid, Index = wing.WingIndex, Bay = wing.Data.zoneSlotId,
-                        Reserves = wing.currentReserves, ReserveProgress = wing.reserveProgress, Command = (int)carrier.WingManager.currentCommand };
-                    foreach (FighterSlot slot in wing.slots)
+                    BaseShip carrier = retained.Value;
+                    if (carrier == null) { playerBattleFighterCarriers.Remove(retained.Key); continue; }
+                    if (carrier.WingManager == null) throw new InvalidOperationException("已登记母舰丢失原生联队管理器。");
+                    long carrierUid = retained.Key;
+                    if (!nativeBattleShips.ContainsKey(carrierUid)) throw new InvalidOperationException("舰载机母舰不属于本场真实参战名单。");
+                    foreach (FighterWingRuntime wing in carrier.WingManager.activeWings)
                     {
-                        FighterShip fighter = slot.ship as FighterShip;
-                        bool alive = slot.status == SlotStatus.Active && fighter != null && fighter.gameObject.activeInHierarchy && !fighter.IsDead() && !endingPlayerBattleFighters.Contains(fighter);
-                        summary.Slots.Add(new BattleFighterSlot { Index = slot.slotIndex, Status = (int)slot.status,
-                            Progress = slot.progress, Remaining = slot.remainingTime, Fighter = alive ? fighter.GetUid() : -1 });
-                        if (!alive) continue;
-                        if (!ReferenceEquals(fighter.ParentCarrier, carrier) || !ReferenceEquals(fighter.ParentWing, wing) || !observed.Add(fighter))
-                            throw new InvalidOperationException("原生舰载机的母舰、联队或槽位归属不一致。");
-                        ArmorStateData armor = fighter.ArmorManager.GetArmorStateData();
-                        ShieldEntity shield = fighter.ShieldManager == null ? null : NativeWire.Get(fighter.ShieldManager, "_entity") as ShieldEntity;
-                        Vector2 velocity = fighter.GetVelocity();
-                        var value = new BattleFighterState { Carrier = carrierUid, RuntimeId = fighter.GetUid(), Wing = wing.WingIndex, Slot = slot.slotIndex, Bay = wing.Data.zoneSlotId,
-                            X = fighter.transform.position.x, Y = fighter.transform.position.y, Z = fighter.transform.position.z, Angle = fighter.transform.eulerAngles.z,
-                            Vx = velocity.x, Vy = velocity.y, Throttle = fighter.Motor == null ? 0 : fighter.Motor.CurrentThrottle, Boost = fighter.Motor != null && fighter.Motor.IsBoosting,
-                            Hull = fighter.StructureManager.CurrentHull, MaxHull = fighter.StructureManager.MaxHull,
-                            ArmorRatio = armor.OverallHealthPercentage, Cells = new Dictionary<int, float>(armor.DamagedCells),
-                            Flux = fighter.FluxManager == null ? 0 : fighter.FluxManager.CurrentFlux, HardFlux = fighter.FluxManager == null ? 0 : fighter.FluxManager.HardFlux,
-                            Shield = fighter.ShieldManager != null && fighter.ShieldManager.IsShieldOn, ShieldVisible = shield != null && shield.IsVisible,
-                            ShieldAngle = shield == null ? 0 : shield.transform.localEulerAngles.z, ShieldArc = fighter.ShieldManager == null ? 0 : (float)NativeWire.Get(fighter.ShieldManager, "_currentArcSize") };
-                        if (fighter.WeaponManager != null) foreach (WeaponController weapon in fighter.WeaponManager.AllWeapons)
+                        if (wing == null || wing.Data == null || wing.slots == null) throw new InvalidOperationException("原生舰载机联队缺少配置或槽位。");
+                        var summary = new BattleFighterWing { Carrier = carrierUid, Index = wing.WingIndex, Bay = wing.Data.zoneSlotId,
+                            Reserves = wing.currentReserves, ReserveProgress = wing.reserveProgress, Command = (int)carrier.WingManager.currentCommand };
+                        foreach (FighterSlot slot in wing.slots)
                         {
-                            if (weapon == null || weapon.weaponData == null) continue;
-                            WeaponSlot weaponSlot = weapon.GetComponentInParent<WeaponSlot>();
-                            if (weaponSlot == null) throw new InvalidOperationException("原生舰载机武器没有正式插槽。");
-                            var visual = new BattleWeaponEffect { Ship = fighter.GetUid(), Slot = weaponSlot.slotId, Resource = weapon.weaponData.id,
-                                Ammo = weapon.CurrentAmmo, Angle = weapon.rotatingPart == null ? 0 : weapon.rotatingPart.localEulerAngles.z };
-                            BeamBehavior beam = weapon.GetComponent<BeamBehavior>();
-                            if (beam != null) foreach (object emitter in EffectEmitters(beam))
+                            FighterShip fighter = slot.ship as FighterShip;
+                            bool alive = slot.status == SlotStatus.Active && fighter != null && fighter.gameObject.activeInHierarchy && !fighter.IsDead() && !endingPlayerBattleFighters.Contains(fighter);
+                            summary.Slots.Add(new BattleFighterSlot { Index = slot.slotIndex, Status = (int)slot.status,
+                                Progress = slot.progress, Remaining = slot.remainingTime, Fighter = alive ? fighter.GetUid() : -1 });
+                            if (!alive) continue;
+                            if (!ReferenceEquals(fighter.ParentCarrier, carrier) || !ReferenceEquals(fighter.ParentWing, wing) || !observed.Add(fighter))
+                                throw new InvalidOperationException("原生舰载机的母舰、联队或槽位归属不一致。");
+                            ArmorStateData armor = fighter.ArmorManager.GetArmorStateData();
+                            ShieldEntity shield = fighter.ShieldManager == null ? null : NativeWire.Get(fighter.ShieldManager, "_entity") as ShieldEntity;
+                            Vector2 velocity = fighter.GetVelocity();
+                            var value = new BattleFighterState { Carrier = carrierUid, RuntimeId = fighter.GetUid(), Wing = wing.WingIndex, Slot = slot.slotIndex, Bay = wing.Data.zoneSlotId,
+                                X = fighter.transform.position.x, Y = fighter.transform.position.y, Z = fighter.transform.position.z, Angle = fighter.transform.eulerAngles.z,
+                                Vx = velocity.x, Vy = velocity.y, Throttle = fighter.Motor == null ? 0 : fighter.Motor.CurrentThrottle, Boost = fighter.Motor != null && fighter.Motor.IsBoosting,
+                                Hull = fighter.StructureManager.CurrentHull, MaxHull = fighter.StructureManager.MaxHull,
+                                ArmorRatio = armor.OverallHealthPercentage, Cells = new Dictionary<int, float>(armor.DamagedCells),
+                                Flux = fighter.FluxManager == null ? 0 : fighter.FluxManager.CurrentFlux, HardFlux = fighter.FluxManager == null ? 0 : fighter.FluxManager.HardFlux,
+                                Shield = fighter.ShieldManager != null && fighter.ShieldManager.IsShieldOn, ShieldVisible = shield != null && shield.IsVisible,
+                                ShieldAngle = shield == null ? 0 : shield.transform.localEulerAngles.z, ShieldArc = fighter.ShieldManager == null ? 0 : (float)NativeWire.Get(fighter.ShieldManager, "_currentArcSize") };
+                            if (fighter.WeaponManager != null) foreach (WeaponController weapon in fighter.WeaponManager.AllWeapons)
                             {
-                                LineRenderer line = (LineRenderer)NativeWire.Get(emitter, "line");
-                                if (line == null || line.positionCount != 2) throw new InvalidOperationException("原生舰载机光束端点无效。");
-                                Vector3 a = line.GetPosition(0), b = line.GetPosition(1);
-                                visual.Beams.Add(new BattleBeamLine { Enabled = line.enabled, X = a.x, Y = a.y, Z = a.z, EndX = b.x, EndY = b.y, EndZ = b.z,
-                                    Width = line.startWidth, EndWidth = line.endWidth, Charge = EffectActive(emitter, "chargeVFXObj"), Muzzle = EffectActive(emitter, "startVFXObj"), Hit = EffectActive(emitter, "endVFXHullObj") });
+                                if (weapon == null || weapon.weaponData == null) continue;
+                                WeaponSlot weaponSlot = weapon.GetComponentInParent<WeaponSlot>();
+                                if (weaponSlot == null) throw new InvalidOperationException("原生舰载机武器没有正式插槽。");
+                                var visual = new BattleWeaponEffect { Ship = fighter.GetUid(), Slot = weaponSlot.slotId, Resource = weapon.weaponData.id,
+                                    Ammo = weapon.CurrentAmmo, Angle = weapon.rotatingPart == null ? 0 : weapon.rotatingPart.localEulerAngles.z };
+                                BeamBehavior beam = weapon.GetComponent<BeamBehavior>();
+                                if (beam != null) foreach (object emitter in EffectEmitters(beam))
+                                {
+                                    LineRenderer line = (LineRenderer)NativeWire.Get(emitter, "line");
+                                    if (line == null || line.positionCount != 2) throw new InvalidOperationException("原生舰载机光束端点无效。");
+                                    Vector3 a = line.GetPosition(0), b = line.GetPosition(1);
+                                    visual.Beams.Add(new BattleBeamLine { Enabled = line.enabled, X = a.x, Y = a.y, Z = a.z, EndX = b.x, EndY = b.y, EndZ = b.z,
+                                        Width = line.startWidth, EndWidth = line.endWidth, Charge = EffectActive(emitter, "chargeVFXObj"), Muzzle = EffectActive(emitter, "startVFXObj"), Hit = EffectActive(emitter, "endVFXHullObj") });
+                                }
+                                value.Weapons.Add(visual);
                             }
-                            value.Weapons.Add(visual);
+                            state.Fighters.Add(value);
                         }
-                        state.Fighters.Add(value);
+                        // A departed carrier is retained only for fighters which are actually
+                        // still flying. Empty terminal wings do not require a dead carrier shell
+                        // on a peer which never observed that carrier's deployment.
+                        if (currentCarriers.Contains(carrier) || summary.Slots.Any(s => s.Fighter >= 0)) state.Wings.Add(summary);
                     }
-                    // A departed carrier is retained only for fighters which are actually
-                    // still flying. Empty terminal wings do not require a dead carrier shell
-                    // on a peer which never observed that carrier's deployment.
-                    if (currentCarriers.Contains(carrier) || summary.Slots.Any(s => s.Fighter >= 0)) state.Wings.Add(summary);
                 }
             }
+            finally { fighterCarrierCaptureSnapshot.Release(retainedCarriers); }
             // Native landing clears the slot before Despawn/Destroy, and no-pool Destroy
             // can complete at frame end. Death/landing/wing-disposal boundary hooks identify
             // that legal terminal interval; no timer or guessed orphan repair is involved.
@@ -453,6 +463,7 @@ namespace FreeWorldMultiplayer
                 catch (Exception error) { errors.Add(error); }
             retainedReplicaFighterCarriers.Clear();
             playerBattleFighters.Clear(); endingPlayerBattleFighters.Clear(); playerBattleFighterCarriers.Clear();
+            fighterCarrierCaptureSnapshot.Reset();
             if (playerBattleFighterRoot != null)
             {
                 PlayerBattleFightersView view = playerBattleFighterRoot.GetComponent<PlayerBattleFightersView>(); if (view != null) view.Bridge = null;
