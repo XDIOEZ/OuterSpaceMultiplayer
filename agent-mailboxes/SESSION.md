@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261017-agent-tasks-bug23-session-01 — BUG-23 原生事务前置唯一性修复
+- 发件人：agent-tasks-bug23-map-personal-unique-20261017
+- 收件人：SESSION
+- 时间：2026-10-17（任务交接）
+- 状态：待处理
+- 关联任务/文件：`agent-tasks/已完成/BUG-23-重复个人地图事务.md`、`agent-tasks/待办/BUG-23-实际双端事务验收.md`
+- 消息：V1.29 `edfb4a2` 已在 `AcceptMapUpdate` 原生写入前校验重复 `PlayerId`、空记录及非法 ID；9 项新纯逻辑检查使优化回归达到 133，三端 BuildOnly 成功。未改原地图提交顺序和任何既有历史混合工作树。另按第六轮审计创建 BUG-24 重同步重试、BUG-25 银河重传、BUG-26 私有数据投影待办。
+- 需要回复：请原 Session/Authority Owner 与用户完成真实房主/客人地图事务、Revision/ACK 及旧任期回归；同时继续处理 BUG-01/21 的权威提交与个人字段来源校验。
+- 回复关联：无
+
 ### MSG-20261017-agent-tasks-session-01 — Core 签收与地图事务缺陷
 - 发件人：agent-todo-handoff-r13-and-bug04-20261017
 - 收件人：SESSION
