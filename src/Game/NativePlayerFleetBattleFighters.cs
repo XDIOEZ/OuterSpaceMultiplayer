@@ -233,8 +233,10 @@ namespace FreeWorldMultiplayer
                             fighter.Slot, fighter.RuntimeId, BattleDeclaredSlotIndex, BattleDeclaredSlotFighter))
                     || fighter.Hull < 0 || fighter.MaxHull <= 0 || fighter.Hull > fighter.MaxHull || fighter.ArmorRatio < 0 || fighter.ArmorRatio > 1
                     || fighter.Flux < 0 || fighter.HardFlux < 0 || fighter.HardFlux > fighter.Flux || fighter.ShieldArc < 0 || fighter.ShieldArc > 360
-                    || fighter.Cells == null || fighter.Cells.Count > 100000 || fighter.Cells.Values.Any(v => float.IsNaN(v) || v < 0 || v > 1)
-                    || new[] { fighter.X, fighter.Y, fighter.Z, fighter.Angle, fighter.Vx, fighter.Vy, fighter.Throttle, fighter.Flux, fighter.HardFlux, fighter.ArmorRatio, fighter.ShieldAngle, fighter.ShieldArc }.Any(v => float.IsNaN(v) || float.IsInfinity(v)))
+                    || fighter.Cells == null || fighter.Cells.Count > 100000 || !BattleFighterFiniteFields.ValidCells(fighter.Cells)
+                    || !BattleFighterFiniteFields.ValidTelemetry(fighter.X, fighter.Y, fighter.Z, fighter.Angle,
+                        fighter.Vx, fighter.Vy, fighter.Throttle, fighter.Flux, fighter.HardFlux,
+                        fighter.ArmorRatio, fighter.ShieldAngle, fighter.ShieldArc))
                     throw new InvalidOperationException("玩家舰载机身份、母舰槽位或伤损状态不一致。");
                 // Reuse the very same effects weapon/beam validation without
                 // allocating unrelated projectile/VFX/event DTO lists for
