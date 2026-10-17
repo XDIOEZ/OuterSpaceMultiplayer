@@ -166,8 +166,8 @@ namespace FreeWorldMultiplayer
         private static void ValidateEffectPose(BattleEffectPose pose)
         {
             if (pose == null || pose.Id <= 0 || String.IsNullOrEmpty(pose.Resource) || pose.Resource.Length > 128
-                || pose.Team < 0 || pose.Team > 2 || new[] { pose.X, pose.Y, pose.Z, pose.Angle, pose.Sx, pose.Sy, pose.Sz }.Any(v => float.IsNaN(v) || float.IsInfinity(v))
-                || Math.Abs(pose.Sx) > 10000 || Math.Abs(pose.Sy) > 10000 || Math.Abs(pose.Sz) > 10000)
+                || pose.Team < 0 || pose.Team > 2
+                || !BattleEffectFiniteFields.ValidPose(pose.X, pose.Y, pose.Z, pose.Angle, pose.Sx, pose.Sy, pose.Sz))
                 throw new InvalidOperationException("玩家舰战表现身份、资源或坐标无效。");
         }
         private static void ValidateEffectLimits(BattleEffectsState state)
@@ -193,8 +193,9 @@ namespace FreeWorldMultiplayer
                     || String.IsNullOrEmpty(value.Resource) || value.Resource.Length > 128 || float.IsNaN(value.Angle) || float.IsInfinity(value.Angle)
                     || !weaponSlots.Add(value.Ship + ":" + value.Slot)) throw new InvalidOperationException("舰战武器表现字段或插槽身份无效。");
                 foreach (BattleBeamLine line in value.Beams)
-                    if (line == null || new[] { line.X, line.Y, line.Z, line.EndX, line.EndY, line.EndZ, line.Width, line.EndWidth }.Any(v => float.IsNaN(v) || float.IsInfinity(v))
-                        || line.Width < 0 || line.EndWidth < 0) throw new InvalidOperationException("舰战光束端点或宽度无效。");
+                    if (line == null || !BattleEffectFiniteFields.ValidBeam(line.X, line.Y, line.Z,
+                        line.EndX, line.EndY, line.EndZ, line.Width, line.EndWidth))
+                        throw new InvalidOperationException("舰战光束端点或宽度无效。");
             }
         }
         private static void ValidatePlayerBattleEffects(string encoded)
