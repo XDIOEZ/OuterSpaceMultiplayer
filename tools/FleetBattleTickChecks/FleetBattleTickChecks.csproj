@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile the actual production gate and wire stages, not copies. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Session/FleetBattleTickGate.cs" Link="FleetBattleTickGate.cs" />
+    <Compile Include="../../src/Core/PlayerFleetBattles.cs" Link="PlayerFleetBattles.cs" />
+  </ItemGroup>
+</Project>

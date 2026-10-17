@@ -397,6 +397,11 @@ namespace FreeWorldMultiplayer
         private void TickPlayerFleetBattles(double seconds)
         {
             if (World == null || World.FleetBattles == null || !IsConnected) return;
+            // Finished battles remain in bounded room history, but have no
+            // per-frame work unless the host still has an outstanding deadline.
+            // Avoid allocating StopNonHostileBattles / main-loop snapshots on
+            // every frame of a room with no active battle.
+            if (!FleetBattleTickGate.HasWork(World.FleetBattles, IsHost, battleDeadlines.Count)) return;
             StopNonHostileBattles();
             foreach (PlayerFleetBattleRecord record in World.FleetBattles.Values.ToList())
             {
