@@ -320,6 +320,14 @@ namespace FreeWorldMultiplayer
                     string existing;
                     if (!World.Players.ContainsKey(owner.Value) || (World.EntityOwners.TryGetValue(owner.Key, out existing) && existing != owner.Value)) throw new InvalidOperationException("地图提交不能转移既有雇员归属。");
                 }
+                // Verify EVERY newly introduced UID before a remote native
+                // delta can register its claimed owners. Existing hosted or
+                // transported entities keep the source recorded by the host.
+                if (peer != null)
+                    MapEntityUidValidation.RequireRemoteProvenance(
+                        update.EntityOwners, World.EntityOwners,
+                        map.Checkpoint == null ? null : map.Checkpoint.EntityOwners,
+                        World.Players, playerId, SessionId);
                 applyingOwners = update.EntityOwners;
                 foreach (PlayerUpdate personal in update.Players ?? new List<PlayerUpdate>())
                 {
