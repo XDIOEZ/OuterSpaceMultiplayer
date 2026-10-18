@@ -165,7 +165,7 @@ namespace FreeWorldMultiplayer
                 BaseShip ship = FindBattleShip(input.ShipId);
                 if (ship == null || ship.IsDead() || owned.Retreated) throw new NativeRejectionException("舰船已离场或不可控制。");
                 FleetBattleControl c = NativeWire.Parse<FleetBattleControl>(input.NativeJson);
-                if (c == null || new[] { c.X, c.Y, c.Z, c.Throttle, c.Turn, c.Strafe }.Any(v => float.IsNaN(v) || float.IsInfinity(v))
+                if (c == null || !BattlePilotFiniteFields.Valid(c.X, c.Y, c.Z, c.Throttle, c.Turn, c.Strafe)
                     || Math.Abs(c.Throttle) > 1 || Math.Abs(c.Turn) > 1 || Math.Abs(c.Strafe) > 1 || c.Index < 0 || c.Index > 64
                     || input.Operation == "Wing" && c.Index > 2)
                     throw new NativeRejectionException("舰战控制参数无效。");
