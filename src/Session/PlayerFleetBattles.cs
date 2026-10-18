@@ -62,7 +62,7 @@ namespace FreeWorldMultiplayer
         private void SendBattleState(PlayerFleetBattleRecord record)
         {
             // Only participants enter battle. Others receive lock metadata with galaxy policy.
-            foreach (string player in new[] { record.AttackerPlayerId, record.DefenderPlayerId })
+            foreach (string player in new BattleParticipantPair(record.AttackerPlayerId, record.DefenderPlayerId))
                 TrySendCommunication(player, "battle.state", JsonData.Clone(record));
             BroadcastPolicy();
         }
@@ -135,7 +135,7 @@ namespace FreeWorldMultiplayer
                 // Both final map/personal deltas were ACKed before their reliable barrier.
                 // Refresh the exact native fleets before either side constructs a battle scene.
                 SaveOrThrow(); BroadcastPolicy();
-                foreach (string player in new[] { record.AttackerPlayerId, record.DefenderPlayerId })
+                foreach (string player in new BattleParticipantPair(record.AttackerPlayerId, record.DefenderPlayerId))
                 {
                     if (player == LocalPlayerId) continue;
                     string peer;
@@ -214,7 +214,7 @@ namespace FreeWorldMultiplayer
             Require(bridge.ApplyPlayerFleetBattleFrame(record, frame), "验证并接收唯一模拟者舰战检查点");
             record.Checkpoint = JsonData.Clone(frame); record.Revision = frame.Revision;
             TrySendCommunication(actor, "battle.ack", new PlayerFleetBattleAck { BattleId = record.BattleId, AuthorityEpoch = record.AuthorityEpoch, Revision = record.Revision });
-            if (!initial) foreach (string peer in new[] { record.AttackerPlayerId, record.DefenderPlayerId })
+            if (!initial) foreach (string peer in new BattleParticipantPair(record.AttackerPlayerId, record.DefenderPlayerId))
                 if (peer != actor && peer != LocalPlayerId) TrySendCommunication(peer, "battle.frame", frame);
             if (!initial && (frame.Ended || record.Interrupted && frame.FinalCheckpoint)) CommitBattle(record);
         }

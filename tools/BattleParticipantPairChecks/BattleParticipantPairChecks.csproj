@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Link the exact enumerator used by three production battle paths. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Session/BattleParticipantPair.cs" Link="BattleParticipantPair.cs" />
+  </ItemGroup>
+</Project>
