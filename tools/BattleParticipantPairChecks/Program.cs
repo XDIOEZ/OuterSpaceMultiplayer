@@ -238,8 +238,9 @@ internal static class Program
                 " synthetic two-player battle dispatch loops: old new[] path " +
                 oldBytes + " B, linked production enumerator " + newBytes +
                 " B (managed allocations after warmup)");
+            checks += VisitRecipientChecks.Run();
             Console.WriteLine("PASS: " + checks +
-                " production linked battle participant ordering and allocation checks");
+                " production linked battle and visit recipient ordering/allocation checks");
             GC.KeepAlive(sink);
             return 0;
         }

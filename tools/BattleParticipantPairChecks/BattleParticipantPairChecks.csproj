@@ -7,8 +7,9 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Link the exact enumerator used by three production battle paths. -->
+    <!-- Link the exact enumerator shared by battle and visit notification paths. -->
     <Compile Include="Program.cs" />
+    <Compile Include="VisitRecipientChecks.cs" />
     <Compile Include="../../src/Session/BattleParticipantPair.cs" Link="BattleParticipantPair.cs" />
   </ItemGroup>
 </Project>

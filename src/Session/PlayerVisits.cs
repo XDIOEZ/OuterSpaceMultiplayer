@@ -128,7 +128,10 @@ namespace FreeWorldMultiplayer
         }
         private void SendVisitUpdate(HostVisit visit, string reason)
         {
-            foreach (string recipient in new[] { visit.Request.RequesterPlayerId, visit.Request.RecipientPlayerId })
+            // Preserve the original two-recipient snapshot and send order.
+            // The shared value-type iterator avoids an array on each visit
+            // update, including timeout, cancellation and approval notices.
+            foreach (string recipient in new BattleParticipantPair(visit.Request.RequesterPlayerId, visit.Request.RecipientPlayerId))
                 TrySendCommunication(recipient, "visit.update", new PlayerVisitUpdate { Request = JsonData.Clone(visit.Request), State = visit.State,
                     RemainingSeconds = visit.Seconds, Reason = reason,
                     Grant = recipient == visit.Request.RequesterPlayerId && visit.State == PlayerVisitState.Approved ? JsonData.Clone(visit.Grant) : null });
