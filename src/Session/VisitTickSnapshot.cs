@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FreeWorldMultiplayer
 {
-    // Active visit/consent ticks can invoke UI and network callbacks that
+    // Active visit/consent, chat and gift ticks can invoke callbacks that
     // mutate their dictionaries. Retain the original Values.ToList snapshot
     // semantics without allocating a fresh List on every pending tick.
     internal sealed class VisitTickSnapshot<T> where T : class
@@ -12,6 +12,14 @@ namespace FreeWorldMultiplayer
         private bool inUse, resetPending;
 
         internal List<T> Capture(Dictionary<string, T> visits)
+        {
+            if (visits == null) throw new ArgumentNullException(nameof(visits));
+            return CaptureDictionary(visits);
+        }
+
+        // Map-keyed gift checkpoints use long keys, while visit/chat records
+        // use string keys. Only the value snapshot matters to the caller.
+        internal List<T> CaptureDictionary<TKey>(Dictionary<TKey, T> visits)
         {
             if (visits == null) throw new ArgumentNullException(nameof(visits));
             bool useReusable = !inUse;

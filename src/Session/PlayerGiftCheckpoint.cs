@@ -9,6 +9,7 @@ namespace FreeWorldMultiplayer
         private sealed class GiftBarrier { internal GiftCheckpointRequest Request; internal string Simulator; internal bool Ready; }
         private readonly Dictionary<string, GiftBarrier> giftBarriers = new Dictionary<string, GiftBarrier>();
         private readonly Dictionary<long, GiftCheckpointRequest> giftFlushes = new Dictionary<long, GiftCheckpointRequest>();
+        private readonly VisitTickSnapshot<GiftCheckpointRequest> giftFlushTickSnapshot = new VisitTickSnapshot<GiftCheckpointRequest>();
         private readonly HashSet<long> giftPausedMaps = new HashSet<long>();
         private string PrepareGiftArrival(TransferRecord transfer)
         {
@@ -44,16 +45,25 @@ namespace FreeWorldMultiplayer
         }
         private void TickGiftFlushes()
         {
-            foreach (GiftCheckpointRequest request in giftFlushes.Values.ToList())
+            // This runs on every connected guest tick, usually without any
+            // pending gifts. Snapshot only active work: Send/Publish callbacks
+            // may remove or add requests during the iteration.
+            if (giftFlushes.Count == 0) return;
+            var snapshot = giftFlushTickSnapshot.CaptureDictionary(giftFlushes);
+            try
             {
-                MapRecord map;
-                if (!World.Maps.TryGetValue(request.MapId, out map) || map.AuthorityEpoch != request.AuthorityEpoch || map.SimulatorPlayerId != LocalPlayerId)
-                { giftFlushes.Remove(request.MapId); giftPausedMaps.Remove(request.MapId); continue; }
-                if (inFlightUpdates.Count != 0 || personalInFlight.Count != 0) continue;
-                PublishLocalMaps(true); PublishPersonalUpdates(true);
-                if (inFlightUpdates.Count != 0 || personalInFlight.Count != 0) continue;
-                Send("host", "gift.flushed", request); giftFlushes.Remove(request.MapId);
+                foreach (GiftCheckpointRequest request in snapshot)
+                {
+                    MapRecord map;
+                    if (!World.Maps.TryGetValue(request.MapId, out map) || map.AuthorityEpoch != request.AuthorityEpoch || map.SimulatorPlayerId != LocalPlayerId)
+                    { giftFlushes.Remove(request.MapId); giftPausedMaps.Remove(request.MapId); continue; }
+                    if (inFlightUpdates.Count != 0 || personalInFlight.Count != 0) continue;
+                    PublishLocalMaps(true); PublishPersonalUpdates(true);
+                    if (inFlightUpdates.Count != 0 || personalInFlight.Count != 0) continue;
+                    Send("host", "gift.flushed", request); giftFlushes.Remove(request.MapId);
+                }
             }
+            finally { giftFlushTickSnapshot.Release(snapshot); }
         }
         private void ConfirmGiftFlush(string actor, GiftCheckpointRequest request)
         {
