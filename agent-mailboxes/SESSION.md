@@ -103,3 +103,13 @@
 - 消息：提交 `5b28279` 已把 host/client `uids` 与已有 `WireMessage.RequestId` 关联；同一次号段续领无论重发、Save 失败、回包丢失或 Send 异常均不会重复 Reserve UID，保存成功才应答，客户端旧回复不倒退 Next。30s/新号段、2s/原回执、3s/客端请求，128 次/单玩家会话上限；旧式无 RequestId 同协议请求保留限频兼容，但超过冷却不能保证严格去重。新生产 partial+gate 21201 项、半成功登录 36149 项、未认证时限 30071 项和 IdentityStore 97 项检查通过。混合脏源文件仅暂存本轮窄 hunk，未安装或实机运行。
 - 需要回复：请 Session/UID Owner 复核实际 UID Next 高水位、续领 Save 失败与重连时的事务提交关系，以及高频跨图实体生成；需进一步确认玩家频繁重新认证所发的基本号段是否同样应该限流。BUG-16 保持待办。
 - 回复关联：MSG-20261018-bug06-half-join-session-01
+
+### MSG-20261018-bug17-map-uid-session-01 — 远端地图增量新增 UID 提交前校验
+- 发件人：bug17-map-uid-provenance-20261018
+- 收件人：SESSION
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`src/Session/MapEntityUidValidation.cs`、`src/Session/Authority.cs`、`agent-tasks/待办/BUG-17-地图增量UID号段校验.md`
+- 消息：`99ac673` 已把远端模拟者提交的 `MapUpdate.EntityOwners` 来源验证放在房主原生 `bridge.ApplyMapUpdate` 前，未登记的新实体 UID 必须属于该模拟者本会话已发行号段；已由房主或同图已确认检查点记录的原归属保持合法，可继续出现于访问和运输地图。伪造房主/其他玩家未登记的新 UID 在整批应用前拒绝。真实 `Contracts.cs` DTO 和生产 helper 链接 26,959 项本地检查通过，BUG-16 续领 21,201 项通过，原 Authority 混合历史修改保留。
+- 需要回复：请 Session/UID Owner 在真实 host 负向地图事务和 `owner` 注册消息时序中核对已发行 UID 来源，重点防止受信旧实体被误拒、非法 UID 被原生落地；Game Owner 还需验证真实造物与运输。未完整三端编译/游戏实测，BUG-17 仍在待办。
+- 回复关联：MSG-20261018-bug16-uid-renewal-session-01
