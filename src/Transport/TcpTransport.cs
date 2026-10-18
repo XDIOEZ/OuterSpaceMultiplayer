@@ -218,7 +218,12 @@ namespace FreeWorldMultiplayer
             lock (peer.Gate)
             {
                 if (peer.Closed) throw new IOException("连接已关闭：" + peerId);
-                if (peer.Outgoing.Count >= 512 || peer.OutgoingBytes + data.Length > TransportQueue.MaxQueuedBytes) throw new IOException("发送队列已满：" + peerId);
+                // The writer already moved its current frame out of OutgoingBytes.
+                // Its payload is still retained until the full Stream.Write ends;
+                // account for that frame before cloning another queued message.
+                if (peer.Outgoing.Count >= 512 || peer.OutgoingBytes < 0 || peer.InFlightBytes < 0
+                    || peer.OutgoingBytes > TransportQueue.MaxQueuedBytes - (long)peer.InFlightBytes - data.Length)
+                    throw new IOException("发送队列已满：" + peerId);
                 peer.Outgoing.Enqueue((byte[])data.Clone());
                 peer.OutgoingBytes += data.Length;
                 Monitor.PulseAll(peer.Gate);

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Test TcpTransport.Send and the real asynchronous socket writer, not a copied admission algorithm. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../UnauthenticatedTcpChecks/TransportStubs.cs" Link="TransportStubs.cs" />
+    <Compile Include="../../src/Transport/TcpTransport.cs" Link="TcpTransport.cs" />
+    <Compile Include="../../src/Transport/TransportQueue.cs" Link="TransportQueue.cs" />
+    <Compile Include="../../src/Transport/UnauthenticatedFramePolicy.cs" Link="UnauthenticatedFramePolicy.cs" />
+  </ItemGroup>
+</Project>
