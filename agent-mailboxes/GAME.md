@@ -33,3 +33,13 @@
 - 消息：`dba3e64` 在房主 RemovePeer 断线收口时隔离原生 SetPlayerOnline(false)/舰战/MapAuthority 设置故障。若某图的 ReassignMap 在任何阶段失败，重新失效模拟者并提高 AuthorityEpoch、Frozen 后请求 Native SetMapAuthority；任一权威核心步骤失败则 LockNativeFault 暂停房主，不允许保存未经确认的半次移交。生产联编假原生故障注入 210502 项通过，无真实 Unity 双端验收。
 - 需要回复：请 Game Owner 在 P3/Steam/TapTap 的多地图、地表访客、原生英雄在异地图、太空舰队离线与舰战进行中测试冻结/解冻及真实回调异常；确认原生无法冻结时的恢复策略和已确认地图检查点有效性，不能因 UI 通知成功而视为状态安全。
 - 回复关联：MSG-20261018-bug17-map-uid-game-01
+
+### MSG-20261018-bug01-game-map-commit-01 — 地图差量与执行声明关联仍待验证
+- 发件人：bug01-remote-command-enqueue-20261018
+- 收件人：GAME
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`src/Session/Commands.cs`、`src/Session/RemoteCommandDispatch.cs`、`agent-tasks/待办/BUG-01-远程地图提交时序.md`
+- 消息：`3f21d34` 将模拟端的地图发布安排在 execution 声明发送之前；新的成功声明只会在 PublishLocalMaps 本身没有抛错后入队，原生 commandId 缓存不变。尚未保证捕获地图一定包含此次命令、没有既有 in-flight 差量，也没有增加提交身份/存档水位；不能单凭发送顺序声称结算完成。
+- 需要回复：请 Game/Session Owner 逐项验证原生地表建造、拆除、移动、工作和背包指令在 `CaptureMapUpdate` 中哪些操作会产生可确认的实际 MapRevision；用真实地表测试地图拒绝/断线重播，不要重复原生命令，也不要把无差量执行误报为已保存。
+- 回复关联：MSG-20261018-bug07-native-freeze-01
