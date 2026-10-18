@@ -60,6 +60,7 @@ namespace FreeWorldMultiplayer
         private static readonly Dictionary<Type, FieldInfo[]> fleetSyncFields = new Dictionary<Type, FieldInfo[]>();
         private static readonly Func<string, string, FleetValue> NewFleetWireField =
             (name, encoded) => new FleetValue { Name = name, NativeValue = encoded };
+        private static readonly Func<FWGalaxy, string> NativeKnownGalaxyId = galaxy => galaxy.id;
         private static readonly Func<FieldInfo, string> NativeFleetFieldName = field => field.Name;
         private static readonly Func<FWAirShip, long> NativeFleetShipUid = ship => ship.getUID();
         private static readonly Func<FWGameData, bool> NativePlayerHasPrimaryFleet =
@@ -277,12 +278,20 @@ namespace FreeWorldMultiplayer
                 foreach (var stage in staged)
                     if (stage.Item4) createdPoseIndex.RegisterCreated(stage.Item1.PlayerId, stage.Item1.FleetId);
             }
+            // Keep the original short-circuit/exception order; index only a
+            // dense, read-only pose preflight, and never cache galaxy IDs
+            // beyond this frame or replace the native creation-time Single.
+            var knownGalaxyIndex = FleetKnownGalaxyIndex<FWGalaxy>.ShouldIndex(sync.Poses.Count)
+                ? new FleetKnownGalaxyIndex<FWGalaxy>(NativeKnownGalaxyId) : null;
             var poseIds = new HashSet<long>();
             foreach (FleetPose pose in sync.Poses)
             {
                 FWGameData owner;
                 if (!Players.TryGetValue(pose.PlayerId, out owner) || Context.OwnerOfEntity(pose.FleetId) != pose.PlayerId || !poseIds.Add(pose.FleetId)
-                    || !FWPlayerLocationGuard.IsPhysicalGalaxyId(pose.GalaxyId) || !owner.galaxyBlock.knownGalaxies.Any(g => g.id == pose.GalaxyId)
+                    || !FWPlayerLocationGuard.IsPhysicalGalaxyId(pose.GalaxyId)
+                    || !(knownGalaxyIndex == null
+                        ? owner.galaxyBlock.knownGalaxies.Any(g => g.id == pose.GalaxyId)
+                        : knownGalaxyIndex.Contains(pose.PlayerId, owner.galaxyBlock.knownGalaxies, pose.GalaxyId))
                     || float.IsNaN(pose.X) || float.IsInfinity(pose.X) || float.IsNaN(pose.Y) || float.IsInfinity(pose.Y)
                     || float.IsNaN(pose.Angle) || float.IsInfinity(pose.Angle) || pose.WorldTimeMM < 0
                     || !(frameIndex == null ? OwnedFleets(pose.PlayerId).Any(f => f.getUID() == pose.FleetId) : frameIndex.Contains(pose.PlayerId, pose.FleetId))
