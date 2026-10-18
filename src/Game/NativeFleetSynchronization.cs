@@ -63,6 +63,11 @@ namespace FreeWorldMultiplayer
         private static readonly Func<FWGalaxy, string> NativeKnownGalaxyId = galaxy => galaxy.id;
         private static readonly Func<FieldInfo, string> NativeFleetFieldName = field => field.Name;
         private static readonly Func<FWAirShip, long> NativeFleetShipUid = ship => ship.getUID();
+        private static readonly Func<FWGameData, IEnumerable<FWGalaxy>> NativeRemovalGalaxies =
+            player => player.galaxyBlock.knownGalaxies;
+        private static readonly Action<FWGalaxy, long> NativeRemoveFleetFromGalaxy =
+            (galaxy, uid) => galaxy.galaxyFleetList.RemoveAll(
+                bean => bean is FWFleet && ((FWFleet)bean).getUID() == uid);
         private static readonly Func<FWGameData, bool> NativePlayerHasPrimaryFleet =
             player => player.galaxyBlock.playerFleet != null;
         private static readonly Func<FWGameData, long> NativePlayerPrimaryFleetUid =
@@ -367,11 +372,15 @@ namespace FreeWorldMultiplayer
                 Players[pose.PlayerId].elapsedMM = pose.WorldTimeMM;
                 PushRemoteFleetPose(pose, sync.Sequence, sync.Full);
             }
+            FleetGalaxyRemovalWalker<FWGameData, FWGalaxy> removalWalker = null;
             foreach (long uid in removed)
             {
                 RemoveRemoteFleetProxy(uid); remoteFleetPoses.Remove(uid);
-                foreach (FWGalaxy galaxy in Players.Values.SelectMany(p => p.galaxyBlock.knownGalaxies).Distinct())
-                    galaxy.galaxyFleetList.RemoveAll(bean => bean is FWFleet && ((FWFleet)bean).getUID() == uid);
+                // Retain the original per-UID enumeration and native
+                // RemoveAll order. Only the Distinct storage is reused across
+                // removals, so callbacks can still alter later UID views.
+                if (removalWalker == null) removalWalker = new FleetGalaxyRemovalWalker<FWGameData, FWGalaxy>();
+                removalWalker.VisitDistinct(Players.Values, NativeRemovalGalaxies, uid, NativeRemoveFleetFromGalaxy);
                 ownedFleetIndexFrame = -1;
             }
         }
