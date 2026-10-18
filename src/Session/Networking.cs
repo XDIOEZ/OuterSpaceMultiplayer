@@ -82,6 +82,7 @@ namespace FreeWorldMultiplayer
             if (message.SessionId != SessionId) throw new InvalidOperationException("旧房间会话的消息已失效。");
             switch (message.Kind)
             {
+                case "galaxyReset": galaxyResetRequests.RequestReset(playerId, bridge.ResetGalaxyRecipient); break;
                 case "ping": Send(peer, "pong", null); break;
                 case "pong": break;
                 case "finalDone": finalCheckpointPeers.Remove(peer); break;
@@ -296,6 +297,7 @@ namespace FreeWorldMultiplayer
             string playerId;
             if (!peers.TryGetValue(peer, out playerId)) return;
             peers.Remove(peer); playerPeers.Remove(playerId);
+            galaxyResetRequests.ForgetPlayer(playerId);
             PlayerRecord player = World.Players[playerId]; player.Online = false;
             Require(bridge.SetPlayerOnline(playerId, false), "冻结离线舰队");
             foreach (MapRecord map in World.Maps.Values.ToList())

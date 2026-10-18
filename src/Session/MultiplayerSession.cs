@@ -265,10 +265,11 @@ namespace FreeWorldMultiplayer
                     galaxyElapsed += seconds;
                     if (galaxyElapsed >= 0.5)
                     {
+                        galaxyResetRequests.Advance(galaxyElapsed, bridge.ResetGalaxyRecipient);
                         galaxyElapsed = 0;
                         Broadcast("clock", new ClockState { Paused = Paused, Speed = Speed, RoomRealSeconds = World.RoomRealSeconds, WorldTimeMM = World.WorldTimeMM });
                         Broadcast("raidClock", new RaidClockState { Active = World.Attacks.Values.Where(x => x.Stage != AttackStage.Finished).ToList(), Cooldowns = World.Maps.Values.Where(x => x.RaidCooldownSeconds > 0).ToDictionary(x => x.MapId, x => x.RaidCooldownSeconds) });
-                        foreach (var peer in peers.ToList()) Send(peer.Key, "galaxy", bridge.CaptureGalaxy(peer.Value));
+                        foreach (var peer in peers.ToList()) SendAndConfirmGalaxy(peer.Key, peer.Value);
                     }
                 }
                 syncElapsed += seconds;

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Stubs.cs" />
+    <!-- Compile the production gate, including its actual session field. -->
+    <Compile Include="../../src/Session/GalaxyResetRequestGate.cs" Link="GalaxyResetRequestGate.cs" />
+    <Compile Include="../../src/Session/GalaxySnapshotSend.cs" Link="GalaxySnapshotSend.cs" />
+  </ItemGroup>
+</Project>

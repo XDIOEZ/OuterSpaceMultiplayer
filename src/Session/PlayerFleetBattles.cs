@@ -140,7 +140,8 @@ namespace FreeWorldMultiplayer
                     if (player == LocalPlayerId) continue;
                     string peer;
                     if (!playerPeers.TryGetValue(player, out peer) || !World.Players[player].Online) throw new InvalidOperationException("参战玩家在入场前已断线。");
-                    bridge.ResetGalaxyRecipient(player); Send(peer, "galaxy", bridge.CaptureGalaxy(player)); bridge.ConfirmGalaxySent(player);
+                    bridge.ResetGalaxyRecipient(player);
+                    SendAndConfirmGalaxy(peer, player);
                 }
                 record.SceneAuthorized = true; SendBattleState(record);
             }

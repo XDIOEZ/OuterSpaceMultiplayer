@@ -206,7 +206,12 @@ namespace FreeWorldMultiplayer
             peer.Sequence = peer.Pending.Sync.Sequence; peer.Pending = null; peer.Snapshot = null;
         }
         public void ResetGalaxyRecipient(string recipient)
-        { galaxyRecipients.Remove(recipient); fleetSampleFrame = -1; nextSharedCapture = 0; }
+        {
+            // Reset only this recipient's delta baseline. Global per-frame fleet
+            // sampling and shared-world encoding are common to all peers; a
+            // chatty or broken client must not repeatedly invalidate them.
+            galaxyRecipients.Remove(recipient);
+        }
 
         private static bool SameFleetPose(FleetPose first, FleetPose second)
         { return first.PlayerId == second.PlayerId && first.GalaxyId == second.GalaxyId && first.X == second.X && first.Y == second.Y && first.Angle == second.Angle && first.Status == second.Status; }
