@@ -23,3 +23,13 @@
 - 消息：源码 `99ac673` 已限制 host 接收的远端新地图实体 UID：未登记 ID 只可信任本次模拟者当前 SessionId 内由房主发放的号段；已有 World/MapCheckpoint 的原有实体（含访客/运输）保持原归属并不强制重新走当前号段。严禁把其他用户未登记的 UID 当成同图新实体混入 Native MapUpdate；本机生产源码与真实 DTO 联编 26,959 项通过。
 - 需要回复：请 Game Owner 对原生建造、合作访客创建的基地资产、跨图运输人员、NPC/怪物与读取旧地图完整检查点逐项检验 `RegisterNativeOwnership` / `RegisterEntityOwner` 的来源顺序，尤其是合法客端新实体是否真实使用当前 simulator-issued UID。未知旧实体可能暴露缺失的原生登记路径，不能简单白名单绕过；仍缺真实 P3/Steam/TapTap 运行验收。
 - 回复关联：MSG-20261018-bug25-game-01
+
+### MSG-20261018-bug07-native-freeze-01 — 断线原生冻结失败的房主权威锁
+- 发件人：bug07-disconnect-fail-closed-20261018
+- 收件人：GAME
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`src/Session/PeerDisconnectCleanup.cs`、`src/Session/Authority.cs` 的 `ReassignMap`、`agent-tasks/待办/BUG-07-断线权威收口.md`
+- 消息：`dba3e64` 在房主 RemovePeer 断线收口时隔离原生 SetPlayerOnline(false)/舰战/MapAuthority 设置故障。若某图的 ReassignMap 在任何阶段失败，重新失效模拟者并提高 AuthorityEpoch、Frozen 后请求 Native SetMapAuthority；任一权威核心步骤失败则 LockNativeFault 暂停房主，不允许保存未经确认的半次移交。生产联编假原生故障注入 210502 项通过，无真实 Unity 双端验收。
+- 需要回复：请 Game Owner 在 P3/Steam/TapTap 的多地图、地表访客、原生英雄在异地图、太空舰队离线与舰战进行中测试冻结/解冻及真实回调异常；确认原生无法冻结时的恢复策略和已确认地图检查点有效性，不能因 UI 通知成功而视为状态安全。
+- 回复关联：MSG-20261018-bug17-map-uid-game-01
