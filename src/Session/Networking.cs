@@ -181,19 +181,7 @@ namespace FreeWorldMultiplayer
             // Save before confirming either first assets or newly allocated IDs. A failed handshake
             // keeps the exact player record in host memory; a retry never grants another asset set.
             SaveOrThrow();
-            player.Online = true;
-            Require(bridge.SetPlayerOnline(player.PlayerId, true), "恢复玩家舰队");
-            PlayerRecord introduction = JsonData.Clone(player);
-            introduction.CredentialId = null; introduction.CredentialHash = null; introduction.Uids = null; introduction.IssuedUidRanges.Clear();
-            Broadcast("playerJoined", new PlayerIntroduction { Player = introduction });
-            peers[peer] = player.PlayerId; playerPeers[player.PlayerId] = peer;
-            Send(peer, "welcome", new Welcome { PlayerId = player.PlayerId, World = PublicWorld(player.PlayerId), Uids = JsonData.Clone(player.Uids) });
-            ITransportPeerAdmission admission = transport as ITransportPeerAdmission;
-            if (admission != null) admission.MarkAuthenticated(peer);
-            unauthenticatedPeerDeadline.Complete(peer);
-            if (player.CurrentMapId >= 0) EnterMap(player, player.CurrentMapId);
-            BroadcastPolicy();
-            SetStatus(player.Nickname + " 已加入");
+            CompleteAuthenticatedJoin(peer, player);
         }
         private long ReconnectMap(PlayerRecord player)
         {
