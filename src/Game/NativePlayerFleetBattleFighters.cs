@@ -68,6 +68,8 @@ namespace FreeWorldMultiplayer
         }
         private readonly Dictionary<BattleFighterReplicaIdentity, BattleFighterReplica> playerBattleFighters =
             new Dictionary<BattleFighterReplicaIdentity, BattleFighterReplica>();
+        private readonly BattleFighterReplicaPresenceBuffer<BattleFighterState> fighterReplicaPresence =
+            new BattleFighterReplicaPresenceBuffer<BattleFighterState>(FighterReplicaKey);
         private readonly HashSet<FighterShip> endingPlayerBattleFighters = new HashSet<FighterShip>();
         // FleetManager removes a dying/retreating carrier before its native wing presentation
         // finishes. Retain only the already-proven scene reference/asset identity during that
@@ -348,13 +350,16 @@ namespace FreeWorldMultiplayer
                     nativeSlots.Add(key, slotLookup);
                 }
             }
-            var present = new HashSet<BattleFighterReplicaIdentity>();
-            foreach (BattleFighterState value in state.Fighters) present.Add(FighterReplicaKey(value));
-            // Remove the previous generation before assigning a reused bay/slot to its new
-            // runtime fighter. A returned/dead craft can never keep the new craft's slot.
-            var stale = BattleFighterReplicaPruner.FindMissing(playerBattleFighters, present);
-            if (stale != null)
-                foreach (BattleFighterReplicaIdentity key in stale) RemoveReplicaFighter(key);
+            var present = fighterReplicaPresence.Capture(state.Fighters);
+            try
+            {
+                // Remove the previous generation before assigning a reused
+                // bay/slot to a new runtime fighter. Never reuse a dead shell.
+                var stale = BattleFighterReplicaPruner.FindMissing(playerBattleFighters, present);
+                if (stale != null)
+                    foreach (BattleFighterReplicaIdentity key in stale) RemoveReplicaFighter(key);
+            }
+            finally { fighterReplicaPresence.Release(present); }
             double now = Time.timeAsDouble;
             double interval = playerBattleFighterReceipt == 0 ? 0 : Math.Min(0.25, Math.Max(0.01, now - playerBattleFighterReceipt));
             foreach (BattleFighterWing value in state.Wings)
@@ -475,6 +480,7 @@ namespace FreeWorldMultiplayer
             retainedReplicaFighterCarriers.Clear();
             playerBattleFighters.Clear(); endingPlayerBattleFighters.Clear(); playerBattleFighterCarriers.Clear();
             fighterCarrierCaptureSnapshot.Reset();
+            fighterReplicaPresence.Reset();
             if (playerBattleFighterRoot != null)
             {
                 PlayerBattleFightersView view = playerBattleFighterRoot.GetComponent<PlayerBattleFightersView>(); if (view != null) view.Bridge = null;
