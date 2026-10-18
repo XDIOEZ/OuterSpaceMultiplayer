@@ -53,7 +53,7 @@ internal static class Program
             string key = command.PlayerId + ":" + command.CommandId;
             int count;
             if (!NativeExecutions.TryGetValue(key, out count)) NativeExecutions[key] = count = 1;
-            RemoteCommandDispatch.PublishBeforeReceipt(
+            RemoteCommandDispatch.PublishBeforeReceipt(true,
                 () =>
                 {
                     Enqueued.Add("map:" + key);
@@ -159,14 +159,14 @@ internal static class Program
     {
         var steps = new List<string>();
         Check(Throws<ArgumentNullException>(() =>
-            RemoteCommandDispatch.PublishBeforeReceipt(null, () => {})),
+            RemoteCommandDispatch.PublishBeforeReceipt(true, null, () => {})),
             "missing actual map capture is rejected");
         Check(Throws<ArgumentNullException>(() =>
-            RemoteCommandDispatch.PublishBeforeReceipt(() => {}, null)),
+            RemoteCommandDispatch.PublishBeforeReceipt(true, () => {}, null)),
             "missing execution receipt sender is rejected");
         Check(steps.Count == 0, "invalid callbacks did not publish nor send anything");
 
-        RemoteCommandDispatch.PublishBeforeReceipt(
+        RemoteCommandDispatch.PublishBeforeReceipt(true,
             () => steps.Add("native-map-published"),
             () => steps.Add("execution-claimed"));
         Check(steps.Count == 2 &&
@@ -176,7 +176,7 @@ internal static class Program
 
         steps.Clear();
         Check(Throws<IOException>(() =>
-            RemoteCommandDispatch.PublishBeforeReceipt(
+            RemoteCommandDispatch.PublishBeforeReceipt(true,
                 () => { steps.Add("map-attempt"); throw new IOException("map enqueue"); },
                 () => steps.Add("false-success"))),
             "failed map publication propagates instead of returning false success");
@@ -185,13 +185,23 @@ internal static class Program
 
         steps.Clear();
         Check(Throws<IOException>(() =>
-            RemoteCommandDispatch.PublishBeforeReceipt(
+            RemoteCommandDispatch.PublishBeforeReceipt(true,
                 () => steps.Add("map-queued"),
                 () => { steps.Add("receipt-attempt"); throw new IOException("receipt queue"); })),
             "failure of execution receipt propagates after successful map enqueue");
         Check(steps.Count == 2 &&
             steps[0] == "map-queued" && steps[1] == "receipt-attempt",
             "receipt queue failure cannot retroactively discard already published map");
+
+        // Failures must not be hidden by an unrelated map capture failure.
+        // A simulator may reject an invalid remote command without changing
+        // the map, even while its previous map revision is still in flight.
+        steps.Clear();
+        RemoteCommandDispatch.PublishBeforeReceipt(false,
+            () => { steps.Add("unexpected-map"); throw new IOException("map unavailable"); },
+            () => steps.Add("not-applied-receipt"));
+        Check(steps.Count == 1 && steps[0] == "not-applied-receipt",
+            "real failed native execution can report failure without a new map delta");
     }
 
     private static void ProductionShapedRetry()

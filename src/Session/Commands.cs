@@ -202,6 +202,7 @@ namespace FreeWorldMultiplayer
             // Preserve the native once-only result across retransmission;
             // put its map state on the reliable queue before claiming success.
             RemoteCommandDispatch.PublishBeforeReceipt(
+                result.Applied,
                 () => PublishLocalMaps(),
                 () => Send("host", "execution", result));
         }

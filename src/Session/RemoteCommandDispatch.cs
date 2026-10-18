@@ -36,11 +36,15 @@ namespace FreeWorldMultiplayer
 
         // This enforces only transport ordering, NOT the stronger
         // "map delta durably committed" proof needed to close BUG-01.
-        internal static void PublishBeforeReceipt(Action publishMap, Action sendExecution)
+        internal static void PublishBeforeReceipt(
+            bool applied, Action publishMap, Action sendExecution)
         {
             if (publishMap == null) throw new ArgumentNullException(nameof(publishMap));
             if (sendExecution == null) throw new ArgumentNullException(nameof(sendExecution));
-            publishMap(); // If capture/enqueue fails, never enqueue a new claim of success.
+            // A genuine failure has no native effects to prove and must still
+            // reach the host if map publishing itself is unavailable.
+            // Only an Applied=true claim requires the map-first barrier.
+            if (applied) publishMap();
             sendExecution();
         }
     }
