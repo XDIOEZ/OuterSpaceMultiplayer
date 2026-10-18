@@ -89,6 +89,8 @@ namespace FreeWorldMultiplayer
         private readonly BattleEffectFrameSnapshot<long, BattleEffectReplica> battleEffectFrameSnapshot =
             new BattleEffectFrameSnapshot<long, BattleEffectReplica>();
         private readonly BattleEffectPresenceBuffer battleEffectPresence = new BattleEffectPresenceBuffer();
+        private readonly BattleEffectIdValidationBuffer battleEffectValidationIds =
+            new BattleEffectIdValidationBuffer();
         private readonly BattleWeaponBindingBuffer<BattleWeaponEffect, WeaponController> battleWeaponBindings =
             new BattleWeaponBindingBuffer<BattleWeaponEffect, WeaponController>();
         private readonly Dictionary<string, WeaponData> battleEffectWeapons = new Dictionary<string, WeaponData>(StringComparer.Ordinal);
@@ -199,27 +201,31 @@ namespace FreeWorldMultiplayer
                 || !BattleEffectFiniteFields.ValidPose(pose.X, pose.Y, pose.Z, pose.Angle, pose.Sx, pose.Sy, pose.Sz))
                 throw new InvalidOperationException("玩家舰战表现身份、资源或坐标无效。");
         }
-        private static void ValidateEffectLimits(BattleEffectsState state)
+        private void ValidateEffectLimits(BattleEffectsState state)
         {
             if (state == null || state.Schema != 1 || state.Sequence <= 0 || state.Projectiles == null || state.Vfx == null || state.Events == null || state.Weapons == null
                 || state.Projectiles.Count > 16000 || state.Vfx.Count > 16000 || state.Events.Count > 32000 || state.Weapons.Count > 8192)
                 throw new InvalidOperationException("玩家舰战表现快照结构或数量无效。");
-            var ids = new HashSet<long>();
-            foreach (BattleEffectPose pose in state.Projectiles)
-            { ValidateEffectPose(pose); if (!ids.Add(pose.Id)) throw new InvalidOperationException("玩家舰战表现实例编号重复。"); }
-            foreach (BattleEffectPose pose in state.Vfx)
-            { ValidateEffectPose(pose); if (!ids.Add(pose.Id)) throw new InvalidOperationException("玩家舰战表现实例编号重复。"); }
-            long previous = 0;
-            foreach (BattleEffectEvent item in state.Events)
+            var ids = battleEffectValidationIds.Rent();
+            try
             {
-                if (item == null || item.Serial <= previous || item.Kind < 1 || item.Kind > 3) throw new InvalidOperationException("玩家舰战表现事件序列无效。");
-                ValidateEffectPose(item.Pose);
-                if (item.Kind != 2 && item.Serial != item.Pose.Id || item.Kind == 2 && item.Serial <= item.Pose.Id) throw new InvalidOperationException("舰战表现事件和实例编号不一致。");
-                previous = item.Serial;
+                foreach (BattleEffectPose pose in state.Projectiles)
+                { ValidateEffectPose(pose); if (!ids.Add(pose.Id)) throw new InvalidOperationException("玩家舰战表现实例编号重复。"); }
+                foreach (BattleEffectPose pose in state.Vfx)
+                { ValidateEffectPose(pose); if (!ids.Add(pose.Id)) throw new InvalidOperationException("玩家舰战表现实例编号重复。"); }
+                long previous = 0;
+                foreach (BattleEffectEvent item in state.Events)
+                {
+                    if (item == null || item.Serial <= previous || item.Kind < 1 || item.Kind > 3) throw new InvalidOperationException("玩家舰战表现事件序列无效。");
+                    ValidateEffectPose(item.Pose);
+                    if (item.Kind != 2 && item.Serial != item.Pose.Id || item.Kind == 2 && item.Serial <= item.Pose.Id) throw new InvalidOperationException("舰战表现事件和实例编号不一致。");
+                    previous = item.Serial;
+                }
+                ValidateBattleWeaponEffects(state.Weapons);
             }
-            ValidateBattleWeaponEffects(state.Weapons);
+            finally { battleEffectValidationIds.Release(ids); }
         }
-        private static void ValidatePlayerBattleEffects(string encoded)
+        private void ValidatePlayerBattleEffects(string encoded)
         { ValidateEffectLimits(NativeWire.Parse<BattleEffectsState>(encoded)); }
         private WeaponData ResolveEffectWeapon(string id)
         {
@@ -471,6 +477,7 @@ namespace FreeWorldMultiplayer
             battleEffectReplicas.Clear(); battleEffectProjectiles.Clear(); battleEffectVfx.Clear(); battleEffectEvents.Clear();
             battleEffectFrameSnapshot.Reset();
             battleEffectPresence.Reset();
+            battleEffectValidationIds.Reset();
             battleWeaponBindings.Reset();
             battleProjectileCaptureSnapshot.Reset();
             battleVfxCaptureSnapshot.Reset();
