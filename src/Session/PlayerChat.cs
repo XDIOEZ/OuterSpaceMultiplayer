@@ -79,7 +79,12 @@ namespace FreeWorldMultiplayer
                 SenderPlayerId = message.SenderPlayerId, TargetPlayerId = message.TargetPlayerId, Text = message.Text,
                 Error = message.Error, Delivery = message.Delivery, DeliverySequence = message.DeliverySequence };
         }
-        private void NotifyChat(RoomChatMessage message) { ChatChanged?.Invoke(CopyChat(message)); }
+        private void NotifyChat(RoomChatMessage message)
+        {
+            Action<RoomChatMessage> observers = ChatChanged;
+            if (observers != null)
+                CommunicationObserverNotification.Publish(observers, CopyChat(message), "chat.changed");
+        }
         private void AddChat(RoomChatMessage message)
         {
             if (chatHistory.Count >= 256)

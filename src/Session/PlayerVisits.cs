@@ -138,6 +138,12 @@ namespace FreeWorldMultiplayer
         }
         private void EndVisit(HostVisit visit, PlayerVisitState state, string reason)
         { visit.State = state; visit.Grant = null; visit.Seconds = 0; SendVisitUpdate(visit, reason); }
+        private void NotifyVisit(PlayerVisitUpdate update)
+        {
+            Action<PlayerVisitUpdate> observers = VisitChanged;
+            if (observers != null)
+                CommunicationObserverNotification.Publish(observers, JsonData.Clone(update), "visit.changed");
+        }
         private void ReceiveVisit(PlayerVisitUpdate update)
         {
             if (update == null || update.Request == null || !CommunicationId(update.Request.RequestId)
@@ -151,7 +157,7 @@ namespace FreeWorldMultiplayer
                 if (remove != null) localVisits.Remove(remove); else throw new MessageRejectionException("本机参观通知队列已满。");
             }
             localVisits[update.Request.RequestId] = JsonData.Clone(update);
-            if (changed) VisitChanged?.Invoke(JsonData.Clone(update));
+            if (changed) NotifyVisit(update);
         }
         private void TickVisits(double seconds)
         {
@@ -179,7 +185,7 @@ namespace FreeWorldMultiplayer
                         {
                             update.RemainingSeconds = Math.Max(0, update.RemainingSeconds - seconds);
                             if (update.RemainingSeconds == 0 && (update.State == PlayerVisitState.Waiting || update.State == PlayerVisitState.Approved))
-                            { update.State = PlayerVisitState.Expired; update.Grant = null; update.Reason = "参观申请或赠送授权已超时。"; VisitChanged?.Invoke(JsonData.Clone(update)); }
+                            { update.State = PlayerVisitState.Expired; update.Grant = null; update.Reason = "参观申请或赠送授权已超时。"; NotifyVisit(update); }
                         }
                     }
                     finally { localVisitTickSnapshot.Release(snapshot); }

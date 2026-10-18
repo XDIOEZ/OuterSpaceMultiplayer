@@ -4,6 +4,20 @@ using Newtonsoft.Json;
 
 namespace FreeWorldMultiplayer
 {
+    internal static class Logger
+    {
+        internal static readonly List<string> Warnings = new List<string>();
+        internal static bool FailNextWarning;
+        internal static void LogWarningEngine(string warning)
+        {
+            if (FailNextWarning)
+            {
+                FailNextWarning = false;
+                throw new InvalidOperationException("synthetic diagnostic writer failed");
+            }
+            Warnings.Add(warning);
+        }
+    }
     internal sealed class MessageRejectionException : InvalidOperationException
     {
         internal MessageRejectionException(string message) : base(message) { }
@@ -161,4 +175,18 @@ namespace FreeWorldMultiplayer
                 });
         }
     }
+        public void AddHostLocalFirstVisit(string id, double seconds)
+        {
+            hostVisits.Add(id, new HostVisit
+            {
+                Request = new PlayerVisitRequest
+                {
+                    RequestId = Guid.NewGuid().ToString("N"), RequesterPlayerId = "host",
+                    RecipientPlayerId = "guest", RequesterFleetId = 100, RecipientFleetId = 200
+                },
+                State = PlayerVisitState.Waiting, Seconds = seconds
+            });
+        }
+        public void TestReceiveChat(RoomChatMessage message) { ReceiveChat(message); }
+        public void TestReceiveVisit(PlayerVisitUpdate update) { ReceiveVisit(update); }
 }

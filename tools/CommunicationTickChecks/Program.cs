@@ -238,19 +238,24 @@ internal static class Program
             failingChat.AddPending("fail-chat", 0.1);
             failingChat.AddPending("after-fail", 10);
             Action<RoomChatMessage> failListener = msg =>
-            { throw new InvalidOperationException("test chat UI callback failure"); };
+            Logger.Warnings.Clear();
+            int healthyChatObservers = 0;
+            { throw new InvalidOperationException("private-chat-text-must-not-be-logged"); };
             failingChat.ChatChanged += failListener;
-            bool chatErrorPropagated = false;
-            try { failingChat.TestTick(0.2); }
-            catch (InvalidOperationException error)
-            { chatErrorPropagated = error.Message == "test chat UI callback failure"; }
-            finally { failingChat.ChatChanged -= failListener; }
-            Check(chatErrorPropagated &&
-                Math.Abs(failingChat.PendingSeconds("after-fail") - 10) < .00001,
-                "chat UI callback failure propagates without advancing later pending records");
+            failingChat.ChatChanged += msg =>
+            { if (msg.ClientMessageId == "fail-chat" && msg.Delivery == RoomChatDelivery.Failed) healthyChatObservers++; };
+            failingChat.TestTick(0.2);
+            Check(failingChat.PendingCount == 1 && failingChat.ChatById("fail-chat").Delivery == RoomChatDelivery.Failed
+                && Math.Abs(failingChat.PendingSeconds("after-fail") - 9.8) < .00001,
+                "chat UI observer failure cannot stop later pending messages in the same production tick");
+            Check(healthyChatObservers == 1 && Logger.Warnings.Count == 1 &&
+                Logger.Warnings[0].Contains("chat.changed") && Logger.Warnings[0].Contains("InvalidOperationException")
+                && !Logger.Warnings[0].Contains("private-chat-text"),
+                "healthy chat listener still runs and diagnostics contain type/stage without private text");
+            failingChat.ChatChanged -= failListener;
             failingChat.TestTick(0.3);
-            Check(Math.Abs(failingChat.PendingSeconds("after-fail") - 9.7) < .00001,
-                "a failed chat callback releases the snapshot for normal retry");
+            Check(Math.Abs(failingChat.PendingSeconds("after-fail") - 9.5) < .00001,
+                "failed chat observer still releases the snapshot for the next tick");
 
             // Real VisitChanged listener can synchronously reenter Tick and
             // must not overwrite the outer visit timer snapshot.
@@ -273,18 +278,66 @@ internal static class Program
             var failingVisit = new MultiplayerSession { IsHost = false };
             failingVisit.AddLocalVisit("fault", 0.1);
             Action<PlayerVisitUpdate> brokenListener =
+            failingVisit.AddLocalVisit("after-fault", 10);
                 update => { throw new InvalidOperationException("test visit callback failure"); };
             failingVisit.VisitChanged += brokenListener;
-            bool propagated = false;
-            try { failingVisit.TestTick(0.2); }
-            catch (InvalidOperationException error)
-            { propagated = error.Message == "test visit callback failure"; }
-            finally { failingVisit.VisitChanged -= brokenListener; }
-            Check(propagated, "visit notification exception propagates without losing the frame lease");
-            failingVisit.AddLocalVisit("after-fault", 10);
+            int goodVisitObservers = 0;
+            failingVisit.VisitChanged += update => { if (update.State == PlayerVisitState.Expired) goodVisitObservers++; };
+            Logger.FailNextWarning = true;
+            failingVisit.TestTick(0.2);
+            Check(failingVisit.LocalVisit("fault").State == PlayerVisitState.Expired &&
+                Math.Abs(failingVisit.LocalVisit("after-fault").RemainingSeconds - 9.8) < .00001 &&
+                goodVisitObservers == 1 && !Logger.FailNextWarning,
+                "visit timeout revokes authorization and next timer continues even if logger and first observer fail");
+            failingVisit.VisitChanged -= brokenListener;
             failingVisit.TestTick(0.4);
-            Check(Math.Abs(failingVisit.LocalVisit("after-fault").RemainingSeconds - 9.6) < 0.00001,
-                "next actual tick can reuse the snapshot after a failing UI notification");
+            Check(Math.Abs(failingVisit.LocalVisit("after-fault").RemainingSeconds - 9.4) < 0.00001,
+                "next actual tick reuses the snapshot after a failed optional observer");
+
+            // Host-local callback comes first; a broken local UI must not
+            // prevent the other participant from receiving the final state.
+            var hostNotification = new MultiplayerSession { IsHost = true };
+            hostNotification.AddHostLocalFirstVisit("local-first", 0.1);
+            hostNotification.VisitChanged += _ => throw new InvalidOperationException("host visit UI fault");
+            hostNotification.TestTick(0.2);
+            Check(hostNotification.HostVisitStatus("local-first") == PlayerVisitState.Expired &&
+                hostNotification.HostVisitSeconds("local-first") == 0 &&
+                hostNotification.SentKinds.Count(x => x == "visit.update") == 1,
+                "host expires consent once and still notifies the remote participant after its local UI fails");
+
+            // A correctly validated network message is not an abusive or
+            // malformed packet merely because its optional UI callback fails.
+            var receiving = new MultiplayerSession { IsHost = false, LocalPlayerId = "guest" };
+            receiving.ChatChanged += _ => throw new InvalidOperationException("incoming chat observer failed");
+            receiving.VisitChanged += _ => throw new InvalidOperationException("incoming visit observer failed");
+            receiving.TestReceiveChat(new RoomChatMessage {
+                MessageId = Guid.NewGuid().ToString("N"), ClientMessageId = Guid.NewGuid().ToString("N"),
+                SenderPlayerId = "host", TargetPlayerId = "guest", Text = "synthetic message", DeliverySequence = 1
+            });
+            Check(receiving.SentKinds.Count(x => x == "chat.received") == 1,
+                "valid inbound chat still acknowledges delivery after optional UI observer failure");
+            receiving.TestReceiveVisit(new PlayerVisitUpdate {
+                Request = new PlayerVisitRequest { RequestId = Guid.NewGuid().ToString("N"),
+                    RequesterPlayerId = "host", RecipientPlayerId = "guest" },
+                State = PlayerVisitState.Waiting
+            });
+            bool rejectedChat = false, rejectedVisit = false;
+            try {
+                receiving.TestReceiveChat(new RoomChatMessage {
+                    MessageId = "invalid", ClientMessageId = "invalid", SenderPlayerId = "host",
+                    TargetPlayerId = "guest", Text = "bad", DeliverySequence = 2
+                });
+            }
+            catch (MessageRejectionException) { rejectedChat = true; }
+            try {
+                receiving.TestReceiveVisit(new PlayerVisitUpdate {
+                    Request = new PlayerVisitRequest { RequestId = Guid.NewGuid().ToString("N"),
+                        RequesterPlayerId = "other", RecipientPlayerId = "another" }
+                });
+            }
+            catch (MessageRejectionException) { rejectedVisit = true; }
+            Check(rejectedChat && rejectedVisit,
+                "actual forged/invalid messages still throw and cannot be hidden by observer isolation");
 
             var rateHost = new MultiplayerSession { IsHost = true };
             for (int i = 0; i < 20; i++)

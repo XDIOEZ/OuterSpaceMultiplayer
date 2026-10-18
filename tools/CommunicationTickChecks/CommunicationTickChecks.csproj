@@ -11,6 +11,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="Stubs.cs" />
     <Compile Include="../../src/Session/PlayerChat.cs" Link="PlayerChat.cs" />
+    <Compile Include="../../src/Session/CommunicationObserverNotification.cs" Link="CommunicationObserverNotification.cs" />
     <Compile Include="../../src/Session/CommunicationIdFormat.cs" Link="CommunicationIdFormat.cs" />
     <Compile Include="../../src/Session/CommunicationRateLimiter.cs" Link="CommunicationRateLimiter.cs" />
     <Compile Include="../../src/Session/BattleParticipantPair.cs" Link="BattleParticipantPair.cs" />
