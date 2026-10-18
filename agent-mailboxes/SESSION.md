@@ -73,3 +73,13 @@
 - 消息：源码和测试 `4300276` 已提交。重复 galaxyReset 按真实 PlayerId 合并，2/4/8/16 秒退避后自动继续合法未完成请求；只有 full baseline 真正通过 Send+ConfirmGalaxySent 才释放本次入队标记；同一个入口覆盖正常银河 Tick 与舰战入场；断开移除旧任务。10 秒合成 100 次请求只需 3 次 Full，不再使其它玩家共享采样缓存全局失效。本机 67924 项生产 helper/发送 partial 测试、374473 项舰队采样测试通过。
 - 需要回复：请 Session/Transport 原 Owner 验证真实 TCP/Steam 满队列、客户端全量应用失败时的重同步重试、不改变 galaxyResyncPending 的旧保护、并与 Game Owner 确认正常玩家和战斗入场最新地图/舰队内容；主任务仍待双端验收。
 - 回复关联：无
+
+### MSG-20261018-bug11-preauth-guard-session-01 — 30 秒绝对未认证握手期限
+- 发件人：bug11-preauth-deadline-20261018
+- 收件人：SESSION
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`agent-tasks/待办/BUG-11-未认证连接占位.md`、`src/Session/UnauthenticatedPeerDeadline.cs`
+- 消息：`b3488d0` 已在房主的 transport Connected/Disconnected 与成功 MarkAuthenticated 后精确接入未认证 peer 30s/32-slot 守卫，过期者清掉未完成 challenge 并调用真正断开；反复 hello 不能续期，断开失败两秒重试。生产辅助源码链接 30071 项、TCP localhost 7 项、已有优化 185 项检查通过；仍未做全量 Unity 编译和双端实机验收。BUG-24 进行中的共享文件及 VERSION 1.30 未改动。
+- 需要回复：请 Session Owner 重点复核 BUG-06 的半成功加入及欢迎消息异常路径是否还有幽灵在线状态，用户执行 Steam/TCP 双端慢速握手和到期驱逐日志；本子补丁仅封堵认证前占位，主卡仍待验收。
+- 回复关联：无
