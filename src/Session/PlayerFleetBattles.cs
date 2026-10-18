@@ -476,7 +476,8 @@ namespace FreeWorldMultiplayer
                     else
                     {
                         if (window == null) pendingBattleFrames[record.BattleId] = window = new BattleFrameWindow();
-                        frame.BaseRevision = window.Frames.Count == 0 ? record.Revision : window.Frames.Keys.Max();
+                        frame.BaseRevision = window.Frames.Count == 0
+                            ? record.Revision : BattleFrameRevisionMax.Highest(window.Frames);
                         frame.Revision = checked(frame.BaseRevision + 1);
                         window.Frames.Add(frame.Revision, frame); window.Characters += frame.NativeJson.Length;
                         Send("host", "battle.frame", frame);
