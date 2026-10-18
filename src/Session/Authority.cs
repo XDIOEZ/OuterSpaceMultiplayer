@@ -353,15 +353,24 @@ namespace FreeWorldMultiplayer
             map.Revision = update.Revision; map.Checkpoint = committed; map.LastCommitId = update.CommitId; map.LastSimulatedWorldMM = World.WorldTimeMM;
             if (playerId == LocalPlayerId) localBaselines[map.MapId] = committed;
             // Map revisions already deduplicate updates; no per-frame transaction ledger is retained.
-            foreach (string visitor in map.Visitors)
+            // ACK the canonical simulator first. Failure to enqueue a delta for
+            // another visitor cannot conceal this successfully applied commit.
+            if (peer != null) Send(peer, "map", CommittedMapReceipt(update));
+            foreach (string visitor in map.Visitors.ToList())
             {
                 string targetPeer;
-                if (playerPeers.TryGetValue(visitor, out targetPeer)) Send(targetPeer, "map", WireMapUpdate(update));
+                if (playerPeers.TryGetValue(visitor, out targetPeer))
+                {
+                    if (targetPeer == peer) continue;
+                    SendCommittedMapToObserver(targetPeer, update);
+                }
             }
             foreach (PlayerUpdate personal in update.Players)
             {
                 string targetPeer;
-                if (!map.Visitors.Contains(personal.PlayerId) && playerPeers.TryGetValue(personal.PlayerId, out targetPeer)) Send(targetPeer, "personal", personal);
+                if (!map.Visitors.Contains(personal.PlayerId) && playerPeers.TryGetValue(personal.PlayerId, out targetPeer)
+                    && targetPeer != peer)
+                    BroadcastCommittedPersonalToRecipient(targetPeer, personal);
             }
         }
         private void ReceiveMapUpdate(MapUpdate update)
@@ -450,8 +459,10 @@ namespace FreeWorldMultiplayer
                 }
             }
             player.PersonalRevision = update.Revision;
-            Broadcast("personal", update, peer);
+            // This ACK confirms host application, not save completion. Deliver
+            // it before unreliable observers can exhaust their send queues.
             if (peer != null) Send(peer, "personalAck", update);
+            BroadcastCommittedUpdate("personal", update, peer);
         }
     }
 }
