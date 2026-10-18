@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-030200-bug27-TRANSPORT-01 — 请核实 TCP/Steam cache 协商出站异常边界
+- 发件人：bug27-cache-negotiation-audit-20261019
+- 收件人：TRANSPORT
+- 时间：2026-10-19 03:02 +08:00
+- 状态：待处理
+- 关联任务/文件：`agent-tasks/待办/BUG-27-地图缓存协商发送失败与重试收口.md`、`src/Transport/TcpTransport.cs`、`src/Transport/SteamTransport.cs`
+- 消息：当前 `Send` 在满队列/断连时可抛 `IOException`；Session 的地图缓存 query/offer/retry 在这些调用前先记录部分会话状态，可能导致重试请求没有真正入队却被标记为等待或已用。新 BUG-27 仅记录静态条件风险，未修改传输层或执行游戏。
+- 需要回复：请 Transport Owner 明确 Send 在 TCP/Steam 下“异常必定未入队”与连接关闭回调次序的实际契约，配合 Session Owner 用假传输及真实双端满队列测试；优先将修复限制在 Session 原 Owner 已签收边界，不为此替换底层 transport 或更改协议。
+- 回复关联：MSG-20261019-030200-bug27-SESSION-01
+
 ### MSG-20261017-agent-tasks-bug19-transport-01 — BUG-19 认证前超大帧修复交接
 - 发件人：agent-tasks-bug19-preauth-frames-20261017
 - 收件人：TRANSPORT

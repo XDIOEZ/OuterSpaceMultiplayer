@@ -152,6 +152,7 @@
 
 | r13-01b-source-dependency-closure-20261019 | 本轮源码闭包静态审查 Agent（仅文档，占用释放） | 新 `agent-tasks/待办/R13-01B-20261019-构建源码依赖闭包与Owner签收.md`、`agent-tasks/README.md` 的索引单行、协调表本行；`src/Core`、`src/Session`、`src/Game`、`src/Entry`、`src/Transport` 全部只读 | 在 HEAD `f7b1c7d` 只读核对 162 个 C# 源文件，当前 26 个已修改追踪源文件和 21 个未追踪源文件；记录地图重同步、访客运输权限、身份设置、UI/世界配置的跨文件依赖与 Owner 签收顺序，独立交接至 R13-01。不是新 BUG，也不宣布 Git 闭包、三端构建或真实联机通过；其它 Agent 已有源码/版本/存档修改和冻结要求保持不变。文档任务结束即释放占用，不 stage 其他 Agent 的源码，不 push。 |
 | r13-01b-20261019-evidence | 本轮 B1/B3 证据完善 Agent（完成，占用释放） | 仅 `agent-tasks/待办/R13-01B-20261019-构建源码依赖闭包与Owner签收.md`、新增 SHA256 签收账本、R13-01 原卡及 README 索引；协调表仅本行 | `fe34d79` 基线的实际源码审计为 364 输入/24U/33M，指纹 `09A93C17...BEDF0344`，SHA 复验通过且严格闭包门禁按预期阻断；47 个待签收 C# 文件完整 SHA256 入账；本地 OptimizationChecks 185、VisitTransferAuthorizationChecks 33715、IdentityStorageChecks 97 项生产关联检查通过。只交付本轮可确认的审计证据和依赖组，Owner 签名、0U/0M 干净闭包、三端 BuildOnly/实机均未完成。保留所有旧源码、VERSION/CHANGELOG、游戏运行副本且不 push；占用已释放。 |
+| bug27-cache-negotiation-audit-20261019 | 本轮地图缓存协商静态审查 Agent（仅文档、占用释放） | 新 `agent-tasks/待办/BUG-27-地图缓存协商发送失败与重试收口.md`、`agent-tasks/README.md` 1 行索引、SESSION/TRANSPORT 邮箱交接及协调表本行；`src/Session/*` 和 `src/Transport/*` 仅只读 | HEAD `8276a7b` 浏览 `MapSnapshotCache.cs` 的 query/offer/retry 出站、`MapCacheExpiry.cs` 60 秒超时及 TCP/Steam 队列满 IOException，新增与 BUG-14/24 分离的 P1 条件性风险卡与 C27-01～08 验收场景。未修改功能源码、协议、版本、存档，未构建/安装/游戏测试、不 push；后续必须由实际 Owner 确认混合 hunk、权限和测试范围。文档提交后释放占用。 |
 
 其他正在进行的任务请由对应负责人自行登记，不根据文件名推断归属。
 

@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-030200-bug27-SESSION-01 — 地图缓存协商满队列后需真实重试收口
+- 发件人：bug27-cache-negotiation-audit-20261019
+- 收件人：SESSION
+- 时间：2026-10-19 03:02 +08:00
+- 状态：待处理
+- 关联任务/文件：`agent-tasks/待办/BUG-27-地图缓存协商发送失败与重试收口.md`、`src/Session/MapSnapshotCache.cs`、`src/Session/MapCacheExpiry.cs`、`src/Session/MapViewLoading.cs`
+- 消息：静态审计发现 `map.cache-query/offer/retry` 多个路径先写等待槽或去重键再调用 Send，真实 TCP/Steam 发送队列满可在入队前抛异常。相同 ViewId 的重复 query 可能不再重发 offer，房主一次性 retry 标记可能提前耗尽，客户端 60 秒超时可能中断地图同步；本轮无实机复现，也不是 BUG-24 普通 resync 或 BUG-14 超时通知已修复部分。
+- 需要回复：请地图缓存/Session 原 Owner 与 Transport 原 Owner 在修改前核实出站失败、FIFO 占位和恢复标记的精确签收范围，优先按 C27-01～08 做生产源码故障注入；不得把发送入队当作地图真实已应用，不得覆盖现有脏源码。
+- 回复关联：无
+
 ### MSG-20261017-agent-tasks-bug23-session-01 — BUG-23 原生事务前置唯一性修复
 - 发件人：agent-tasks-bug23-map-personal-unique-20261017
 - 收件人：SESSION
