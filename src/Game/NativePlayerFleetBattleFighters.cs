@@ -77,6 +77,10 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<long, BaseShip> playerBattleFighterCarriers = new Dictionary<long, BaseShip>();
         private readonly BattleEffectFrameSnapshot<long, BaseShip> fighterCarrierCaptureSnapshot =
             new BattleEffectFrameSnapshot<long, BaseShip>();
+        private readonly BattleFighterCaptureSet<FighterShip> observedFighterCaptureSet =
+            new BattleFighterCaptureSet<FighterShip>();
+        private readonly BattleFighterCaptureSet<BaseShip> currentCarrierCaptureSet =
+            new BattleFighterCaptureSet<BaseShip>();
         private readonly HashSet<BaseShip> retainedReplicaFighterCarriers = new HashSet<BaseShip>();
         private GameObject playerBattleFighterRoot;
         private long playerBattleFighterSequence, appliedPlayerBattleFighterSequence;
@@ -120,8 +124,18 @@ namespace FreeWorldMultiplayer
         private string CapturePlayerBattleFighters()
         {
             var state = new BattleFightersState { Sequence = checked(playerBattleFighterSequence + 1) };
-            var observed = new HashSet<FighterShip>();
-            var currentCarriers = new HashSet<BaseShip>(FleetManager.Instance.GetAllShips().Values);
+            using (var observedLease = observedFighterCaptureSet.Rent())
+            using (var carriersLease = currentCarrierCaptureSet.Rent())
+                return CapturePlayerBattleFightersCore(state, observedLease.Items, carriersLease.Items);
+        }
+
+        private string CapturePlayerBattleFightersCore(BattleFightersState state,
+            HashSet<FighterShip> observed, HashSet<BaseShip> currentCarriers)
+        {
+            // Snapshot before entering native wing callbacks, exactly as before.
+            // Enumerating the concrete Values collection avoids a boxed iterator.
+            foreach (BaseShip carrier in FleetManager.Instance.GetAllShips().Values)
+                currentCarriers.Add(carrier);
             foreach (BaseShip carrier in currentCarriers) RememberPlayerBattleFighterCarrier(carrier);
             var retainedCarriers = fighterCarrierCaptureSnapshot.Capture(playerBattleFighterCarriers);
             try
@@ -480,6 +494,8 @@ namespace FreeWorldMultiplayer
             retainedReplicaFighterCarriers.Clear();
             playerBattleFighters.Clear(); endingPlayerBattleFighters.Clear(); playerBattleFighterCarriers.Clear();
             fighterCarrierCaptureSnapshot.Reset();
+            observedFighterCaptureSet.Reset();
+            currentCarrierCaptureSet.Reset();
             fighterReplicaPresence.Reset();
             if (playerBattleFighterRoot != null)
             {
