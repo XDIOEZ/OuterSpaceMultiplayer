@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile the actual map loading/replay and existing refusal/eviction production methods. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="SessionStubs.cs" />
+    <Compile Include="../../src/Session/MapViewLoading.cs" Link="MapViewLoading.cs" />
+    <Compile Include="../../src/Session/OptionalPeerNotice.cs" Link="OptionalPeerNotice.cs" />
+    <Compile Include="../../src/Session/RejectedPeerEvictionGate.cs" Link="RejectedPeerEvictionGate.cs" />
+  </ItemGroup>
+</Project>

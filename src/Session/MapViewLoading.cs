@@ -276,7 +276,11 @@ namespace FreeWorldMultiplayer
                             if (IsHost)
                             {
                                 string current;
-                                if (!peers.TryGetValue(queued.Peer, out current) || current != queued.Player) continue;
+                                // A failed optional refusal may quarantine this peer while
+                                // its later frames are already waiting in the loading FIFO.
+                                // They were never applied/ACKed and must not bypass isolation.
+                                if (rejectedPeerEvictions.Contains(queued.Peer)
+                                    || !peers.TryGetValue(queued.Peer, out current) || current != queued.Player) continue;
                                 HandleHostMessage(queued.Peer, queued.Message);
                             }
                             else HandleClientMessage(queued.Message);
@@ -286,8 +290,37 @@ namespace FreeWorldMultiplayer
                     {
                         // A queued lease/command can legitimately expire before native init ends.
                         // It is never an applied native transaction and must not poison the load.
-                        Error("等待地图载入的消息已失效：" + rejected.Message);
-                        if (IsHost && queued.Peer != null && peers.ContainsKey(queued.Peer)) Send(queued.Peer, "error", rejected.Message);
+                        // StatusChanged is an optional UI observer, not another map transaction.
+                        try { Error("等待地图载入的消息已失效：" + rejected.Message); }
+                        catch (Exception) { }
+                        string boundPlayer;
+                        if (IsHost && queued.Peer != null && queued.Player != null
+                            && peers.TryGetValue(queued.Peer, out boundPlayer) && boundPlayer == queued.Player)
+                        {
+                            const string isolationReason = "地图载入期间拒绝通知未能送达，隔离该连接。";
+                            try
+                            {
+                                OptionalPeerNotice.SendOrDisconnect(
+                                    () => Send(queued.Peer, "error", rejected.Message),
+                                    () =>
+                                    {
+                                        // Track BEFORE disconnect: a synchronous Disconnected callback
+                                        // may Forget the old lease; never re-add it afterwards.
+                                        string current;
+                                        if (!peers.TryGetValue(queued.Peer, out current) || current != queued.Player) return;
+                                        rejectedPeerEvictions.Track(queued.Peer, isolationReason);
+                                        transport.Disconnect(queued.Peer, isolationReason);
+                                    });
+                            }
+                            catch (Exception)
+                            {
+                                // Unknown failures while encoding an optional refusal are not
+                                // native/map/ACK failures. Quarantine only this still-bound peer.
+                                string current;
+                                if (peers.TryGetValue(queued.Peer, out current) && current == queued.Player)
+                                    QuarantineRejectedPeer(queued.Peer, isolationReason);
+                            }
+                        }
                     }
                     finally { replayingLoadingMessage = false; }
                 }
