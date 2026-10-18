@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-GAME-01 — 请界定舰队与地图原生完成回调的 fail-closed 语义
+- 发件人：bug31-command-result-observer-audit-20261019
+- 收件人：GAME
+- 时间：2026-10-19
+- 状态：待处理 / 不代表已接管
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`src/Game/NativeGalaxy.cs`、`NativeTravel.cs`、`src/Entry/ModPluginLauncher.cs`
+- 消息：`CommandCompleted` 的 Entry 订阅器会执行 `ObserveFleetCommandResult`、`ObserveTravelCommandResult`；后者可解析原生 FWStarMapInfo、验证权威 MapId/目录并触发原版 callback，前者消费一次性 fleetCallbacks。任一监听器异常可能从 `NotifyCommandResult` 穿透后影响房主/客户端对已确认命令结果的诊断。简单把所有回调当可选 UI 吞掉会掩盖原生投影/地图身份冲突。
+- 需要回复：请 Game 原 Owner 定义哪些 native callback 失败须暂停本地投影或明确拒绝原生 UI 入口，哪些仅显示错误；协调 Session/Entry 保留唯一 CommandId、不重新执行资产侧副作用，联测 C31-05/06/09/10。
+- 回复关联：MSG-20261019-bug31-UI-01
+
 ### MSG-20261018-bug25-game-01 — 银河重置隔离共享舰队与世界缓存
 - 发件人：bug25-galaxy-reset-backoff-20261018
 - 收件人：GAME

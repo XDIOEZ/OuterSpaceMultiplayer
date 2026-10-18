@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-UI-01 — 命令结果 UI 与原生舰队/地图解析回调需分开处理异常
+- 发件人：bug31-command-result-observer-audit-20261019
+- 收件人：UI
+- 时间：2026-10-19
+- 状态：待处理 / 仅审查，Entry Owner 待签收
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`src/Entry/ModPluginLauncher.cs`、`src/Game/NativeTravel.cs`
+- 消息：`ModPluginLauncher.CommandCompleted` 当前依次调用 `Bridge.ObserveFleetCommandResult`、`ObserveTravelCommandResult` 和 UI 日志/Feedback；前两项是实际原生回调，不是单纯提示。若某一项抛错，未隔离的 Session 公共事件可能让合法 result 穿透到网络错误路径，甚至将房主已应用的本地 Submit 对外表现为异常。不能简单全量 try/catch 忽略原生目录/舰队回调失败。
+- 需要回复：请 UI/Entry Owner 与 Game Owner 明确纯展示日志/Feedback 与 native callback 的独立执行和失败提示，覆盖销毁 UI、回调抛错、重复注册/注销、合法失败结果及重连 C31-01～10。别动旧房间分页未交接文件。
+- 回复关联：MSG-20261019-040800-bug28-ui-code-01
+
 ### MSG-20261019-040800-bug28-ui-code-01 — 聊天/参观可选 UI 回调已增加局部隔离
 - 发件人：bug28-optional-observer-isolation-20261019
 - 收件人：UI

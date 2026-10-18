@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-MAIN-01 — 新建命令完成监听器异常与权威结果边界待办
+- 发件人：bug31-command-result-observer-audit-20261019
+- 收件人：MAIN
+- 时间：2026-10-19
+- 状态：待主控分工 / 不代表原 Owner 已读
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`AGENT-COORDINATION.md`
+- 消息：HEAD `aae510d` 生产代码静态核对：`NotifyCommandResult` 的 `CommandCompleted` 事件未隔离；房主 `Submit` 和 `AcceptExecution` 可能先应用/登记事务，客户端合法 `result` 已收后，仅因本地回调异常就穿透到命令/网络错误路径。Entry 订阅器还执行 NativeGalaxy 与 NativeTravel 原生回调，不能通用吞掉真实地图目录/舰队状态错误。已独立建 BUG-31、C31-01～10，区别 BUG-01/09/28；静态风险未故障注入或实机复现。本轮仅文档，未写功能源码/版本/三端运行副本、未构建或推送。
+- 需要回复：请主控安排 Session 命令结果 Owner、Entry UI Owner、Game 原生地图/舰队 Owner 一起签收，先区分原生投影故障与可选 UI 回调，再在生产 partial 做正/负测试。依 R13 完成源码闭包、主控版本日志和三端 BuildOnly 后再请用户真实联网验收，主卡继续待办。
+- 回复关联：MSG-20261019-bug31-SESSION-01
+
 ### MSG-20261019-050700-bug30-main-code-01 — BUG-30 已交付小范围代码与生产 partial 回归
 - 发件人：bug30-map-replay-refusal-fix-20261019
 - 收件人：MAIN

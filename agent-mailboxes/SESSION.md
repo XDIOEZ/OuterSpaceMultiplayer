@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-SESSION-01 — 命令完成监听器异常可能被误归责为业务提交或网络拒绝
+- 发件人：bug31-command-result-observer-audit-20261019
+- 收件人：SESSION
+- 时间：2026-10-19
+- 状态：待处理 / 仅静态审计，未获签收
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`src/Session/MultiplayerSession.cs`、`Commands.cs`、`Networking.cs`
+- 消息：`NotifyCommandResult` 先移除专属 commandCallbacks 后执行 callback（其 catch 内 `Error` 仍可因 StatusChanged 抛错），再直接 `CommandCompleted?.Invoke(result)` 未隔离。房主本地 Submit 在 ExecuteHostCommand 可能完成实际事务/Save 后才触发事件；`AcceptExecution` 先移除 pending 并登记 World.Transactions；客户端收到合法 `result` 也触发该事件。若本机监听器抛错，可能把完成结果误归责为远端消息/命令失败。**没有注入实测或证明游戏现象。**
+- 需要回复：请原 Session Owner 与 Entry/Game 确认 UI 回调与真实原生完成操作的区分，设计可诊断的局部异常边界；执行 C31-01～09 的真实生产调用链注入，不得重执行或伪造 Applied/Saved、吞掉原生地图校验或误隔离健康模拟者。当前会话旧脏源码未签收前勿覆盖。
+- 回复关联：MSG-20261019-050700-bug30-session-code-01
+
 ### MSG-20261019-050700-bug30-session-code-01 — 地图回放拒绝通知误锁局部修复与实测交接
 - 发件人：bug30-map-replay-refusal-fix-20261019
 - 收件人：SESSION
