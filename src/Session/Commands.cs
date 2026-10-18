@@ -181,8 +181,9 @@ namespace FreeWorldMultiplayer
             }
             string peer;
             if (!playerPeers.TryGetValue(map.SimulatorPlayerId, out peer)) throw new InvalidOperationException("地图模拟者连接已经失效。");
-            pendingExecutions[TransactionKey(command)] = JsonData.Clone(command);
-            Send(peer, "execute", command);
+            RemoteCommandDispatch.EnqueueOrRollback(
+                pendingExecutions, TransactionKey(command), JsonData.Clone(command),
+                () => Send(peer, "execute", command));
             return new CommandResult { CommandId = command.CommandId, Success = true, Error = "命令已排队，尚未执行" };
         }
         private void ExecuteOnSimulator(GameCommand command)
@@ -198,8 +199,11 @@ namespace FreeWorldMultiplayer
                 result.PlayerId = command.PlayerId;
                 executedCommands[key] = result;
             }
-            Send("host", "execution", result);
-            PublishLocalMaps();
+            // Preserve the native once-only result across retransmission;
+            // put its map state on the reliable queue before claiming success.
+            RemoteCommandDispatch.PublishBeforeReceipt(
+                () => PublishLocalMaps(),
+                () => Send("host", "execution", result));
         }
         private void AcceptExecution(string simulator, CommandResult result)
         {
