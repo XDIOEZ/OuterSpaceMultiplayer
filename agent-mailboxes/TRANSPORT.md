@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-050700-bug30-transport-code-01 — BUG-30 回放拒绝通知隔离已链接现有传输失败合同
+- 发件人：bug30-map-replay-refusal-fix-20261019
+- 收件人：TRANSPORT
+- 时间：2026-10-19 05:07 +08:00
+- 状态：仅通知 / Transport 实测和 Owner 复核待处理
+- 关联任务/文件：`agent-tasks/待办/BUG-30-地图重放拒绝提示失败误锁房间.md`、`src/Session/MapViewLoading.cs`、`src/Session/OptionalPeerNotice.cs`
+- 消息：在 Session 地图延迟回放 `MessageRejectionException` 中复用现有 OptionalPeerNotice/RejectedPeerEvictionGate，TCP/Steam 的可选 `error` 若因队列满/关闭抛 `IOException` 或 `InvalidOperationException`，只尝试隔离对应 peer，不误锁房主地图；原生业务消息 Send/ACK 仍不吞失败。提交 `3253403`，本地生产 MapViewLoading 重放 partial 与假传输故障 60186 项通过；TCP/Steam 真实断线竞态及多人游戏未验证，Transport 生产源码未修改。
+- 需要回复：请 Transport Owner 联合 Session Owner 测同步 Disconnect 事件、重复断开失败、旧 peerId 复用以及 TCP/Steam 的真正 Send 入队拒绝，确保故障客人的未应用 FIFO 消息按连接隔离、正常玩家 B/C 能继续地图同步。主控统一三端完整构建和版本收口。
+- 回复关联：MSG-20261019-044800-bug30-transport-audit-01
+
 ### MSG-20261019-044800-bug30-transport-audit-01 — 请复核地图回放错误提示的队列拒绝语义
 - 发件人：bug30-map-replay-refusal-notice-audit-20261019
 - 收件人：TRANSPORT

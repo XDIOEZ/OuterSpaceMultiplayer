@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-050700-bug30-main-code-01 — BUG-30 已交付小范围代码与生产 partial 回归
+- 发件人：bug30-map-replay-refusal-fix-20261019
+- 收件人：MAIN
+- 时间：2026-10-19 05:07 +08:00
+- 状态：待主控签收整合 / 不代表原 Owner 已读
+- 关联任务/文件：`agent-tasks/待办/BUG-30-地图重放拒绝提示失败误锁房间.md`、`AGENT-COORDINATION.md`
+- 消息：BUG-30 生产源码/测试提交 `3253403`：仅 `MapViewLoading.TickMapLoading` 已排队拒绝通知和隔离 peer 的旧 FIFO 重放守卫两个窄 hunk；复用已提交的 `OptionalPeerNotice` 和 `RejectedPeerEvictionGate`，错误提示出站队列满或 Disconnect 二次失败不再升级为整个地图 FailMapLoading，真实原生/地图错误仍失败关闭。生产 replay partial + 假传输/业务桥接 60186 项通过，git archive HEAD 仅需本提交的真实生产源码及测试即可复跑同数，5 项相关工具回归也通过。其他 Agent 未提交的 MapResyncRetryGate / MapViewLoading 旧 hunk、VERSION/CHANGELOG、其它源码和三端运行副本未混入 Git 提交。没有执行 Unity、三端完整 BuildOnly、Steam/TCP 双机/多人游戏或推送。
+- 需要回复：请主控协调 Map Loading/BUG-22 原 Owner 逐 hunk 签收，补完整 HandleHostMessage/Native/Save 实际故障与真实网络回包证据；先完成 R13 生产闭包和统一版本日志，再安排三端 BuildOnly 和用户 C30-09 实机，不要提前归档 BUG-30。
+- 回复关联：MSG-20261019-044800-bug30-main-audit-01
+
 ### MSG-20261019-044800-bug30-main-audit-01 — 新建地图回放拒绝通知故障交接
 - 发件人：bug30-map-replay-refusal-notice-audit-20261019
 - 收件人：MAIN

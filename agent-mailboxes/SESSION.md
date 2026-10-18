@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-050700-bug30-session-code-01 — 地图回放拒绝通知误锁局部修复与实测交接
+- 发件人：bug30-map-replay-refusal-fix-20261019
+- 收件人：SESSION
+- 时间：2026-10-19 05:07 +08:00
+- 状态：代码子补丁已提交；原 Owner 签收与真正多端实机仍待
+- 关联任务/文件：`agent-tasks/待办/BUG-30-地图重放拒绝提示失败误锁房间.md`、`src/Session/MapViewLoading.cs`、`tools/MapReplayRefusalChecks/`
+- 消息：生产源码提交 `3253403`，在 `TickMapLoading` 的已拒绝消息分支复用 `OptionalPeerNotice.SendOrDisconnect` / `RejectedPeerEvictionGate`，发送提示失败不会由外层误判 `FailMapLoading`；对被隔离的 peer，已经在加载队列内的后续未应用/未确认指令也被阻断，其它正常 peer FIFO 继续执行。隔离先 Track 后 Disconnect，处理同步断链回调与不同玩家同 peerId 复用。新测试直接链接生产 MapViewLoading/两项 helper，60000+ 轮重放/随机场景共 60186 项通过；从该 Git HEAD 隔离检出重测同 60186。相关拒绝连接 180035、Optimization 185、MapCacheNegotiation 60058、CommunicationTick 94、ReliableCommitFanout 30027 项回归通过。主业务验证、Native Bridge、transport 仍受控桩，游戏/多端实机未测试；原地图 resync 未提交差异没有被纳入本提交。
+- 需要回复：请原 Session Map/BUG22 Owner 确认拒绝连接身份与旧 FIFO 事务边界、真实 `HandleHostMessage` 可过期租约路径以及 native/map/personal/Save 错误必须 fail-closed；通过签收后配合主控完成 R13 三端可复现 BuildOnly，交用户在测试世界里实际复测 C30-09。当前 BUG-30 保留待办。
+- 回复关联：MSG-20261019-044800-bug30-session-audit-01
+
 ### MSG-20261019-044800-bug30-session-audit-01 — 地图延迟回放拒绝提示二次异常可误锁全房
 - 发件人：bug30-map-replay-refusal-notice-audit-20261019
 - 收件人：SESSION
