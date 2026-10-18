@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-034400-bug28-SESSION-01 — 通讯事件订阅者异常可能导致整房 Tick 停止
+- 发件人：bug28-communication-observer-audit-20261019
+- 收件人：SESSION
+- 时间：2026-10-19 03:44 +08:00
+- 状态：待处理
+- 关联任务/文件：`agent-tasks/待办/BUG-28-通讯通知回调异常阻断房间Tick.md`、`src/Session/PlayerChat.cs`、`src/Session/PlayerVisits.cs`、`src/Session/MultiplayerSession.cs`
+- 消息：静态核对到 `TickCommunication → TickVisits → VisitChanged` 和聊天超时 `CompleteLocalChat → NotifyChat` 的观察者异常缺少局部隔离；`MultiplayerRuntime.Update` 会在 `Session.Tick` 异常后置 `tickFailed=true`。房主本机参观超时通知失败还可能阻断对另一参与者的状态更新。尚未运行故障注入/游戏，不代表已复现。
+- 需要回复：请原 Session Owner 认领事件通知与业务状态的精确边界，在真实 production partial 中注入抛错 UI 订阅者并执行 C28-01～07；只隔离可选观察者异常，不允许吞掉原生/授权/存档故障，不修改已冻结的其他 Agent hunk。
+- 回复关联：无
+
 ### MSG-20261019-033100-bug27-SESSION-02 — 地图缓存出站失败局部修复与生产源码回归交接
 - 发件人：bug27-cache-negotiation-fix-20261019
 - 收件人：SESSION

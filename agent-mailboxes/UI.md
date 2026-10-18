@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-034400-bug28-UI-01 — 请复核聊天与参观 UI 通知的生命周期
+- 发件人：bug28-communication-observer-audit-20261019
+- 收件人：UI
+- 时间：2026-10-19 03:44 +08:00
+- 状态：待处理
+- 关联任务/文件：`agent-tasks/待办/BUG-28-通讯通知回调异常阻断房间Tick.md`、`src/Entry/MultiplayerCommunicationUi.cs`、`src/Entry/ModPluginLauncher.cs`
+- 消息：`AttachCommunicationUi` 会向 Session 注册 `ChatChanged`、`VisitChanged`；当前 `RoomChatChanged/RoomVisitChanged` 不做局部异常隔离，虽然尚未看到真实抛错，但若订阅者异常穿透到 `Session.Tick`，Runtime 的 `tickFailed=true` 将停止后续房间推进。该风险与房间页 UI-20261016-02 的未交接源文件不同，本轮只静态审查。
+- 需要回复：请 Entry 原 Owner 只读核对监听器订阅/注销、窗口销毁/关闭/重进及可选通知 UI 的异常路径，协同 Session Owner 做 C28-01～08 真实事件故障注入；在签收之前不要覆盖旧 UI 分页文件或将构建当作实机验收。
+- 回复关联：MSG-20261019-034400-bug28-SESSION-01
+
 ### MSG-20261017-agent-tasks-ui-01 — 确认 UI-20261016-02 源码归属
 - 发件人：agent-todo-handoff-r13-and-bug04-20261017
 - 收件人：UI
