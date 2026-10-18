@@ -117,6 +117,52 @@ internal static class Program
             Console.WriteLine("INFO: " + (frames * fleetCount) +
                 " production presentation calls, zero OwnedFleets rescans (previously one per call)");
 
+            // True production PresentRemoteFleetProxy integration: a dirty
+            // unrelated content field must not rebuild unchanged formation,
+            // whereas ship resource/UID/order changes must rebuild it once.
+            RemotePlayerFleetProxyView visualProxy = proxies[1001];
+            FWFleet visualFleet = visualProxy.BoundFleet;
+            string initialKey = visualProxy.VisualKey;
+            int visualBuilds = visualProxy.Visual.CreateCalls;
+            visualProxy.ContentDirty = true;
+            bridge.PresentRemoteFleetProxy(visualProxy);
+            Check(ReferenceEquals(initialKey, visualProxy.VisualKey) &&
+                visualProxy.Visual.CreateCalls == visualBuilds && !visualProxy.ContentDirty,
+                "real dirty-but-unchanged fleet reuses original key and native visual");
+            visualFleet.ships[0].id = "destroyer|α:2";
+            visualProxy.ContentDirty = true;
+            bridge.PresentRemoteFleetProxy(visualProxy);
+            string exactResourceKey = visualFleet.moveSeed + ":" + "test-mothership" + ":" +
+                String.Join("|", visualFleet.ships.Select(ship => ship.getUID() + ":" + ship.id));
+            Check(visualProxy.VisualKey == exactResourceKey &&
+                visualProxy.Visual.CreateCalls == ++visualBuilds,
+                "native resource change preserves exact legacy key and rebuilds visual once");
+            string stableChangedKey = visualProxy.VisualKey;
+            visualProxy.ContentDirty = true;
+            bridge.PresentRemoteFleetProxy(visualProxy);
+            Check(visualProxy.Visual.CreateCalls == visualBuilds &&
+                ReferenceEquals(visualProxy.VisualKey, stableChangedKey),
+                "subsequent unchanged dirty frame skips rebuilding native formation");
+            visualFleet.ships.Add(new FWAirShip { Uid = long.MaxValue, id = null });
+            visualProxy.ContentDirty = true;
+            bridge.PresentRemoteFleetProxy(visualProxy);
+            Check(visualProxy.Visual.CreateCalls == ++visualBuilds &&
+                visualProxy.VisualKey == visualFleet.moveSeed + ":test-mothership:" +
+                    String.Join("|", visualFleet.ships.Select(ship => ship.getUID() + ":" + ship.id)),
+                "adding a native ship with null resource preserves old visual formatting");
+            visualFleet.ships.Reverse();
+            visualProxy.ContentDirty = true;
+            bridge.PresentRemoteFleetProxy(visualProxy);
+            Check(visualProxy.Visual.CreateCalls == ++visualBuilds &&
+                visualProxy.VisualKey == visualFleet.moveSeed + ":test-mothership:" +
+                    String.Join("|", visualFleet.ships.Select(ship => ship.getUID() + ":" + ship.id)),
+                "formation order remains part of the native visual cache identity");
+            visualProxy.ContentDirty = true;
+            bridge.PresentRemoteFleetProxy(visualProxy);
+            Check(visualProxy.Visual.CreateCalls == visualBuilds &&
+                !visualProxy.ContentDirty,
+                "rechecked matching fleet content does not spawn duplicate native visuals");
+
             RemotePlayerFleetProxyView first = proxies[1000];
             FWFleet replacement = CreateFleet(1000, 500, "replacement");
             bridge.Players["guest"].Fleets[0] = replacement;

@@ -14,5 +14,6 @@
     <Compile Include="../../src/Game/NativeRemoteFleetProxy.cs" Link="NativeRemoteFleetProxy.cs" />
     <Compile Include="../../src/Game/RemoteFleetPoseCheckpoint.cs" Link="RemoteFleetPoseCheckpoint.cs" />
     <Compile Include="../../src/Game/RemoteFleetVisibilityPruner.cs" Link="RemoteFleetVisibilityPruner.cs" />
+    <Compile Include="../../src/Game/RemoteFleetVisualKeyBuilder.cs" Link="RemoteFleetVisualKeyBuilder.cs" />
   </ItemGroup>
 </Project>

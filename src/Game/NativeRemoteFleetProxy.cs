@@ -39,6 +39,9 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<long, RemoteFleetPoseCheckpoint<FleetPose, Vector3>> remoteFleetPoses =
             new Dictionary<long, RemoteFleetPoseCheckpoint<FleetPose, Vector3>>();
         private readonly HashSet<long> visibleRemoteFleetIds = new HashSet<long>();
+        private readonly RemoteFleetVisualKeyBuilder remoteFleetVisualKeyBuilder = new RemoteFleetVisualKeyBuilder();
+        private static readonly Func<FWAirShip, long> RemoteVisualShipUid = ship => ship.getUID();
+        private static readonly Func<FWAirShip, string> RemoteVisualShipResource = ship => ship.id;
         private GameObject remoteFleetPrefab;
 
         internal bool IsRemoteFleetProxy(GalaxyNPCFleet view)
@@ -174,7 +177,8 @@ namespace FreeWorldMultiplayer
             {
                 string motherType;
                 using (EnterPlayer(proxy.PlayerId)) motherType = GalaxyMothershipVisual.ResolveType(FleetView(proxy.PlayerId, fleet));
-                string key = fleet.moveSeed + ":" + motherType + ":" + String.Join("|", fleet.ships.Select(ship => ship.getUID() + ":" + ship.id));
+                string key = remoteFleetVisualKeyBuilder.Build(fleet.moveSeed, motherType,
+                    fleet.ships, RemoteVisualShipUid, RemoteVisualShipResource, proxy.VisualKey);
                 if (key != proxy.VisualKey)
                 {
                     if (proxy.Build != null) proxy.Build.Dispose();
@@ -230,6 +234,7 @@ namespace FreeWorldMultiplayer
             foreach (long uid in remoteFleetProxies.Keys.ToArray())
                 try { RemoveRemoteFleetProxy(uid); } catch (Exception error) { failures.Add(error); }
             remoteFleetPoses.Clear(); visibleRemoteFleetIds.Clear();
+            remoteFleetVisualKeyBuilder.Reset();
             try { if (remoteFleetPrefab != null) ResourceLoader.Release(remoteFleetPrefab); }
             catch (Exception error) { failures.Add(error); }
             finally { remoteFleetPrefab = null; }
