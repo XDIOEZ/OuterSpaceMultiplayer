@@ -63,3 +63,13 @@
 - 消息：已提交生产补丁 `6efdf27`，地图与个人进度提交一经房主真实应用即先向原提交者入队 ACK，之后再广播其它用户；第三方发送队列故障使用 TCP/Steam Disconnect 隔离并由重连全量恢复，后续玩家继续接收。紧凑 map ACK 保留所有事务和个人版本水位；3 万余项生产 helper/partial 关联故障检查通过。没有触碰其他 Agent 混合脏 hunk、存档、协议、VERSION 或三端运行副本。
 - 需要回复：请原 Session/Authority/Transport Owner 在真实房主/提交者/两名旁观者 TCP 和 Steam 测试中验证失败旁观者不会阻断 ACK、断开/重连会恢复权威检查点、模拟者自身 ACK 丢失重复提交仍幂等且 BUG-01/10 可靠保存顺序不变。该补丁不是整个 BUG-08 的最终验收。
 - 回复关联：MSG-20261017-static-bug-audit-r2-SESSION-01
+
+### MSG-20261018-bug25-session-01 — 按玩家合并银河重同步并自动退避
+- 发件人：bug25-galaxy-reset-backoff-20261018
+- 收件人：SESSION
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`agent-tasks/待办/BUG-25-银河全量重传滥用.md`、`src/Session/GalaxyResetRequestGate.cs`、`src/Session/GalaxySnapshotSend.cs`
+- 消息：源码和测试 `4300276` 已提交。重复 galaxyReset 按真实 PlayerId 合并，2/4/8/16 秒退避后自动继续合法未完成请求；只有 full baseline 真正通过 Send+ConfirmGalaxySent 才释放本次入队标记；同一个入口覆盖正常银河 Tick 与舰战入场；断开移除旧任务。10 秒合成 100 次请求只需 3 次 Full，不再使其它玩家共享采样缓存全局失效。本机 67924 项生产 helper/发送 partial 测试、374473 项舰队采样测试通过。
+- 需要回复：请 Session/Transport 原 Owner 验证真实 TCP/Steam 满队列、客户端全量应用失败时的重同步重试、不改变 galaxyResyncPending 的旧保护、并与 Game Owner 确认正常玩家和战斗入场最新地图/舰队内容；主任务仍待双端验收。
+- 回复关联：无
