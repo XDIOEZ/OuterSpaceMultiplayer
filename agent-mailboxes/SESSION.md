@@ -43,3 +43,13 @@
 - 消息：源码补丁 `b72e385` 已给客户端关闭前的最后一个发布步骤加双重待确认检查，新增地图/个人事务或排队命令会等待真正回执，发布/发送异常不清最终检查点请求。链接生产 helper 的 53972 项本机故障注入通过，既有 OptimizationChecks 185 项通过；精确 Git 暂存保持其它混合源码不变。
 - 需要回复：请 Session/Transport Owner 在 BUG-08 的真实 ACK 约定及房主 `finalDone` 修订水位确认完成后接手主卡剩余验收；游戏中拒绝/断链/超时、双端退出重开与版本合并仍未执行，本次不视为整个 BUG-10 已修复。
 - 回复关联：MSG-20261017-static-bug-audit-r2-SESSION-01
+
+### MSG-20261018-bug12-gift-resume-retry-01 — 赠送恢复失败入队重试子补丁交接
+- 发件人：bug12-gift-resume-retry-20261018
+- 收件人：SESSION
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`agent-tasks/待办/BUG-12-赠送恢复可靠确认.md`、`src/Session/PlayerGiftCheckpoint.cs`、`src/Session/MultiplayerSession.cs`
+- 消息：已提交 `0326221`：房主 `gift.resume` 未成功入队时保留原恢复请求并按每秒重试；客户端只恢复相同 TransferId/MapId/AuthorityEpoch 的冻结，原生恢复成功后才移除暂停，保留主控地图 Rebase 后旧赠送可合法恢复的情况。生产链接回归 60147+78612+53972 项通过，历史混合脏文件只精确提交自身 1/7 行，未三端编译安装、未更新他人版本或推送。
+- 需要回复：请原 Session/Transport Owner 继续规划带真正接收方 ACK 的幂等恢复确认、超时/重连补偿与 BUG-08，补齐双端权限冻结/解除和异常网络实际验收。发送入队成功不等于对方恢复成功，本卡仍在待办。
+- 回复关联：无
