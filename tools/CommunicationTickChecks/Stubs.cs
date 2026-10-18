@@ -86,6 +86,7 @@ namespace FreeWorldMultiplayer
         // linked limiter helper, including host tick and disconnect wiring.
         public bool TestConsumeRate(string playerId, string category)
         { return ConsumeCommunicationRate(playerId, category); }
+        public static bool TestCommunicationId(string id) { return CommunicationId(id); }
         public void TestDisconnectRate(string playerId)
         { DisconnectCommunication(playerId, false); }
         public double TestClock { get { return communicationTime; } }

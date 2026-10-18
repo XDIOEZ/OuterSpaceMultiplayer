@@ -35,7 +35,7 @@ namespace FreeWorldMultiplayer
         private readonly CommunicationRateLimiter communicationRateLimiter = new CommunicationRateLimiter();
 
         private static bool CommunicationId(string id)
-        { return id != null && id.Length == 32 && id.All(c => c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'); }
+        { return CommunicationIdFormat.IsValid(id); }
         private static T ReadCommunication<T>(WireMessage message)
         {
             try { return JsonData.Payload<T>(message.Payload); }

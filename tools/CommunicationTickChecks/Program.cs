@@ -39,6 +39,17 @@ internal static class Program
     {
         try
         {
+            // The original private entrypoint is shared by live chat, visit,
+            // and battle commands; this compiles that production method,
+            // rather than calling only the extracted utility in isolation.
+            Check(MultiplayerSession.TestCommunicationId("0123456789abcdefABCDEF0123456789") &&
+                MultiplayerSession.TestCommunicationId(Guid.Empty.ToString("N")),
+                "shared production communication ID accepts exact ASCII hex, in either case");
+            Check(!MultiplayerSession.TestCommunicationId(null) &&
+                !MultiplayerSession.TestCommunicationId("") &&
+                !MultiplayerSession.TestCommunicationId("0123456789abcdefABCDEF012345678Z") &&
+                !MultiplayerSession.TestCommunicationId("0123456789abcdefABCDEF0123456789 "),
+                "shared production communication ID rejects null, length, bad hex and whitespace");
             const int iterations = 5000;
             var host = new MultiplayerSession { IsHost = true };
             long hostAllocated = AllocatedByTicks(() => host.TestTick(0.016), iterations);
