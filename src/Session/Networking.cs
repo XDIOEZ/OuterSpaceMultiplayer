@@ -289,21 +289,7 @@ namespace FreeWorldMultiplayer
         }
         private void RemovePeer(string peer)
         {
-            challenges.Remove(peer);
-            DeferredCommandReplyMap.RemoveForPeer(commandReplyPeers, peer);
-            string playerId;
-            if (!peers.TryGetValue(peer, out playerId)) return;
-            peers.Remove(peer); playerPeers.Remove(playerId);
-            galaxyResetRequests.ForgetPlayer(playerId);
-            PlayerRecord player = World.Players[playerId]; player.Online = false;
-            Require(bridge.SetPlayerOnline(playerId, false), "冻结离线舰队");
-            foreach (MapRecord map in World.Maps.Values.ToList())
-            {
-                map.Visitors.Remove(playerId);
-                if (map.SimulatorPlayerId == playerId) ReassignMap(map);
-            }
-            foreach (string id in pendingExecutions.Where(x => x.Value.PlayerId == playerId).Select(x => x.Key).ToList()) pendingExecutions.Remove(id);
-            BroadcastPolicy(); SetStatus(player.Nickname + " 已离线，舰队冻结");
+            RemovePeerAuthorityFirst(peer);
         }
         private void BroadcastPolicy()
         {
