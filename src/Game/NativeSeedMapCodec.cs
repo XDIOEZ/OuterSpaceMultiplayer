@@ -323,33 +323,9 @@ namespace FreeWorldMultiplayer
         internal static void ClearCache()
         { lock (CacheLock) { Cache.Clear(); cacheCells = 0; cacheUse = 0; readContent = null; writeContent = null; } }
         internal static string HashTiles(string[,] tiles)
-        { return HashBytes(EncodeTiles(tiles)); }
+        { return SeedTerrainStreamingCodec.HashTiles(tiles); }
         internal static byte[] EncodeTiles(string[,] tiles)
-        {
-            if (tiles == null || tiles.GetLength(0) <= 0 || tiles.GetLength(1) <= 0 || tiles.Length > MaxCells
-                || tiles.GetLowerBound(0) != 0 || tiles.GetLowerBound(1) != 0)
-                throw new InvalidDataException("Invalid bounded terrain matrix.");
-            var paletteSet = new HashSet<string>(StringComparer.Ordinal);
-            foreach (string value in tiles)
-            { if (!ValidId(value)) throw new InvalidDataException("Native terrain contains a missing or oversized ground ID."); paletteSet.Add(value); }
-            if (paletteSet.Count > 4096) throw new InvalidDataException("Seed terrain has too many ground definitions.");
-            var palette = paletteSet.ToList(); palette.Sort(StringComparer.Ordinal);
-            var indices = new Dictionary<string, int>(StringComparer.Ordinal);
-            using (var stream = new MemoryStream())
-            {
-                using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
-                {
-                    writer.Write(0x31544D46); writer.Write(tiles.GetLength(1)); writer.Write(tiles.GetLength(0)); writer.Write(palette.Count);
-                    foreach (string value in palette)
-                    {
-                        byte[] text = System.Text.Encoding.UTF8.GetBytes(value); writer.Write(text.Length); writer.Write(text);
-                        indices.Add(value, indices.Count);
-                    }
-                    foreach (string value in tiles) writer.Write(indices[value]);
-                }
-                return stream.ToArray();
-            }
-        }
+        { return SeedTerrainStreamingCodec.EncodeTiles(tiles); }
         private static string[,] DecodeTiles(byte[] bytes, int width, int height)
         {
             // Every length is checked before allocating, including content recovered from the
