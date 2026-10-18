@@ -148,6 +148,7 @@
 | UI-20261016-03 | 本轮 UI 结构代理 | `src/Entry/MultiplayerVisualTheme.cs`、`src/Entry/MultiplayerPlayerRosterVisual.cs` | 已完成：视觉刷新和玩家列表数据 / 显示职责拆分，本地提交 `a7c6d6c`；未构建或游戏内验收，文件占用已释放 |
 | landing-capture-scan | 当前性能优化代理（本会话） | `src/Game/NativeLanding.cs` | 已撤销并释放文件：发现 `transport-pvp-game` 正在使用此文件，试验改动已精确撤回，未提交；需主控明确协调后才能继续 |
 | transit-manifest-skip-empty | 当前性能优化代理（本会话） | `src/Game/NativeTransitProjection.cs` | 已完成 `e7a09fb`：货运空乘客清单跳过雇员/动物列表扫描；仅静态差异检查，未构建、未安装、未游戏验收；无接口、协议、存档变更；文件占用已释放 |
+| plan-20261019-mod-optimization | 本轮只读审查/待办规划 Agent（完成，文件占用释放） | 新 `agent-tasks/待办/PLAN-20261019-联机MOD优化与验收总清单.md`；协调表仅本行 | 已浏览开发规范、现有任务卡与高风险调用链，按 P0/P1/P2 建立 Owner/验收/阻塞清单；没有修改功能代码、版本、协议、存档或三端副本。当前工作树含其它 Agent 大量未提交内容，后续源码修复须逐一签收；文档提交可从本轮 Git 记录查验，无实机/BuildOnly 验收；占用已释放。 |
 
 其他正在进行的任务请由对应负责人自行登记，不根据文件名推断归属。
 
