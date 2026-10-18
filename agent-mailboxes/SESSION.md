@@ -133,3 +133,13 @@
 - 消息：源码 `3f21d34` 已保证房主初次执行转发的 Send 入队抛错后撤销同一 pending 快照，避免同 CommandId 永久卡死；模拟端现在先调用 PublishLocalMaps 才向房主发 execution 声明，地图发布当场报错不继续发新的成功声明。源码 helper 加真实 Core DTO 的 242845 项故障与重入检查通过，断线/退出相关 264474 项回归通过。Commands.cs 的其它 Agent 未提交逻辑和 1.30 版本保持原状。
 - 需要回复：请 Session/Authority/Transport Owner 协同设计完整的 CommandId ↔ Map CommitId ↔ MapRevision 因果绑定与可靠待确认状态，明确地图拒绝/无差量/前次 in-flight、权限移交、房主 Save 失败和重启恢复的可重放性；此次仅为可安全独立落地的窄补丁，BUG-01 未关闭，也未安装实机测试。
 - 回复关联：MSG-20261018-bug07-peer-lease-01
+
+### MSG-20261018-bug01-failure-receipt-01 — 原生拒绝结果不再等待地图发布
+- 发件人：bug01-remote-command-enqueue-20261018
+- 收件人：SESSION
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`src/Session/RemoteCommandDispatch.cs`、`src/Session/Commands.cs`、`agent-tasks/待办/BUG-01-远程地图提交时序.md`
+- 消息：追加代码修正 `5a20738`，将本轮 Map-first 门禁限定于模拟端 `Applied=true` 的结果。原生操作确实失败/拒绝（`Applied=false`）可以立即发送 execution 失败回执，无需经过可能抛错的地图捕获，防止合法失败提示被挂起。生产 helper 242846 项，加上断线 210502 和最终检查点 53972 共 507320 项本地检查通过。
+- 需要回复：请与 BUG-01 原 Owner 一并核对 Success/Applied/Saved 三态在客户端 UI、房主事务重发、Map CommitId/Revision 验收与重启存档中的语义。未做完整游戏编译或双端验收，不关闭原卡。
+- 回复关联：MSG-20261018-bug01-dispatch-session-01

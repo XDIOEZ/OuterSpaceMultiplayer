@@ -14,3 +14,8 @@
 - **模拟者结果投递：** 保留原有 `executedCommands` 对 CommandId 的 once-only 原生执行缓存，但发送顺序改为 `PublishLocalMaps()` 先于 `Send("host", "execution", result)`。若地图捕获/队列入队立即失败，异常向上报告且不会另外发送成功的执行声明；重复执行结果仍引用原本缓存的返回值。该顺序只保证本地调用和队列的先后，不能证明实际房主已接受地图或保存世界。
 - **本地证据：** `dotnet run -c Release --project tools/RemoteCommandDispatchChecks/RemoteCommandDispatchChecks.csproj` 直接编译生产 helper 与 `src/Core/Contracts.cs`、`src/Core/PlayerFleetBattles.cs` 的真实类型，242845 项通过（初次 execute 入队失败、重试同 ID、同步回调重入、其它玩家命令隔离、地图上传失败后绝不发送执行声明、2.2 万轮随机注入）。`PeerDisconnectCleanupChecks` 210502 项、`FinalCheckpointGateChecks` 53972 项同时通过。本地桩并非实际 Unity `Commands` 全流程或跨机联机。
 - **尚未完成（本卡必须继续待办）：** `AcceptExecution` 仍可能依据模拟者提供的结果在地图 `CommitId/MapRevision` 完成权威提交之前记录 `Applied=true`；已有待发送地图差量或没有可捕获变化时，简单的 Publish-first 不构成因果证明。必须由 Session/Authority/Transport Owner 联合设计命令 ↔ 地图提交编号与水位的持久状态，并覆盖房主拒绝地图、回执丢包、旧任期/连接重放、保存失败与重开旧档不重复执行。BUG-02 的 deferred reply 生命周期也需联测。当前用户其他 Agent 的 `VERSION=1.30`、CHANGELOG 未提交内容未覆盖，暂不执行三端构建安装或宣称实机通过。
+
+### 2026-10-18 补充：原生拒绝操作时无需等待地图差量
+
+- **补充代码提交：** `5a20738`。模拟端 `RemoteCommandDispatch.PublishBeforeReceipt(result.Applied,...)` 现在只要求 `Applied=true` 的执行声明先提交本地地图；对于 `Applied=false` 的真实拒绝/失败结果，直接入队回执，即使此时地图捕获异常也不会将失败通知一起堵住。
+- **补充验证：** 新增生产 helper 本地回归用例，确认未应用结果不会触发可能失败的地图捕获，`RemoteCommandDispatchChecks` 从 242845 增至 **242846 项通过**；断线权威 210502 与最终检查点 53972 项分别通过。本轮共 **507320 项相关本地检查通过**。这只区分声明是否已应用，不表示成功执行已得到房主权威 MapRevision/CommitId 确认，原卡仍待办。
