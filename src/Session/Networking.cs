@@ -125,12 +125,7 @@ namespace FreeWorldMultiplayer
                     if (!World.Maps.TryGetValue(reference.MapId, out resync) || !resync.Visitors.Contains(playerId)) throw new InvalidOperationException("只能重同步自己正在访问的地图。");
                     SendMapView(resync, playerId); break;
                 case "uids":
-                    PlayerRecord recipient = World.Players[playerId];
-                    UidRange range = ReserveUidRange(false);
-                    recipient.Uids = range;
-                    recipient.IssuedUidRanges.Add(range);
-                    SaveOrThrow();
-                    Send(peer, "uids", range);
+                    ReceiveUidRangeRequest(peer, playerId, message.RequestId);
                     break;
                 case "execution": AcceptExecution(playerId, JsonData.Payload<CommandResult>(message.Payload)); break;
                 case "personalUpdate": AcceptPersonalUpdate(playerId, peer, JsonData.Payload<PlayerUpdate>(message.Payload)); break;
@@ -259,7 +254,7 @@ namespace FreeWorldMultiplayer
                 case "mapRejected":
                     var rejection = JsonData.Payload<AuthorityReady>(message.Payload);
                     inFlightUpdates.Remove(rejection.MapId); Error("地图提交版本过期，等待房主重发完整状态。"); break;
-                case "uids": World.Players[LocalPlayerId].Uids = JsonData.Payload<UidRange>(message.Payload); break;
+                case "uids": ReceiveUidRenewal(message); break;
                 case "personal":
                     PlayerUpdate personal = JsonData.Payload<PlayerUpdate>(message.Payload);
                     Require(bridge.ApplyPlayerUpdate(personal), "同步个人进度字段差量");

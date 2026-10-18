@@ -35,14 +35,14 @@ namespace FreeWorldMultiplayer
             if (player.Uids == null || player.Uids.SessionId != SessionId) throw new InvalidOperationException("旧会话 UID 号段不可继续使用。");
             if (player.Uids.Next > player.Uids.Last)
             {
-                if (!IsHost) { Send("host", "uids", null); throw new InvalidOperationException("房主 UID 号段已耗尽，等待新号段后重试该操作。"); }
+                if (!IsHost) { RequestUidRenewal(player); throw new InvalidOperationException("房主 UID 号段已耗尽，等待新号段后重试该操作。"); }
                 player.Uids = ReserveUidRange(false); player.IssuedUidRanges.Add(player.Uids);
                 // If serialization itself requested a UID, the current generation will persist
                 // this high-water mark. A nested save here would recursively capture the same world.
                 if (!saveInProgress) SaveOrThrow();
             }
             long uid = player.Uids.Next++;
-            if (!IsHost && player.Uids.Last - player.Uids.Next == 1000) Send("host", "uids", null);
+            if (!IsHost && player.Uids.Last - player.Uids.Next <= 1000) RequestUidRenewal(player);
             return uid;
         }
         private void RegisterOwner(long uid, string playerId)
