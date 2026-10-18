@@ -1,6 +1,6 @@
 # BUG-27 / P1 · 地图缓存协商发送失败后状态滞留与重试收口
 
-> **状态：待原 Owner 签收与故障注入（本轮仅静态审计）**
+> **状态：局部生产源码修复已提交 + 本机生产 partial/辅助类故障注入通过；完整 MOD 构建、原 Owner 签收与真实双端运行仍待办**
 > **发现日期：** 2026-10-19（主仓库 `codex/multiplayer-v1`，审查时 HEAD `8276a7b`）
 > **风险等级：** P1 / 地图加载可用性；**尚未用真实游戏或故障注入证明已经发生**
 > **预期负责人：** Session 地图缓存/加载 Owner 主导，Transport Owner 复核 TCP/Steam 入队异常；涉及 Game 原生 SEED 回退时由 Game Owner 复核。不代表已经取得接管授权。
@@ -50,7 +50,7 @@
 - 若多处补偿难以证明一致性，再考虑以 `ViewId` 为键统一组织缓存事务及定时器，保留原 `WorldId / MapId / Epoch / Revision` 校验和唯一 FIFO 槽。
 - **优点：** 统一管理成功、超时、重试与释放；**缺点：** 需要跨多个历史混合脏文件，回归和协议兼容风险高。未证明必要性前不应为“优雅”重构整个地图加载链。
 
-## 5. 故障注入与验收（全部待执行）
+## 5. 故障注入与验收（本机生产关联测试已执行，实机仍待执行）
 
 | 编号 | 故障位置与注入方式 | 必须观察/断言 |
 | --- | --- | --- |
@@ -65,6 +65,31 @@
 
 **证据分层：** 静态调用链 → 链接真实生产方法的假传输故障注入 → 原 Owner 签收并从干净 Git 检出重建 → P3/Steam/TapTap 各自真实引用 BuildOnly → 用户执行 TCP/Steam 双端或 3 人游戏回归。仅本地 helper 通过不代表跨端加载/本体运行通过。
 
+### 2026-10-19 / 子补丁交付：出站失败有界恢复
+
+**提交：** `05445fedd60c07e344f1edac443acc5ff0df118b`（`fix: defer failed map cache negotiation messages with bounded retries`）。
+
+**精确改动：** `src/Session/MapSnapshotCache.cs`、`MapCacheExpiry.cs`（修改前均为干净已跟踪文件），新增 `src/Session/MapCacheOutboundRetry.cs`；为既有优化检查追加仅测试环境的 `MapCacheExpiryStubs.cs` 方法，新建 `tools/MapCacheNegotiationChecks/`。本提交**没有暂存**其它 Agent 混合的 `MapViewLoading.cs`、`Authority.cs`、Core/Transport、`VERSION`、`CHANGELOG.md`。
+
+| 触发点 | 真实接线改动 | 本地证据 / 保留边界 |
+| --- | --- | --- |
+| C27-01 房主 query | 先完成协议编码，再记录 `OfferedMapView` 和保留字节；`transport.Send` 抛错只按**对象引用身份**移除本次预留并还原对应字节 | 生产 partial 桩注入满队列，故障 peer 不影响健康 peer；若更晚业务流程失败，不清空其它准备记录 |
+| C27-02 客端 offer | 协商数据编码成功后才创建 FIFO 等待槽；发送队列拥塞时暂存**同一已编码帧**，每隔 **2 秒未缩放会话时间**重试 | 同 ViewId 重复 query 不新增 FIFO 槽，不跳过冷却；重连会清理等待帧 |
+| C27-03 房主 retry | 为正在进行的恢复 query 建立可嵌套尝试标记；**只有明确由新 query 的 transport 入队失败触发**才释放一次性恢复资格 | 生产方法注入 IOException 可重新受理同键请求；FormatException 等未知/可能已改变业务状态的故障不会解除一次性保护 |
+| C27-04 缓存损坏回退 | 缓存校验异常时先建立 `loadingResyncs` 权威修订屏障，再移除原缓存 FIFO 占位，重试消息如果入队失败保留有界待发送状态 | 解码损坏、满队列与下次入队场景已走真实 `StageNetworkMapView`；恢复前不解除权威屏障 |
+| C27-05 SEED 不匹配 | `RetryFullTerrain` 的完整地形请求也经过同一退避器，保持当前一次性完整回退/地图任期限制 | 生产方法链接测试覆盖首发异常、延迟重发、同 ViewId 二次拒绝 |
+| C27-06/08 状态释放与上限 | 退出/断线清空待发送帧；旧任期或不再等待的 ViewId 不重投，重试池最多 **16 条**，保留原 8 视图/256 MiB/60 秒限制 | 随机、同步重入、原对象替换、容量/60 秒常态拥塞故障用例通过 |
+
+**本轮实际执行命令与结果：**
+
+1. `dotnet run -c Release --project tools/MapCacheNegotiationChecks/MapCacheNegotiationChecks.csproj`：**60,058 项通过**。编译链接**真实** `src/Session/MapSnapshotCache.cs`、`MapCacheExpiry.cs`、`MapCacheOutboundRetry.cs` 与 `OptionalPeerNotice.cs`，外围 Unity/Transport 用受控测试桩；含 C27-01～08 对应本机故障注入。测试桩的未赋值字段有 `CS0649/CS0414` 警告，不影响通过结果。
+2. `dotnet run -c Release --project tools/OptimizationChecks/OptimizationChecks.csproj`：**185 项通过**，原缓存超时通知等独立生产关联检查保持通过。
+3. `dotnet run -c Release --project tools/MapCacheStoreChecks/MapCacheStoreChecks.csproj`：**31 项通过**，内容哈希与持久缓存独立路径保持通过。
+
+**明确未覆盖：** 以上为测试桩/逻辑和真实会话部分源码链接，并非 Unity 完整编译、真实 TCP/Steam 多人游戏或原生地图 `ApplyMap` 端到端验收；生产 `MapViewLoading.cs`、`Authority.cs` 属于其它 Agent 现有混合未提交差异，本子补丁没有改写。房主**发送已入队后**的 ACK/对端实际应用仍按原可靠链路，不能由该局部重试器证明；房主对 `map.cache-retry` 首次回包失败后的**无需客户端再发请求的主动重试**尚未落地，后续 Owner 应结合当前 C27-03 复测并决定是否需要独立有界主机侧任务。异常/断链的真实 UI 提示也仍须验收。
+
+**发布与版本：** 项目要求每个完整独立 BUG 修复由主控维护版本/CHANGELOG；当前二者有历史未提交混合内容且本卡仍缺最终真实验收，**此次未抢写版本**。发布前由主控签收本子补丁、统一整理版本与日志并做真正干净 Git 构建，未获批不复制到任何游戏安装副本、不 push。
+
 ## 6. 工作范围、阻塞与交接
 
 - **候选文件（先由原 Owner 确认）：** `src/Session/MapSnapshotCache.cs`、`src/Session/MapCacheExpiry.cs`、`src/Session/MapViewLoading.cs`、`src/Session/Authority.cs` 的 `RetryFullTerrain` 调用；若需要测试新建 `tools/MapCacheNegotiationChecks/`，必要时复用既有地图重同步测试。
@@ -75,9 +100,10 @@
 ## 7. 归档条件
 
 - [ ] Session/Transport/Game 相应原 Owner 对精确 hunk 与调用契约签收。
-- [ ] C27-01～08 的适用生产关联场景执行并有异常前后状态/保留字节记录；处理断线、重复消息和编码错误边界。
+- [x] C27-01～08 的**本机生产方法/辅助类链接测试**及异常前后状态、重复消息、重入、60 秒/容量门禁已执行（见子补丁回执）。
+- [ ] C27-01～08 的**真实房主/客端完整加载与 TCP/Steam 网络故障**仍未执行；不把上条部分测试冒充实机验收。
 - [ ] 干净 Git 构建输入闭包和三端目标 BuildOnly 证据齐全。
 - [ ] 用户完成至少 TCP 与 Steam 双端相关缓存/SEED 恢复及正常玩家不受影响的实机回归。
 - [ ] 更新此任务卡的真实提交 SHA、版本、测试日志和剩余依赖后，**才可由待办移动到已完成**。
 
-**本轮实际动作：** 仅浏览仓库与代码路径，创建本任务卡。未改业务源码、协议、存档、版本；未运行游戏或故障注入。以上都是条件性静态风险，须验证后才认定为实机 BUG。
+**历史建卡动作：** 首次建档仅浏览源码，记录条件性风险，未复现；**本次已经实施上述局部生产代码及测试提交**。本卡保持待办，原 Owner、三端构建、协议兼容和用户真实联机证据未齐全前不能归档。

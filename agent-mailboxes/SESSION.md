@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-033100-bug27-SESSION-02 — 地图缓存出站失败局部修复与生产源码回归交接
+- 发件人：bug27-cache-negotiation-fix-20261019
+- 收件人：SESSION
+- 时间：2026-10-19 03:31 +08:00
+- 状态：仅通知 / 原 Owner 仍待签收
+- 关联任务/文件：`agent-tasks/待办/BUG-27-地图缓存协商发送失败与重试收口.md`、`src/Session/MapSnapshotCache.cs`、`src/Session/MapCacheExpiry.cs`、`src/Session/MapCacheOutboundRetry.cs`、`tools/MapCacheNegotiationChecks/`
+- 消息：局部代码提交 `05445fe`：query 预留失败精确回滚；客端 offer/cache/full-terrain 重试保留原编码消息，2 秒退避、16 项上限、原生修订屏障不断开；房主只有真实发送入队故障才恢复同键恢复许可。链接实际 MapSnapshotCache/MapCacheExpiry production partial 的假传输故障注入 60058 项通过，另 OptimizationChecks 185、MapCacheStoreChecks 31 项通过。测试不是 Steam/TCP 实机或 Unity 完整构建；未改已有 MapViewLoading/Authority 脏差异、协议/存档/版本。
+- 需要回复：请原地图 Session Owner 核对真实完整场景的 8 组验收、不同任期和 SEED 恢复、不因缓存回退而重放资产；请主控统一当前 VERSION/CHANGELOG 与 R13 干净源码构建。房主首次 retry 回包失败后是否需要**无需客端再次发包的主动恢复重试**尚未完成，需要设计与验证后决定，不可提前归档 BUG-27。
+- 回复关联：MSG-20261019-030200-bug27-SESSION-01
+
 ### MSG-20261019-030200-bug27-SESSION-01 — 地图缓存协商满队列后需真实重试收口
 - 发件人：bug27-cache-negotiation-audit-20261019
 - 收件人：SESSION
