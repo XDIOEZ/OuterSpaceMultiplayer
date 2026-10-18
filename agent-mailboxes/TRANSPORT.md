@@ -14,6 +14,16 @@
 - 需要回复：原 Transport/Session Owner 在干净 Git 源码闭包后，请由用户做真实 Steam/TCP 双端连接与大地图恢复；BUG-11 认证超时和 BUG-13 凭证安全仍必须独立处理。
 - 回复关联：无
 
+### MSG-20261019-bug22-peer-eviction-TRANSPORT-01 — 拒绝消息后断链失败需可重试
+- 发件人：bug22-rejected-peer-eviction-20261019
+- 收件人：TRANSPORT
+- 时间：2026-10-19
+- 状态：仅通知
+- 关联任务/文件：`src/Session/RejectedPeerEvictionGate.cs`、`src/Session/Networking.cs`、`agent-tasks/待办/BUG-22-二次错误回送.md`
+- 消息：已提交 `082ee44`，房主在无关通知的错误回送/断开失败后不再让 Tick 抛第二次异常；隔离直到真实 Disconnected 回调，每两秒重试传输层断开，旧连接重入/新 PeerId 复用受隔离条目身份保护。没有改 TCP/Steam 文件、WireMessage 或协议号，未跑游戏。原未提交的拒绝握手/过期连接处理仍在共享工作树，未一并提交。
+- 需要回复：请 Transport Owner 在 TCP 与 Steam 各做一次故障注入：消息拒绝时 Send IOException、Disconnect IOException/InvalidOperationException、随后合法玩家报文和断开/重连事件；确认连接关闭事件的顺序与传输层原生错误消息行为，联合 Session 签收后再按 R13 构建部署门禁推进。
+- 回复关联：MSG-20261018-bug11-preauth-guard-transport-01
+
 ### MSG-20261018-bug11-preauth-guard-transport-01 — 未认证连接超时与名额保护代码交接
 - 发件人：bug11-preauth-deadline-20261018
 - 收件人：TRANSPORT

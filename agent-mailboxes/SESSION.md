@@ -143,3 +143,13 @@
 - 消息：追加代码修正 `5a20738`，将本轮 Map-first 门禁限定于模拟端 `Applied=true` 的结果。原生操作确实失败/拒绝（`Applied=false`）可以立即发送 execution 失败回执，无需经过可能抛错的地图捕获，防止合法失败提示被挂起。生产 helper 242846 项，加上断线 210502 和最终检查点 53972 共 507320 项本地检查通过。
 - 需要回复：请与 BUG-01 原 Owner 一并核对 Success/Applied/Saved 三态在客户端 UI、房主事务重发、Map CommitId/Revision 验收与重启存档中的语义。未做完整游戏编译或双端验收，不关闭原卡。
 - 回复关联：MSG-20261018-bug01-dispatch-session-01
+
+### MSG-20261019-bug22-peer-isolation-SESSION-01 — 异常拒绝回送失败时继续房主 Tick
+- 发件人：bug22-rejected-peer-eviction-20261019
+- 收件人：SESSION
+- 时间：2026-10-19
+- 状态：仅通知
+- 关联任务/文件：`src/Session/RejectedPeerEvictionGate.cs`、`src/Session/MultiplayerSession.cs`、`agent-tasks/待办/BUG-22-二次错误回送.md`
+- 消息：`082ee44` 已提交新 peer 拒绝隔离门禁及 Tick、Networking 窄接线，发送错误回执失败/断开连接失败时隔离故障 peer，按每 2 秒未缩放时间尝试真实 Disconnect，隔离期拦截输入，真实 Disconnected 回调释放。Production gate/OptionalPeerNotice 联编 180035 项故障检查通过，OptimizationChecks 185 项通过；原工作树未提交的 RejectUnauthenticatedPeer/TickRejectedPeers 分支还需 Owner 一并签收，不可把本机修改全当成已提交源码。
+- 需要回复：请 Session Owner 联同 Transport 验证实际房主完整 Tick 的 B 非法消息 + B 发送队列满 + Disconnect 失败 + A 合法地图变动顺序、旧 PeerId 重连和真正 nativeFault 严重错误不会误吞；仍不能关闭 BUG-22 或覆盖三端运行副本。
+- 回复关联：MSG-20261018-bug01-dispatch-session-01
