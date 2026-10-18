@@ -174,7 +174,6 @@ namespace FreeWorldMultiplayer
                     State = PlayerVisitState.Consumed, Seconds = 0
                 });
         }
-    }
         public void AddHostLocalFirstVisit(string id, double seconds)
         {
             hostVisits.Add(id, new HostVisit
@@ -189,4 +188,5 @@ namespace FreeWorldMultiplayer
         }
         public void TestReceiveChat(RoomChatMessage message) { ReceiveChat(message); }
         public void TestReceiveVisit(PlayerVisitUpdate update) { ReceiveVisit(update); }
+    }
 }

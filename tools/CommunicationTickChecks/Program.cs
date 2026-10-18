@@ -237,9 +237,9 @@ internal static class Program
             var failingChat = new MultiplayerSession { IsHost = false };
             failingChat.AddPending("fail-chat", 0.1);
             failingChat.AddPending("after-fail", 10);
-            Action<RoomChatMessage> failListener = msg =>
             Logger.Warnings.Clear();
             int healthyChatObservers = 0;
+            Action<RoomChatMessage> failListener = msg =>
             { throw new InvalidOperationException("private-chat-text-must-not-be-logged"); };
             failingChat.ChatChanged += failListener;
             failingChat.ChatChanged += msg =>
@@ -277,8 +277,8 @@ internal static class Program
 
             var failingVisit = new MultiplayerSession { IsHost = false };
             failingVisit.AddLocalVisit("fault", 0.1);
-            Action<PlayerVisitUpdate> brokenListener =
             failingVisit.AddLocalVisit("after-fault", 10);
+            Action<PlayerVisitUpdate> brokenListener =
                 update => { throw new InvalidOperationException("test visit callback failure"); };
             failingVisit.VisitChanged += brokenListener;
             int goodVisitObservers = 0;
