@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Exercise the exact production retry/identity implementation. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="ProductionSessionStubs.cs" />
+    <Compile Include="ProductionSessionChecks.cs" />
+    <Compile Include="../../src/Session/MapCacheOutboundRetry.cs" Link="MapCacheOutboundRetry.cs" />
+    <Compile Include="../../src/Session/MapSnapshotCache.cs" Link="MapSnapshotCache.cs" />
+    <Compile Include="../../src/Session/MapCacheExpiry.cs" Link="MapCacheExpiry.cs" />
+    <Compile Include="../../src/Session/OptionalPeerNotice.cs" Link="OptionalPeerNotice.cs" />
+  </ItemGroup>
+</Project>

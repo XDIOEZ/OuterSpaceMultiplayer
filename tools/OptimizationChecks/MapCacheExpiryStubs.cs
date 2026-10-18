@@ -27,6 +27,9 @@ namespace FreeWorldMultiplayer
 
         private void Send(string peer, string kind, object payload) { SendHandler?.Invoke(peer, kind, payload); }
         private void FailMapLoading(Exception fault) { throw fault; }
+        // The cache retry producer lives in the other production partial.
+        // This test project links expiry alone and does not simulate that producer.
+        private void TickCacheNegotiationOutbound(double seconds) { }
 
         internal void SeedOffer(string key, string player, double elapsed, long bytes)
         {

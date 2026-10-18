@@ -7,6 +7,9 @@ namespace FreeWorldMultiplayer
     {
         private void TickMapCache(double seconds)
         {
+            // Only transport enqueue failures are retried; each view keeps its
+            // original session/epoch/revision and the existing 60-second load timeout.
+            TickCacheNegotiationOutbound(seconds);
             if (mapCacheWarning != null && !mapCacheWarningReported)
             {
                 mapCacheWarningReported = true;

@@ -16,6 +16,8 @@ namespace FreeWorldMultiplayer
             internal long RetainedBytes;
             internal string Player;
         }
+        private sealed class RecoveryQueryAttempt { internal bool TransportEnqueueFailed; }
+        private RecoveryQueryAttempt activeRecoveryQueryAttempt;
         private MapCacheStore mapCache;
         private string mapCacheWarning;
         private bool mapCacheWarningReported;
@@ -26,6 +28,7 @@ namespace FreeWorldMultiplayer
         private readonly HashSet<long> requiresFullTerrain = new HashSet<long>();
         private readonly Dictionary<string, MapCacheQuery> waitingMapCaches = new Dictionary<string, MapCacheQuery>();
         private readonly Dictionary<string, double> waitingMapCacheSeconds = new Dictionary<string, double>();
+        private readonly MapCacheOutboundRetry cacheOutboundRetry = new MapCacheOutboundRetry();
         private long retainedMapViewBytes;
         private bool HasMapCacheBarrier => waitingMapCaches.Count != 0;
 
@@ -60,9 +63,24 @@ namespace FreeWorldMultiplayer
                 throw new InvalidOperationException("待发送的完整地图超过本房间有界准备容量，请稍后重试。");
             var query = new MapCacheQuery { ViewId = Guid.NewGuid().ToString("N"), WorldId = World.WorldId, MapId = view.Access.MapId,
                 AuthorityEpoch = view.Access.AuthorityEpoch, Revision = view.Access.Revision, FullTerrain = fullTerrain, IgnoreCache = ignoreCache };
-            offeredMapViews[query.ViewId] = new OfferedMapView { Player = playerId, View = view, Query = query, RetainedBytes = bytes };
+            byte[] encoded = EncodeMessage("map.cache-query", query, null);
+            var reserved = new OfferedMapView { Player = playerId, View = view, Query = query, RetainedBytes = bytes };
+            offeredMapViews[query.ViewId] = reserved;
             retainedMapViewBytes += bytes;
-            Send(peer, "map.cache-query", query);
+            try { transport.Send(peer, encoded); }
+            catch (Exception error)
+            {
+                // An enqueue failure is not a pending offer. Only roll back
+                // our exact reservation; a synchronous callback may replace it.
+                if (MapCacheOutboundRetry.RemoveIfSame(offeredMapViews, query.ViewId, reserved))
+                    retainedMapViewBytes -= reserved.RetainedBytes;
+                // Only a verified transport enqueue rejection can reopen the
+                // same one-use recovery intent. Native/contract faults cannot.
+                if (activeRecoveryQueryAttempt != null &&
+                    (error is IOException || error is InvalidOperationException))
+                    activeRecoveryQueryAttempt.TransportEnqueueFailed = true;
+                throw;
+            }
         }
         private bool HandleMapCacheMessage(string peer, WireMessage message)
         {
@@ -86,8 +104,6 @@ namespace FreeWorldMultiplayer
             if (query == null || query.WorldId != World.WorldId || query.MapId < 0 || !IsViewId(query.ViewId)) throw new InvalidDataException("Invalid map cache query.");
             if (waitingMapCaches.ContainsKey(query.ViewId)) return;
             if (waitingMapCaches.Count >= 8) throw new InvalidDataException("Too many pending map views.");
-            waitingMapCaches.Add(query.ViewId, query); waitingMapCacheSeconds.Add(query.ViewId, 0);
-            EnqueueLoadingMessage(new LoadingMessage { CacheViewId = query.ViewId, WireBytes = 256 });
             var offer = new MapCacheOffer { WorldId = World.WorldId, ViewId = query.ViewId, MapId = query.MapId };
             offer.FullTerrain = query.FullTerrain || requiresFullTerrain.Contains(query.MapId);
             if (!query.IgnoreCache && mapCache != null)
@@ -99,7 +115,14 @@ namespace FreeWorldMultiplayer
                 }
                 catch (Exception error) { DisableMapCache(error); }
             }
-            Send("host", "map.cache-offer", offer);
+            // Protocol/encoding failures must surface before inserting a FIFO
+            // placeholder. Only transport enqueue failures are retried.
+            byte[] encoded = EncodeMessage("map.cache-offer", offer, null);
+            waitingMapCaches.Add(query.ViewId, query); waitingMapCacheSeconds.Add(query.ViewId, 0);
+            try { EnqueueLoadingMessage(new LoadingMessage { CacheViewId = query.ViewId, WireBytes = 256 }); }
+            catch { waitingMapCaches.Remove(query.ViewId); waitingMapCacheSeconds.Remove(query.ViewId); throw; }
+            cacheOutboundRetry.TrySend(MapCacheOutboundKind.Offer, query.ViewId,
+                query.MapId, query.AuthorityEpoch, query.Revision, encoded, bytes => transport.Send("host", bytes));
         }
         private void ReceiveMapCacheOffer(string peer, string player, MapCacheOffer offer)
         {
@@ -139,8 +162,19 @@ namespace FreeWorldMultiplayer
                 || !World.Maps.TryGetValue(retry.MapId, out map) || !map.Visitors.Contains(player)) throw new MessageRejectionException("地图恢复请求已过期。");
             string key = player + ":" + retry.ViewId + ":" + retry.FullTerrain;
             if (!retriedCacheViews.Add(key)) throw new MessageRejectionException("同一地图视图已请求过该恢复方式。");
+            RecoveryQueryAttempt previous = activeRecoveryQueryAttempt;
+            var attempt = new RecoveryQueryAttempt();
+            activeRecoveryQueryAttempt = attempt;
+            try { SendMapView(map, player, true, retry.FullTerrain, true); }
+            catch
+            {
+                // Other failures may have changed native state; never make
+                // those operations replayable just because they threw.
+                if (attempt.TransportEnqueueFailed) retriedCacheViews.Remove(key);
+                throw;
+            }
+            finally { activeRecoveryQueryAttempt = previous; }
             if (retriedCacheViews.Count > 256) retriedCacheViews.Remove(retriedCacheViews.First());
-            SendMapView(map, player, true, retry.FullTerrain, true);
         }
         private void StageNetworkMapView(WireMessage message)
         {
@@ -188,6 +222,7 @@ namespace FreeWorldMultiplayer
                 queued.WireBytes = expandedBytes;
                 loadingWireBytes += queued.WireBytes;
                 waitingMapCaches.Remove(view.ViewId); waitingMapCacheSeconds.Remove(view.ViewId);
+                cacheOutboundRetry.Remove(MapCacheOutboundKind.Offer, view.ViewId);
                 CoalesceLoadingViews(view, position);
             }
             catch (Exception error)
@@ -197,9 +232,12 @@ namespace FreeWorldMultiplayer
                 {
                     if (retriedCacheViews.Count > 256) retriedCacheViews.Remove(retriedCacheViews.First());
                     if (mapCacheWarning == null) mapCacheWarning = error.ToString();
-                    Send("host", "map.cache-retry", new MapCacheRetry { ViewId = view.ViewId, MapId = view.Access.MapId });
-                    RemoveMapCachePlaceholder(view.ViewId);
+                    // A failed queue insertion must not leave the original FIFO
+                    // placeholder ahead of a retry that has not reached the host.
+                    // The recovery barrier keeps later map/personal changes blocked.
                     AddSeedRecoveryBarrier(view);
+                    RemoveMapCachePlaceholder(view.ViewId);
+                    SendCacheRetry(view, false);
                     return;
                 }
                 throw new InvalidDataException("无缓存完整地图仍未通过完整性校验，未写入原生地图。", error);
@@ -215,8 +253,41 @@ namespace FreeWorldMultiplayer
             if (fullTerrainRetries.Count > 256) fullTerrainRetries.Remove(fullTerrainRetries.First());
             if (requiresFullTerrain.Count > 128) requiresFullTerrain.Remove(requiresFullTerrain.First());
             AddSeedRecoveryBarrier(view);
-            Send("host", "map.cache-retry", new MapCacheRetry { ViewId = view.ViewId, MapId = view.Access.MapId, FullTerrain = true });
+            SendCacheRetry(view, true);
             return true;
+        }
+        private void SendCacheRetry(MapView view, bool fullTerrain)
+        {
+            // Encode errors are programming/contract failures and are not
+            // disguised as transient queue congestion.
+            byte[] encoded = EncodeMessage("map.cache-retry",
+                new MapCacheRetry { ViewId = view.ViewId, MapId = view.Access.MapId, FullTerrain = fullTerrain }, null);
+            cacheOutboundRetry.TrySend(fullTerrain ? MapCacheOutboundKind.FullTerrainRetry : MapCacheOutboundKind.CacheRetry,
+                view.ViewId, view.Access.MapId, view.Access.AuthorityEpoch, view.Access.Revision,
+                encoded, bytes => transport.Send("host", bytes));
+        }
+        private void TickCacheNegotiationOutbound(double seconds)
+        {
+            if (cacheOutboundRetry.Count == 0) return;
+            cacheOutboundRetry.Advance(seconds,
+                (kind, viewId, mapId, epoch, revision) =>
+                {
+                    if (!IsConnected || IsHost || World == null) return false;
+                    if (kind == MapCacheOutboundKind.Offer)
+                    {
+                        MapCacheQuery expected;
+                        MapRecord currentOfferMap;
+                        return waitingMapCaches.TryGetValue(viewId, out expected)
+                            && expected.WorldId == World.WorldId && expected.MapId == mapId
+                            && expected.AuthorityEpoch == epoch && expected.Revision == revision
+                            && (!World.Maps.TryGetValue(mapId, out currentOfferMap) || currentOfferMap.AuthorityEpoch <= epoch);
+                    }
+                    LoadingResync required;
+                    MapRecord current;
+                    return loadingResyncs.TryGetValue(mapId, out required) && required.Epoch <= epoch
+                        && required.Revision >= revision
+                        && (!World.Maps.TryGetValue(mapId, out current) || current.AuthorityEpoch <= epoch);
+                }, bytes => transport.Send("host", bytes));
         }
         private MapSnapshot ResolvedMapSnapshot(MapView view, BridgeResult result)
         {
@@ -237,6 +308,7 @@ namespace FreeWorldMultiplayer
             int index = loadingMessages.FindIndex(x => x.CacheViewId == viewId);
             if (index >= 0) { loadingWireBytes -= loadingMessages[index].WireBytes; loadingMessages.RemoveAt(index); }
             waitingMapCaches.Remove(viewId); waitingMapCacheSeconds.Remove(viewId);
+            cacheOutboundRetry.Remove(MapCacheOutboundKind.Offer, viewId);
         }
         private void AddSeedRecoveryBarrier(MapView view)
         {
@@ -248,6 +320,6 @@ namespace FreeWorldMultiplayer
             { long old; required.Players.TryGetValue(fields.PlayerId, out old); required.Players[fields.PlayerId] = Math.Max(old, fields.PersonalRevision); }
         }
         private void ClearMapCacheSession()
-        { offeredMapViews.Clear(); sentMapViews.Clear(); waitingMapCaches.Clear(); waitingMapCacheSeconds.Clear(); retainedMapViewBytes = 0; retriedCacheViews.Clear(); fullTerrainRetries.Clear(); requiresFullTerrain.Clear(); }
+        { offeredMapViews.Clear(); sentMapViews.Clear(); waitingMapCaches.Clear(); waitingMapCacheSeconds.Clear(); retainedMapViewBytes = 0; retriedCacheViews.Clear(); fullTerrainRetries.Clear(); requiresFullTerrain.Clear(); cacheOutboundRetry.Clear(); }
     }
 }
