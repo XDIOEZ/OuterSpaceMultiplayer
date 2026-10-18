@@ -1,13 +1,13 @@
 # BUG-28 / P1 · 通讯 / 参观通知回调异常可能阻断整房 Tick
 
-> **状态：待执行 / 仅生产调用链静态审查，尚无故障注入与实机复现**
+> **状态：局部生产代码已提交 + 本机生产源码关联注入通过；Owner 签收、完整 Session Tick / 三端构建和真实联机仍待办**
 > **建卡：** 2026-10-19，仓库 `codex/multiplayer-v1`，浏览时 HEAD `fe2c82116a1373a525678c67c9b4e718e9f5c245`。
 > **建议 Owner：** Session 通讯 / 参观模块；Entry UI Owner 协助核对事件订阅/注销；主控负责混合源码 hunk 签收与完整发布门禁。
 > **需求：** [联机方案 V1.md](../../联机方案%20V1.md) 的玩家聊天、参观同意、5 分钟赠送授权、10 秒内送达回执、断线及房主唯一世界推进。**本卡不新增 V1 功能。**
 
 ## 1. 源码观察与风险限定
 
-已经确认以下**条件性异常传播路径**，但**没有实际注入会抛错的订阅者，也没有运行 Unity / Play Mode / 双端游戏**。不可写成用户已经遇到此 BUG：
+下表是**首次建卡时、实施修复之前**的调用链：本轮已经向真实事件发射路径增加窄范围的可选观察者隔离，但**仍没有运行 Unity / Play Mode / 双端游戏**。不能写成用户已经遇到或在游戏内确认解决了此 BUG：
 
 | 调用位置 | 生产代码行为 | 可疑传播路径 |
 | --- | --- | --- |
@@ -39,13 +39,14 @@
 
 ## 4. 建议实施方式（需 Owner 签收）
 
-- [ ] **T28-1 / Session：** 审核 `NotifyChat`、`ReceiveVisit`、`TickVisits` 和 `SendVisitUpdate` 的全部 `ChatChanged/VisitChanged` 发射点，判断可否统一成两个受控通知方法；同类回调的错误不得影响已完成的房主状态变化或另一个人的通知。
-- [ ] **T28-2 / Session + Entry：** 为事件处理建立**受限诊断防护**。只捕获外部/可选观察者抛错，业务方法中的 `InvalidDataException / MessageRejectionException / nativeFault` 保持原 fail-closed 边界；诊断发送失败也不能再次使 `Tick` 抛错。决定是否按 `GetInvocationList` 隔离单个观察者，避免一个坏 UI 处理器阻断后面的正常处理器；不改变现有公开事件签名。
+- [x] **T28-1 / Session（生产接线代码已完成）：** `NotifyChat`、`ReceiveVisit`、`TickVisits` 的所有 `ChatChanged/VisitChanged` 发射点已经改用同一受限派发；房主 `SendVisitUpdate` 的原两接收者次序不变。
+- [x] **T28-2 / Session（窄范围防护代码已完成）：** 仅在观察者的调用内捕获异常，`GetInvocationList` 按注册顺序逐个派发；**业务验证、JSON 克隆、聊天 ACK、授权/原生/存档错误不在 catch 内**。日志只写固定 stage 与异常类型，日志输出再次抛错也不能冒泡。Entry 的实机 UI 行为仍待验收。
 - [ ] **T28-3 / Entry：** 审核 `AttachCommunicationUi/DetachCommunicationUi`、窗口销毁与重连时的实际订阅生存期，避免失效监听器和重复订阅；不擅自接管历史冻结中的房间分页文件。
-- [ ] **T28-4 / Test：** 新增链接真实生产代码的可控事件观察者注入，用 `Tick` 包装层 / 真实 `PlayerVisits` / `PlayerChat` 方法验证下面 C28 系列。优先避免为通过测试创建未被真实调用的空 helper。
+- [x] **T28-4a / Test（生产 partial 本机回归）：** 已编译真实 `PlayerVisits/PlayerChat/CommunicationObserverNotification` 并在真实 `TickCommunication/TickVisits` 方法中注入抛错监听器，覆盖本机 C28-01～06 的适用片段。
+- [ ] **T28-4b / Test（完整房间）：** 仍需完整 `MultiplayerSession.Tick`、`MultiplayerRuntime.Update`、GameBridge 原生故障和至少 2 人网络事件顺序的联编/实机证据；现有辅助桩不能直接声明此项通过。
 - [ ] **T28-5 / 主控：** 跟踪原 Owner、当前源码 SHA、精确 diff/hunk、VERSION / CHANGELOG 归属；完成官方三端 `BuildOnly` 后交由用户按仓库边界测试 TCP / Steam，未验证前继续待办。
 
-## 5. 故障注入与验收矩阵（本轮尚未执行）
+## 5. 故障注入与验收矩阵（局部已执行，完整联机未执行）
 
 | 用例 | 场景 / 人为注入 | 期望结果 |
 | --- | --- | --- |
@@ -58,7 +59,30 @@
 | C28-07 | 注入真实会话内部桥接失败、原生写入不确定或存档失败，不注入 UI 事件 | 不会被“可选观察者失败保护”误吞；保持原生/保存故障锁和明确用户提示 |
 | C28-08 | 用户双端或 3 人 Steam / TCP 测私聊超时、参观等待、取消/授权到期、关闭界面再重进，查看房主日志 | 房主世界仍推进、仍能保存并接收其他玩家合法操作；消息不重复且实际资产/授权一致 |
 
-**证据级别**：本轮是静态源码调用链（S0），不是故障注入通过、干净 Git 闭包、三端 `BuildOnly` 或多人实机验收。测试结果必须按真实执行内容分层记录；不得拿 UI 提示正常冒充原生权威/存档一致。
+### 2026-10-19 / 本轮真实交付与证据
+
+**生产代码提交：** `58f4407b2d705e3ae318d965e4451465f2f56e37`（`fix: isolate optional chat and visit observer exceptions`）；随后独立修正测试快照暂存位置的提交：`1e36044`（`test: correct committed observer regression test structure`）。**两个提交均为本地 Git，未 push**。
+
+- **新增 `src/Session/CommunicationObserverNotification.cs`：** 把可选观察者列表复制为当次委托快照，按原注册次序逐个通知；只捕获各委托调用抛出的异常，不会因第一个失败阻断其它监听器；尽力记录 `chat.changed / visit.changed` 与异常类型，**不输出消息正文、玩家、Grant、凭证或异常 Message/堆栈**；日志本身故障也单独隔离。
+- **`src/Session/PlayerChat.cs`：** `NotifyChat` 仍**在通知前**复制原聊天消息；已确认的 `Delivered/Failed` 状态及 ACK 逻辑均保持原流程，UI 失败不改变事务结果。
+- **`src/Session/PlayerVisits.cs`：** 增加 `NotifyVisit` 并仅替换 `ReceiveVisit`、本地授权到期的两个事件发射点；仍在通知前 `JsonData.Clone`，原 `HostVisit/Grant` 撤销、两参与者投递次序与原生访问鉴权保持不变。
+- **`tools/CommunicationTickChecks/`：** 在原有链接生产 partial 的 .NET8 工程中更新并扩展坏监听器、好监听器、二次日志故障、回调重入、房主本机先通知与远端继续、合法入站聊天 ACK、非法消息仍拒绝等断言。源文件与测试文件的历史混合脏 hunk **均只精确暂存本轮代码**，保留了原 Agent 的赠送授权白名单/测试改动，不抢占 `VERSION/CHANGELOG.md`。
+
+| 真实执行命令或证据 | 观察结果 | 范围限制 |
+| --- | --- | --- |
+| `dotnet run -c Release --project tools/CommunicationTickChecks/CommunicationTickChecks.csproj --no-restore` | **94 项通过**；原 90 项基础上纳入新的生产事件边界断言，空闲和活动中的快照分配回归仍为 0 B | 当前工作树还包含别的 Agent 尚未提交的赠送授权检查，不能将 94 全部计为本轮新增 |
+| `git archive HEAD src/Session src/Core tools/CommunicationTickChecks` 生成隔离源码快照，在 `artifacts/bug28-head-check/` 运行同一工程 | **86 项通过**；验证修订后**已提交 Git HEAD** 可独立编译此局部测试工程 | 只打包上述测试及依赖目录，不是完整 MOD 的 0U/0M Git 闭包或三端目标构建 |
+| `dotnet run -c Release --project tools/VisitTickSnapshotChecks/VisitTickSnapshotChecks.csproj --no-restore` | **272,461 项通过** | 参观计时与回调快照的本地合成数据 |
+| `tools/ActiveChatSnapshotChecks/ActiveChatSnapshotChecks.csproj` | **787,582 项通过** | 聊天等待/ACK 快照本地检查 |
+| `tools/ChatHistoryWindowChecks/ChatHistoryWindowChecks.csproj` | **225,168 项通过** | 聊天列表窗口本地检查 |
+| `tools/GiftResumeReliabilityChecks/GiftResumeReliabilityChecks.csproj` | **60,147 项通过** | 原生赠送恢复辅助逻辑，非整房/真实网络 |
+| `tools/CommunicationIdChecks/CommunicationIdChecks.csproj` | **424,161 项通过** | 通讯 ID 验证，不含本体运行 |
+
+**逐场景状态：** C28-01～03、05、06 的本地生产 partial 桩场景已经覆盖；C28-04 已核实好/坏多监听器本机顺序与手工解绑，但 UI 关闭重进/真实订阅生命周期未验证；C28-07 仅验证**非法消息仍抛**，真实原生桥接与存档错误未注入；C28-08 全部仍待用户双端/多人验证。因此本卡状态仍是**待办，不能移入 `已完成/`**。
+
+**Entry 静态核对：** `src/Entry/ModPluginLauncher.cs::CreateSession` 调用 `AttachCommunicationUi`，正常 `FinalizeSession` 路径调用 `DetachCommunicationUi`；`MultiplayerCommunicationUi.cs` 中明确解除 `ChatChanged/VisitChanged` 订阅。尚未验证异常退出、重入/重连、真正 UI 生命周期，未修改 Entry 的其他 Agent 代码。
+
+**发布边界：** 现有 `PlayerVisits.cs`、`CommunicationTickChecks` 和 `VERSION/CHANGELOG.md` 仍有别的 Agent 未提交差量；本轮未尝试替其签收或完成全部 Git 源码闭包，不启动 Unity，不安装 P3/Steam/TapTap MOD，不推送。由主控先核验所有输入并统一版本，再决定三端 `BuildOnly` 与用户实机联机验收。
 
 ## 6. 后续交接与关闭标准
 
@@ -66,4 +90,4 @@
 
 关闭本卡必须同时满足：已验证原 Owner 文件/hunk 签收、生产源码真实接线与 C28-01～07 受控故障注入通过、干净 Git 依赖闭包和三端官方构建、用户实际 C28-08 TCP/Steam 验收及可复核双端日志。若只完成代码或本地逻辑检查，继续留在 `待办/`，并在卡中分别记录未通过 / 未执行的层级。
 
-**本轮交付边界**：仅只读浏览、创建 MD、登记协作和通知有关 Agent；没有修改 MOD 功能源码、协议、存档、版本、运行副本或其它 Agent 的历史工作区差异，不构建安装、不运行游戏、不推送。
+**首次建卡边界（历史）**：创建 BUG-28 时仅只读浏览和规划，未改功能源码；**本轮已交付局部源码隔离和生产 partial 本机测试**，没有修改协议、存档、版本、游戏本体、运行副本或其它 Agent 的历史差量，未构建安装整套游戏、未运行游戏或推送。

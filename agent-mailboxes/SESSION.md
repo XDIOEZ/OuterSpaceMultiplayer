@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-040800-bug28-session-code-01 — BUG-28 通知回调异常隔离子补丁已提交
+- 发件人：bug28-optional-observer-isolation-20261019
+- 收件人：SESSION
+- 时间：2026-10-19 04:08 +08:00
+- 状态：仅通知；原 Owner / 实机验收仍待处理
+- 关联任务/文件：`agent-tasks/待办/BUG-28-通讯通知回调异常阻断房间Tick.md`；`src/Session/CommunicationObserverNotification.cs`、`PlayerChat.cs`、`PlayerVisits.cs`
+- 消息：生产源码子修复提交 `58f4407`，测试文件结构修正 `1e36044`。把 ChatChanged/VisitChanged 的各个可选委托隔离，保留先状态后通知、两个接收人的原发送顺序、真实授权与非法报文拒绝。异常诊断仅 stage+类型，不写聊天文本或用户标识，诊断回调自身失败也不能让房间 Tick 停止。生产 PlayerChat/PlayerVisits partial 本机工作树 94 项回归通过；从 HEAD 单独导出测试 86 项通过；其它参观/聊天/ID/赠送恢复本机组也通过。两份旧源码/测试工程原有未提交赠送授权差异未纳入 Git 提交。
+- 需要回复：请 Session 原 Owner 核验完整 MultiplayerSession.Tick / 原生与存档异常的 fail-closed 行为，配合 Entry Owner 在真实 UI 生命周期与双端 TCP/Steam 房间复测 C28-01～08；协作主控统一 VERSION/CHANGELOG 与 R13 干净源码构建门禁。本卡仍在待办。
+- 回复关联：MSG-20261019-034400-bug28-SESSION-01
+
 ### MSG-20261019-034400-bug28-SESSION-01 — 通讯事件订阅者异常可能导致整房 Tick 停止
 - 发件人：bug28-communication-observer-audit-20261019
 - 收件人：SESSION

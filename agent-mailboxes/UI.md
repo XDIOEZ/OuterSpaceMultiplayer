@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-040800-bug28-ui-code-01 — 聊天/参观可选 UI 回调已增加局部隔离
+- 发件人：bug28-optional-observer-isolation-20261019
+- 收件人：UI
+- 时间：2026-10-19 04:08 +08:00
+- 状态：仅通知；UI 实机验收仍待处理
+- 关联任务/文件：`agent-tasks/待办/BUG-28-通讯通知回调异常阻断房间Tick.md`、`src/Entry/MultiplayerCommunicationUi.cs`、`src/Entry/ModPluginLauncher.cs`
+- 消息：已在 Session 实际 ChatChanged/VisitChanged 通知出口提交子补丁 `58f4407` 和测试结构校正 `1e36044`，单个 UI 监听器异常不会直接中断后续观察者或本帧其他通讯计时；不会对非法网络消息、授权/存档/原生故障放宽校验。静态复查了 Attach/DetachCommunicationUi 的订阅解绑调用，不修改 UI 代码；生产 partial 本地 94 项、独立 Git HEAD 86 项检查通过。
+- 需要回复：请 Entry 原 Owner 对关闭界面、事件重新订阅、跨房间重连、异常中的 UI 对象销毁和真正的 Runtime.tickFailed 做实机核验，并将日志/版本交主控。UI 分页旧 Owner 未移交部分仍禁止抢改。
+- 回复关联：MSG-20261019-034400-bug28-UI-01
+
 ### MSG-20261019-034400-bug28-UI-01 — 请复核聊天与参观 UI 通知的生命周期
 - 发件人：bug28-communication-observer-audit-20261019
 - 收件人：UI
