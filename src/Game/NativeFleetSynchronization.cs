@@ -62,6 +62,10 @@ namespace FreeWorldMultiplayer
             (name, encoded) => new FleetValue { Name = name, NativeValue = encoded };
         private static readonly Func<FieldInfo, string> NativeFleetFieldName = field => field.Name;
         private static readonly Func<FWAirShip, long> NativeFleetShipUid = ship => ship.getUID();
+        private static readonly Func<FWGameData, bool> NativePlayerHasPrimaryFleet =
+            player => player.galaxyBlock.playerFleet != null;
+        private static readonly Func<FWGameData, long> NativePlayerPrimaryFleetUid =
+            player => player.galaxyBlock.playerFleet.getUID();
         private static readonly Action<FWAirShip, FWAirShip> NativeFleetShipCopy =
             (source, destination) => NativeWire.Copy(source, destination);
         private readonly Dictionary<long, FleetSample> fleetSamples = new Dictionary<long, FleetSample>();
@@ -303,8 +307,21 @@ namespace FreeWorldMultiplayer
                         if (!ids.Contains(fleet.getUID())) removed.Add(fleet.getUID());
                 if (staged.Any(stage => !poseIds.Contains(stage.Item1.FleetId))) throw new InvalidOperationException("A complete galaxy baseline is missing a fleet pose.");
             }
+            // In a dense removal/full-baseline frame, the old per-UID Any()
+            // scanned every player's primary fleet again and again. The first
+            // eligible check still scans/short-circuits in original order;
+            // only a fully successful scan is cached for subsequent checks.
+            // No fleet writes occur until this entire preflight completes.
+            var primaryIndex = removed.Count >= 8 && Players.Count >= 3
+                ? new FleetPrimaryRemovalIndex<FWGameData>(
+                    Players.Values, NativePlayerHasPrimaryFleet, NativePlayerPrimaryFleetUid)
+                : null;
             foreach (long uid in removed)
-                if (ids.Contains(uid) || poseIds.Contains(uid) || Players.Values.Any(p => p.galaxyBlock.playerFleet != null && p.galaxyBlock.playerFleet.getUID() == uid)) throw new InvalidOperationException("A delta cannot remove an updated or primary player fleet.");
+                if (ids.Contains(uid) || poseIds.Contains(uid)
+                    || (primaryIndex == null
+                        ? Players.Values.Any(p => p.galaxyBlock.playerFleet != null && p.galaxyBlock.playerFleet.getUID() == uid)
+                        : primaryIndex.Contains(uid)))
+                    throw new InvalidOperationException("A delta cannot remove an updated or primary player fleet.");
             // All known fields and poses decode before the first native write. Pose-only frames
             // never call FWFleet.update or setFleetGalaxy and preserve cached ship wrappers.
             foreach (var stage in staged)

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Check the actual helper used in ApplyFleetFrame. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Game/FleetPrimaryRemovalIndex.cs" Link="FleetPrimaryRemovalIndex.cs" />
+  </ItemGroup>
+</Project>
