@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Use the exact production closing-barrier helper, not a copied policy. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="../../src/Session/FinalCheckpointGate.cs" Link="FinalCheckpointGate.cs" />
+  </ItemGroup>
+</Project>

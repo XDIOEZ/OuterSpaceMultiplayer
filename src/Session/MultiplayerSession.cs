@@ -266,12 +266,15 @@ namespace FreeWorldMultiplayer
                 }
                 syncElapsed += seconds;
                 if (syncElapsed >= Math.Max(0.1, World.Options.MapSyncSeconds)) { syncElapsed = 0; PublishLocalMaps(); PublishPersonalUpdates(); }
-                if (finalCheckpointRequested && inFlightUpdates.Count == 0 && personalInFlight.Count == 0)
+                if (finalCheckpointRequested && FinalCheckpointGate.TryPublishAndConfirm(
+                    () => inFlightUpdates.Count != 0 || personalInFlight.Count != 0 || checkpointCommands.Count != 0,
+                    () => PublishLocalMaps(),
+                    () => PublishPersonalUpdates(),
+                    () => Send("host", "finalDone", null)))
                 {
+                    // Do not clear this request while newly published deltas
+                    // are waiting for host ACK, or when Send has thrown.
                     finalCheckpointRequested = false;
-                    PublishLocalMaps();
-                    PublishPersonalUpdates();
-                    Send("host", "finalDone", null);
                 }
             }
             catch (Exception ex) { Paused = true; Error("联机推进已暂停，保留现场：" + ex.Message); }
