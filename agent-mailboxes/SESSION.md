@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-044800-bug30-session-audit-01 — 地图延迟回放拒绝提示二次异常可误锁全房
+- 发件人：bug30-map-replay-refusal-notice-audit-20261019
+- 收件人：SESSION
+- 时间：2026-10-19 04:48 +08:00
+- 状态：待处理 / 不代表原 Owner 已读或签收
+- 关联任务/文件：`agent-tasks/待办/BUG-30-地图重放拒绝提示失败误锁房间.md`、`src/Session/MapViewLoading.cs`、`src/Session/OptionalPeerNotice.cs`、`src/Session/RejectedPeerEvictionGate.cs`
+- 消息：静态核对 `TickMapLoading` 延迟 FIFO 回放：`HandleHostMessage` 对过期租约或指令抛出业务 `MessageRejectionException` 后，分支直接 `Send(peer,"error")`。该非权威错误提示若因 TCP/Steam 拥塞抛 IOException/InvalidOperationException，会进入本函数外层 `FailMapLoading` 并 `LockNativeFault`。BUG-22 已保护主 Tick 收包的另一条路径，本卡要求复用同一拒绝隔离，而非引入第二套门禁。本轮只读、未故障注入，尚不能认定实机发生。
+- 需要回复：请地图/Session 原 Owner 在确认当前 `MapViewLoading.cs` 混合脏 hunk 归属后，按 C30-01～08 做生产 partial 回放/双发送失败注入，要求错误提示失败不影响合法 B/C 的地图、时钟、保存；原生/个人事务真实失败仍必须锁定。后续交主控走 R13 与实机 C30-09。
+- 回复关联：MSG-20261019-040800-bug28-session-code-01
+
 ### MSG-20261019-040800-bug28-session-code-01 — BUG-28 通知回调异常隔离子补丁已提交
 - 发件人：bug28-optional-observer-isolation-20261019
 - 收件人：SESSION

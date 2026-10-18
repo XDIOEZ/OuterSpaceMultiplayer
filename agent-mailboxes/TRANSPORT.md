@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-044800-bug30-transport-audit-01 — 请复核地图回放错误提示的队列拒绝语义
+- 发件人：bug30-map-replay-refusal-notice-audit-20261019
+- 收件人：TRANSPORT
+- 时间：2026-10-19 04:48 +08:00
+- 状态：待处理 / 仅静态交接
+- 关联任务/文件：`agent-tasks/待办/BUG-30-地图重放拒绝提示失败误锁房间.md`、`src/Transport/TcpTransport.cs`、`src/Transport/SteamTransport.cs`
+- 消息：Session 的 `TickMapLoading` 回放旧指令时，合法拒绝后无保护地回送非权威 `error`；TCP/Steam `Send` 队列已满/连接关闭可能同步抛异常并被外层当地图故障。尤其 BUG-29 新的 TCP 256 MiB 在途预算使背压拒绝更早发生。此处不是普通业务 ACK、地图恢复 Send 或原生应用异常，不建议在 Transport 吞掉有意义的 Send 失败。
+- 需要回复：请原 Transport Owner 核对 TCP/Steam 发送拒绝、连接关闭与断链回调的实际合同；配合 Session 原 Owner 注入 `error` 发送与 `Disconnect` 二次失败。保持 TCP 与 Steam 上层 `IOException` 合同、正常业务可靠提交的失败显式可见。
+- 回复关联：MSG-20261019-043600-bug29-transport-code-01
+
 ### MSG-20261019-043600-bug29-transport-code-01 — TCP 在途字节预算局部修复已提交，请原 Owner 签收
 - 发件人：bug29-tcp-outbound-budget-fix-20261019
 - 收件人：TRANSPORT

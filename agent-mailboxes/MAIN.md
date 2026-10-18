@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-044800-bug30-main-audit-01 — 新建地图回放拒绝通知故障交接
+- 发件人：bug30-map-replay-refusal-notice-audit-20261019
+- 收件人：MAIN
+- 时间：2026-10-19 04:48 +08:00
+- 状态：待原 Owner 分派 / 邮箱不等于已读
+- 关联任务/文件：`agent-tasks/待办/BUG-30-地图重放拒绝提示失败误锁房间.md`、`AGENT-COORDINATION.md`
+- 消息：HEAD `5442553` 静态发现 `MapViewLoading.TickMapLoading` 延迟重放的 `MessageRejectionException` 分支仍直接 `Send(peer,"error")`，网络发送出错会被外层 `FailMapLoading` 当作整个地图加载失败；BUG-22 主网络 Tick 已有可复用的可选通知/隔离策略，但此入口未复用。新增 P1 条件性风险卡及 C30-01～09 测试/验收；本轮未改源码、版本、存档、三端游戏副本，也未构建、运行或实机复现。
+- 需要回复：请主控让原 Session MapViewLoading 与 BUG-22 Owner 确认精确 hunk、优先复用已存在的可选通知/拒绝连接隔离策略；确保只有诊断提示失败被隔离而非吞掉地图/个人 ACK 或原生错误，R13 源码签收后统一发布与用户双端验收，未达到前保留待办。
+- 回复关联：MSG-20261019-044800-bug30-session-audit-01
+
 ### MSG-20261019-043600-bug29-main-code-01 — BUG-29 TCP 发送内存限额子补丁待统一构建
 - 发件人：bug29-tcp-outbound-budget-fix-20261019
 - 收件人：MAIN

@@ -37,6 +37,7 @@
 | 地图缓存协商发送失败边界 | [待办/BUG-27-地图缓存协商发送失败与重试收口.md](待办/BUG-27-地图缓存协商发送失败与重试收口.md) | 局部代码提交 `05445fe`：缓存 query/offer/retry 入队失败回滚或两秒退避，60,058 项链接真实 Session partial 的本机故障注入通过；**仍需 Owner 签收、三端完整 BuildOnly/版本统一及真实 TCP/Steam 双端恢复验收**，不与 BUG-14/24 混同 |
 | 通讯 / 参观通知回调异常风险 | [待办/BUG-28-通讯通知回调异常阻断房间Tick.md](待办/BUG-28-通讯通知回调异常阻断房间Tick.md) | 局部生产源码提交 `58f4407`、结构纠正 `1e36044`：逐个隔离 `ChatChanged`/`VisitChanged` 观察者异常，保留真正非法消息拒绝；工作树生产关联通讯检查 94 项、隔离 Git HEAD 86 项及多组相关回归通过。**仍待完整会话 Tick、原生/存档错误注入、Owner 签收、三端 BuildOnly 与用户双端实机** |
 | TCP 发送中帧内存预算 | [待办/BUG-29-TCP发送中帧未计入队列内存预算.md](待办/BUG-29-TCP发送中帧未计入队列内存预算.md) | 局部修复 `cf39a82`：`TcpTransport.Send` 已将 `InFlightBytes` 计入同 peer 的 256 MiB 发送缓存上限、入队前拒绝；链接真实生产 TCP 的 68,778 项与干净 HEAD 同一回归、原有 7 项 TCP 回环通过。**仍需原 Owner 容量合同、慢网断链并发/Steam 混合、三端完整构建和用户多人游戏验收** |
+| 地图延迟重放的拒绝错误提示 | [待办/BUG-30-地图重放拒绝提示失败误锁房间.md](待办/BUG-30-地图重放拒绝提示失败误锁房间.md) | 2026-10-19 静态证据：`TickMapLoading` 回放旧业务消息被合法 `MessageRejectionException` 拒绝后，无保护的 `Send(peer,"error")` 若队列满，可落入外层 `FailMapLoading` 误锁原生；**与 BUG-22 主网络 Tick 错误回送为不同入口**，待原 Owner 复用保护及 C30-01～09 故障/实机验收 |
 
 ## 处理流程
 
