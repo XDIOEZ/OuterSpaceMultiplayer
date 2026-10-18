@@ -21,7 +21,7 @@ namespace FreeWorldMultiplayer
         private static readonly Func<PlayerFleetBattleFrame, int> PendingBattleFrameLength =
             frame => frame.NativeJson.Length;
         private readonly Dictionary<string, BattleFrameWindow> pendingBattleFrames = new Dictionary<string, BattleFrameWindow>();
-        private readonly Dictionary<string, long> battleInputSequences = new Dictionary<string, long>();
+        private readonly BattleInputSequenceIndex battleInputSequences = new BattleInputSequenceIndex();
         private readonly HashSet<string> battleResyncPending = new HashSet<string>();
         private long nextBattleInput;
         private bool IsBattleParticipant(PlayerFleetBattleRecord battle, string player) => battle.AttackerPlayerId == player || battle.DefenderPlayerId == player;
@@ -169,7 +169,7 @@ namespace FreeWorldMultiplayer
                 || input.NativeJson == null || input.NativeJson.Length > 16384
                 || !BattleInputAllowedOperations.Contains(input.Operation))
                 throw new MessageRejectionException("只能控制本战中本人真实舰队的舰船。");
-            string key = record.BattleId + ":" + actor; long sequence;
+            var key = new BattleInputSequenceKey(record.BattleId, actor, false); long sequence;
             if (input.Sequence <= 0 || battleInputSequences.TryGetValue(key, out sequence) && input.Sequence <= sequence) return;
             if (!ConsumeCommunicationRate(actor, "battle")) throw new MessageRejectionException("舰战输入过于频繁。");
             battleInputSequences[key] = input.Sequence; input.PlayerId = actor;
@@ -289,7 +289,7 @@ namespace FreeWorldMultiplayer
                 battleResyncPending.Remove(ended.BattleId);
                 localBattlePreparations.Remove(ended.BattleId); pendingBattleFrames.Remove(ended.BattleId);
                 battleReady.Remove(ended.BattleId); battleQuiescent.Remove(ended.BattleId); battleDeadlines.Remove(ended.BattleId);
-                foreach (string key in battleInputSequences.Keys.Where(x => x.StartsWith(ended.BattleId + ":", StringComparison.Ordinal) || x.StartsWith("execute:" + ended.BattleId + ":", StringComparison.Ordinal)).ToList()) battleInputSequences.Remove(key);
+                battleInputSequences.RemoveBattle(ended.BattleId);
             }
             var history = World.FleetBattles.Values.Where(x => x.Stage == PlayerFleetBattleStage.Finished).OrderByDescending(x => x.NativeBattleUid).Skip(64).ToList();
             foreach (var ended in history) World.FleetBattles.Remove(ended.BattleId);
@@ -396,7 +396,7 @@ namespace FreeWorldMultiplayer
                     PlayerFleetBattleRecord record;
                     if (input == null || !World.FleetBattles.TryGetValue(input.BattleId ?? "", out record) || record.SimulatorPlayerId != LocalPlayerId
                         || record.Stage != PlayerFleetBattleStage.Active || record.AuthorityEpoch != input.AuthorityEpoch) throw new MessageRejectionException("舰战控制输入任期已失效。");
-                    string key = "execute:" + input.BattleId + ":" + input.PlayerId; long prior;
+                    var key = new BattleInputSequenceKey(input.BattleId, input.PlayerId, true); long prior;
                     if (battleInputSequences.TryGetValue(key, out prior) && input.Sequence <= prior) return true;
                     battleInputSequences[key] = input.Sequence;
                     ExecuteAuthorizedBattleInput(record, input); return true;
