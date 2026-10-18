@@ -231,7 +231,12 @@ namespace FreeWorldMultiplayer
             // linear lookup and identical validation behavior.
             var frameIndex = FleetFrameIndex<FWFleet>.ShouldIndex(sync.Content.Count, sync.Poses.Count)
                 ? new FleetFrameIndex<FWFleet>(OwnedFleets, fleet => fleet.getUID()) : null;
-            var staged = new List<Tuple<FleetContent, FWFleet, Dictionary<string, object>, bool>>();
+            // Reserve a bounded number of stage entries up front. Value
+            // types are larger than object references; repeatedly growing
+            // their backing array can outweigh the saved Tuple allocations.
+            // Never reserve unbounded memory for untrusted incoming content.
+            var staged = new List<FleetContentStage<FleetContent, FWFleet>>(
+                Math.Min(sync.Content.Count, 512));
             int createdFleetCount = 0;
             var ids = new HashSet<long>();
             foreach (FleetContent content in sync.Content)
@@ -273,7 +278,7 @@ namespace FreeWorldMultiplayer
                 }
                 if (content.Full && decoded.Count != fields.Length) throw new InvalidOperationException("Initial fleet content is incomplete.");
                 if (sync.Full && !content.Full) throw new InvalidOperationException("A complete galaxy baseline contains partial fleet content.");
-                staged.Add(Tuple.Create(content, fleet, decoded, created));
+                staged.Add(new FleetContentStage<FleetContent, FWFleet>(content, fleet, decoded, created));
                 if (created) createdFleetCount++;
             }
             FleetCreatedPoseIndex<FleetPose> createdPoseIndex = null;
