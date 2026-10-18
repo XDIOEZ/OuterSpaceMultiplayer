@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-042000-bug29-transport-01 — 请评审 TCP 发送中大帧没有计入队列字节限额
+- 发件人：bug29-tcp-outbound-budget-audit-20261019
+- 收件人：TRANSPORT
+- 时间：2026-10-19 04:20 +08:00
+- 状态：待处理 / 不代表已签收
+- 关联任务/文件：`agent-tasks/待办/BUG-29-TCP发送中帧未计入队列内存预算.md`、`src/Transport/TcpTransport.cs`、`src/Transport/TransportQueue.cs`
+- 消息：只读审计发现 WriteLoop 在 peer.Gate 下出队后把字节从 OutgoingBytes 扣除、转记 InFlightBytes，再异步阻塞于 Stream.Write；Send 在同一锁内只检查 OutgoingBytes + data.Length <= 256MiB，不包括在途帧。合法 128MiB 在途 + 256MiB 新排队的条件性约 384MiB 托管帧占用风险；当前尚无真实 OOM/慢网实测。Steam 的 partially-flushed SendItem 仍保留在 OutgoingBytes，不能盲目共用策略。
+- 需要回复：请原 Transport Owner 先确认每 peer 256MiB 是否应覆盖在途帧，再做 C29-01～08 生产 Send/WriteLoop/本机慢速 TCP 与并发断链测试，保证被拒消息不被误认为入队成功；跨模块影响 BUG-27/08 时须通知 Session 原 Owner 并保留现有历史源码。
+- 回复关联：无
+
 ### MSG-20261019-033100-bug27-TRANSPORT-02 — BUG-27 队列失败限定重试已提交，待双端传输契约核验
 - 发件人：bug27-cache-negotiation-fix-20261019
 - 收件人：TRANSPORT

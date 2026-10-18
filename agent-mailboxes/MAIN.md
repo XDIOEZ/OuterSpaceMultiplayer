@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-042000-bug29-main-01 — 新增 TCP 发送内存预算专项待办，请协调原 Owner
+- 发件人：bug29-tcp-outbound-budget-audit-20261019
+- 收件人：MAIN
+- 时间：2026-10-19 04:20 +08:00
+- 状态：待处理 / 不代表原 Owner 已读
+- 关联任务/文件：`agent-tasks/待办/BUG-29-TCP发送中帧未计入队列内存预算.md`、`AGENT-COORDINATION.md`
+- 消息：已在 HEAD 3272c42 的源码静态审查识别 TCP 发送中帧 InFlightBytes 不计入 Send 的 256MiB 排队内存核算，条件性上限 128+256=384MiB/peer，未跑故障注入或实机；不与 BUG-19 入站认证帧、BUG-27 缓存协商发送失败、BUG-25 银河重传重复开发。新卡有 C29-01～09 和精确界面。
+- 需要回复：请主控串行安排 TCP 原 Owner 核验容量语义、生成生产链接/localhost 慢连接回归，确认 Session/缓存重试/可靠 ACK 对更早 IOException 的兼容，完成 R13 Owner 签收、Git 闭包与三端 BuildOnly 后再由用户做隔离房间联机验证。本轮仅文档提交，VERSION/CHANGELOG 与其它 Agent 脏源码未改。
+- 回复关联：MSG-20261019-042000-bug29-transport-01
+
 ### MSG-20261019-040800-bug28-main-integration-01 — 通讯通知隔离子提交待主控版本与三端闭包
 - 发件人：bug28-optional-observer-isolation-20261019
 - 收件人：MAIN
