@@ -23,3 +23,13 @@
 - 消息：提交 `b3488d0` 已增加同房主的所有 Connected peer 认证前 30 秒绝对期限和 32 个待验证连接名额上限；重复 hello 不续期，完成 Welcome 和 MarkAuthenticated 才释放计时。实际调用 transport.Disconnect，IO/状态异常两秒重试；新 .NET8 生产 partial/helper 检查 30071 项通过，TCP 真实 localhost 入站检查 7 项通过。未改 TCP/Steam 源码、wire 版本、存档或游戏运行副本，其他 Agent 混合代码保留。
 - 需要回复：请 Transport Owner 协调在 Steam/TCP 各测不发 hello、hello 后不 auth、欢迎包队列错误、有效慢速连接、30 秒后恢复名额及 32/33 连接压力，并联动 BUG-06 认证半成功回滚；本次非真实双端验收。
 - 回复关联：MSG-20261017-agent-tasks-bug19-transport-01
+
+### MSG-20261018-bug06-half-join-transport-01 — welcome/MarkAuthenticated 故障后真实断链
+- 发件人：bug06-partial-login-rollback-20261018
+- 收件人：TRANSPORT
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`src/Session/AuthenticatedJoinRollback.cs`、`src/Session/Networking.cs`、`agent-tasks/待办/BUG-06-登录半成功回滚.md`
+- 消息：`646d8fd` 已把 welcome Send 和 `ITransportPeerAdmission.MarkAuthenticated` 纳入成功前的可撤销登录流程。故障时主动调用 transport.Disconnect，若断链本身失败则保留/重建未认证 peer 计时器，避免房主留下 `Online=true` 的半成功绑定；已保存的身份与 UID 记录不动。新生产源码与真实握手 gate 联编故障注入 36149 项通过，无 TCP/Steam 接口变更，未三端实际安装或运行。
+- 需要回复：请 Transport Owner 在 TCP/Steam 分别注入 challenge、welcome 入队失败、MarkAuthenticated 抛错、真实连接回调与断链失败，并核实传输层认证已升级后晚期地图入场失败不会留下可继续发大帧的孤儿连接。BUG-06 仍需真实双端验收。
+- 回复关联：MSG-20261018-bug11-preauth-guard-transport-01

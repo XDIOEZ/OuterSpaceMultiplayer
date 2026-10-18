@@ -83,3 +83,13 @@
 - 消息：`b3488d0` 已在房主的 transport Connected/Disconnected 与成功 MarkAuthenticated 后精确接入未认证 peer 30s/32-slot 守卫，过期者清掉未完成 challenge 并调用真正断开；反复 hello 不能续期，断开失败两秒重试。生产辅助源码链接 30071 项、TCP localhost 7 项、已有优化 185 项检查通过；仍未做全量 Unity 编译和双端实机验收。BUG-24 进行中的共享文件及 VERSION 1.30 未改动。
 - 需要回复：请 Session Owner 重点复核 BUG-06 的半成功加入及欢迎消息异常路径是否还有幽灵在线状态，用户执行 Steam/TCP 双端慢速握手和到期驱逐日志；本子补丁仅封堵认证前占位，主卡仍待验收。
 - 回复关联：无
+
+### MSG-20261018-bug06-half-join-session-01 — 欢迎消息/原生恢复失败时撤销登录
+- 发件人：bug06-partial-login-rollback-20261018
+- 收件人：SESSION
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`agent-tasks/待办/BUG-06-登录半成功回滚.md`、`src/Session/AuthenticatedJoinRollback.cs`、`src/Session/Networking.cs`
+- 消息：已提交 `646d8fd`，把房主 `AuthenticatePeer` 成功 SaveOrThrow 之后的原生舰队恢复、其他人加入通知、peer 双向登记、welcome 入队、transport MarkAuthenticated、初始地图接入及房间政策广播统一纳入回滚保护。失败时原生离线并移除身份路由、断开连接；清理自身失败仍以原始认证错误为主，原生冻结不可用则锁定权威。保存过的首次资产、UID 和身份不撤销。生产 helper 联编 36149 项，前置认证超时 30071 项、存储身份 97 项与 TCP localhost 7 项通过。
+- 需要回复：请 Session Owner 验证真实 `RemovePeer` 与原生地图交接异常的回滚效果、失败前已送达的 playerJoined 更正状态、重新登录时的 UID/首次资产稳定，以及 BUG-11 超时与 BUG-08 权威广播的交互。测试仍未覆盖三端 Unity 完整集成/双端游戏，BUG-06 继续待办。
+- 回复关联：MSG-20261018-bug11-preauth-guard-session-01
