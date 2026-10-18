@@ -179,6 +179,7 @@ namespace FreeWorldMultiplayer
             double seconds = unscaledSeconds;
             TickUidRenewal(seconds); // Unscaled, including paused rooms and lost UID replies.
             TickUnauthenticatedPeers(seconds); // Host idle-handshake lease is independent of pause and game speed.
+            TickRejectedPeerEvictions(seconds); // Rejected network peers must not stop the room if Disconnect fails.
             if (IsConnected && IsHost && World != null)
             {
                 // Retry only the advisory resume send; a transient transport
@@ -206,11 +207,22 @@ namespace FreeWorldMultiplayer
                         string rejectedPeer = item.PeerId;
                         // An advisory refusal reply can fail on a full or closed
                         // transport queue. Never let that secondary error stop host ticks.
-                        OptionalPeerNotice.SendOrDisconnect(
-                            () => Send(rejectedPeer, "error", ex.Message),
-                            () => transport.Disconnect(rejectedPeer, "拒绝消息的错误提示发送失败；隔离拥塞连接。"));
+                        const string isolationReason = "拒绝消息的错误提示发送失败；隔离拥塞连接。";
+                        try
+                        {
+                            OptionalPeerNoticeOutcome notice = OptionalPeerNotice.SendOrDisconnect(
+                                () => Send(rejectedPeer, "error", ex.Message),
+                                () => transport.Disconnect(rejectedPeer, isolationReason));
+                            if (notice != OptionalPeerNoticeOutcome.Sent)
+                                rejectedPeerEvictions.Track(rejectedPeer, isolationReason);
+                        }
+                        catch (Exception)
+                        {
+                            QuarantineRejectedPeer(rejectedPeer, isolationReason);
+                        }
                     }
-                    if (IsHost && item != null && item.PeerId != null && !peers.ContainsKey(item.PeerId)) transport.Disconnect(item.PeerId, "握手失败");
+                    if (IsHost && item != null && item.PeerId != null && !peers.ContainsKey(item.PeerId))
+                        QuarantineRejectedPeer(item.PeerId, "握手失败");
                 }
             }
             if (IsConnected && !transport.IsRunning)

@@ -29,6 +29,7 @@ namespace FreeWorldMultiplayer
             if (item.Kind == TransportEventKind.Error) { Error(item.Error ?? "传输错误"); return; }
             if (item.Kind == TransportEventKind.Disconnected)
             {
+                rejectedPeerEvictions.Forget(item.PeerId);
                 if (IsHost) unauthenticatedPeerDeadline.Forget(item.PeerId);
                 if (IsHost) RemovePeer(item.PeerId);
                 else { if (IsConnected && !closing) HostLeft = true; IsConnected = false; Paused = true; Error(item.Error ?? "与房主的连接已断开；重连将使用房主状态。"); CompleteDisconnect(); }
@@ -45,6 +46,9 @@ namespace FreeWorldMultiplayer
                 return;
             }
             if (item.Kind != TransportEventKind.Message) return;
+            // An isolated peer must not mutate maps, commands or credentials
+            // while its transport is still refusing to close.
+            if (IsHost && rejectedPeerEvictions.Contains(item.PeerId)) return;
             // An untrusted peer must never cause a 128 MiB UTF-16 string and
             // JSON token tree allocation before its handshake is complete.
             if (IsHost && !UnauthenticatedFramePolicy.AllowsFrame(true,
