@@ -177,6 +177,7 @@ namespace FreeWorldMultiplayer
             if (IsStarting) { TickHostCreation(); return; }
             // Unity's unscaled delta is the authority; no client wall-clock or game speed drives raid timers.
             double seconds = unscaledSeconds;
+            TickUnauthenticatedPeers(seconds); // Host idle-handshake lease is independent of pause and game speed.
             if (IsConnected && IsHost && World != null)
             {
                 // Retry only the advisory resume send; a transient transport

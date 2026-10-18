@@ -29,13 +29,19 @@ namespace FreeWorldMultiplayer
             if (item.Kind == TransportEventKind.Error) { Error(item.Error ?? "传输错误"); return; }
             if (item.Kind == TransportEventKind.Disconnected)
             {
+                if (IsHost) unauthenticatedPeerDeadline.Forget(item.PeerId);
                 if (IsHost) RemovePeer(item.PeerId);
                 else { if (IsConnected && !closing) HostLeft = true; IsConnected = false; Paused = true; Error(item.Error ?? "与房主的连接已断开；重连将使用房主状态。"); CompleteDisconnect(); }
                 return;
             }
             if (item.Kind == TransportEventKind.Connected)
             {
-                if (!IsHost) Send("host", "hello", new Hello { CredentialId = identity.CredentialId, Nickname = identity.Nickname });
+                if (IsHost)
+                {
+                    if (!unauthenticatedPeerDeadline.Begin(item.PeerId))
+                        transport.Disconnect(item.PeerId, "未认证连接数量已达上限，请稍后加入。");
+                }
+                else Send("host", "hello", new Hello { CredentialId = identity.CredentialId, Nickname = identity.Nickname });
                 return;
             }
             if (item.Kind != TransportEventKind.Message) return;
@@ -67,6 +73,8 @@ namespace FreeWorldMultiplayer
             if (closing && message.Kind != "map" && message.Kind != "personalUpdate" && message.Kind != "finalDone" && message.Kind != "pong" && message.Kind != "ping") return;
             if (message.Kind == "hello")
             {
+                if (unauthenticatedPeerDeadline.IsExpired(peer))
+                    throw new InvalidOperationException("未在允许时间内完成身份认证，请重新连接。");
                 if (peers.ContainsKey(peer)) throw new InvalidOperationException("Connection is already authenticated.");
                 Hello hello = JsonData.Payload<Hello>(message.Payload);
                 if (World.RevokedCredentialIds.Contains(hello.CredentialId)) throw new InvalidOperationException("该旧凭证已由房主撤销绑定。");
@@ -76,7 +84,12 @@ namespace FreeWorldMultiplayer
                 Send(peer, "challenge", new Challenge { Nonce = nonce, Enroll = !World.Players.Values.Any(x => x.CredentialId == hello.CredentialId) });
                 return;
             }
-            if (message.Kind == "auth") { AuthenticatePeer(peer, JsonData.Payload<Authenticate>(message.Payload)); return; }
+            if (message.Kind == "auth")
+            {
+                if (unauthenticatedPeerDeadline.IsExpired(peer))
+                    throw new InvalidOperationException("未在允许时间内完成身份认证，请重新连接。");
+                AuthenticatePeer(peer, JsonData.Payload<Authenticate>(message.Payload)); return;
+            }
             string playerId;
             if (!peers.TryGetValue(peer, out playerId)) throw new InvalidOperationException("Player handshake has not completed.");
             if (message.SessionId != SessionId) throw new InvalidOperationException("旧房间会话的消息已失效。");
@@ -177,6 +190,7 @@ namespace FreeWorldMultiplayer
             Send(peer, "welcome", new Welcome { PlayerId = player.PlayerId, World = PublicWorld(player.PlayerId), Uids = JsonData.Clone(player.Uids) });
             ITransportPeerAdmission admission = transport as ITransportPeerAdmission;
             if (admission != null) admission.MarkAuthenticated(peer);
+            unauthenticatedPeerDeadline.Complete(peer);
             if (player.CurrentMapId >= 0) EnterMap(player, player.CurrentMapId);
             BroadcastPolicy();
             SetStatus(player.Nickname + " 已加入");
