@@ -118,7 +118,7 @@ namespace FreeWorldMultiplayer
             if (dirty)
             {
                 dirty = false; var text = new StringBuilder();
-                foreach (RoomChatMessage message in session.GetChatMessages(targetPlayerId).Reverse().Take(40).Reverse())
+                foreach (RoomChatMessage message in session.GetRecentChatMessages(targetPlayerId, 40))
                 {
                     bool mine = message.SenderPlayerId == session.LocalPlayerId;
                     string state = !mine ? "" : message.Delivery == RoomChatDelivery.Sending ? " · 发送中" : message.Delivery == RoomChatDelivery.Delivered ? " · 已送达" : " · 未确认送达";
