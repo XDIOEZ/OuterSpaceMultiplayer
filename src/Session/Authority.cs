@@ -245,6 +245,7 @@ namespace FreeWorldMultiplayer
             MapRecord map;
             if (!World.Maps.TryGetValue(view.Snapshot.MapId, out map)) { map = new MapRecord { MapId = view.Snapshot.MapId }; World.Maps.Add(map.MapId, map); }
             map.AuthorityEpoch = view.Access.AuthorityEpoch; map.Revision = view.Access.Revision;
+            pausedGiftRequests.Remove(map.MapId);
             map.SimulatorPlayerId = view.Access.SimulatorPlayerId; map.Checkpoint = view.Snapshot;
             map.AwaitingAuthorityReady = true;
             foreach (PlayerFieldState fields in view.Players)

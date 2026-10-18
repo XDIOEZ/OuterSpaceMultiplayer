@@ -177,6 +177,13 @@ namespace FreeWorldMultiplayer
             if (IsStarting) { TickHostCreation(); return; }
             // Unity's unscaled delta is the authority; no client wall-clock or game speed drives raid timers.
             double seconds = unscaledSeconds;
+            if (IsConnected && IsHost && World != null)
+            {
+                // Retry only the advisory resume send; a transient transport
+                // fault must not skip the rest of the authoritative room tick.
+                try { TickGiftResumes(seconds); }
+                catch (Exception error) { Error("赠送地表恢复通知重试失败，保留待发状态：" + error.Message); }
+            }
             TransportEvent item; int budget = 256;
             while (!shutdown && budget-- > 0 && transport.TryDequeue(out item))
             {

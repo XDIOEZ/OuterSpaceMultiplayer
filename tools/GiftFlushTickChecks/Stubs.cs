@@ -29,7 +29,7 @@ namespace FreeWorldMultiplayer
     {
         public readonly Dictionary<long, MapRecord> Maps = new Dictionary<long, MapRecord>();
     }
-    internal enum MapAccessMode { Frozen }
+    internal enum MapAccessMode { Frozen, Simulator }
     internal sealed class MapAccess
     {
         public long MapId, AuthorityEpoch, Revision;
@@ -38,9 +38,16 @@ namespace FreeWorldMultiplayer
     internal sealed class FakeBridge
     {
         public int Freezes;
+        public int Restores, FailedRestores;
+        public bool RejectRestore;
         public bool SetMapAuthority(MapAccess access)
         {
             if (access.Access == MapAccessMode.Frozen) Freezes++;
+            else
+            {
+                if (RejectRestore) { FailedRestores++; return false; }
+                Restores++;
+            }
             return true;
         }
     }
@@ -59,6 +66,8 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<string, int> personalInFlight = new Dictionary<string, int>();
         private string LocalPlayerId = "guest";
         private bool IsHost;
+        private bool IsConnected = true;
+        internal Func<string, string, object, bool> OnTrySend;
         internal Action<string, string, object> OnSend;
         internal Action OnPublishMaps, OnPublishPersonal;
         internal int MapPublishes, PersonalPublishes;
@@ -66,6 +75,7 @@ namespace FreeWorldMultiplayer
         private void EnsureCurrentCheckpoint(MapRecord map, bool forced) { }
         private bool TrySendCommunication(string peer, string kind, object payload)
         {
+            if (OnTrySend != null) return OnTrySend(peer, kind, payload);
             OnSend?.Invoke(peer, kind, payload);
             return true;
         }
@@ -76,7 +86,8 @@ namespace FreeWorldMultiplayer
         {
             if (!result) throw new InvalidOperationException(reason);
         }
-        private MapAccess GetMapAccess(long mapId) { return new MapAccess { MapId = mapId }; }
+        private MapAccess GetMapAccess(long mapId)
+        { return new MapAccess { MapId = mapId, AuthorityEpoch = World.Maps[mapId].AuthorityEpoch, Access = MapAccessMode.Simulator }; }
 
         internal void AddMap(long id, long epoch = 1, string simulator = "guest")
         {
@@ -92,10 +103,29 @@ namespace FreeWorldMultiplayer
         {
             giftFlushes[request.MapId] = request;
             giftPausedMaps.Add(request.MapId);
+            pausedGiftRequests[request.MapId] = request;
         }
         internal void Receive(GiftCheckpointRequest request) { ReceiveGiftFlush(request); }
         internal void Resume(GiftCheckpointRequest request) { ResumeGiftMap(request); }
         internal void Tick() { TickGiftFlushes(); }
+        internal void Host() { IsHost = true; LocalPlayerId = "host"; }
+        internal string BeginGift(string transferId, long mapId)
+        {
+            return PrepareGiftArrival(new TransferRecord
+            {
+                TransferId = transferId,
+                GiftRecipientPlayerId = "guest",
+                Request = new TransferRequest { DestinationMapId = mapId }
+            });
+        }
+        internal void CancelGift(string transferId) { ClearGiftBarrier(transferId); }
+        internal void RetryResumes(double seconds) { TickGiftResumes(seconds); }
+        internal int PendingResumeCount { get { return pendingGiftResumes.Count; } }
+        internal int BarrierCount { get { return giftBarriers.Count; } }
+        internal int FrozenRequestCount { get { return pausedGiftRequests.Count; } }
+        internal void RejectNativeRestore(bool value) { bridge.RejectRestore = value; }
+        internal int RestoreCount { get { return bridge.Restores; } }
+        internal int FailedRestoreCount { get { return bridge.FailedRestores; } }
         internal int PendingCount { get { return giftFlushes.Count; } }
         internal bool IsPaused(long id) { return giftPausedMaps.Contains(id); }
         internal int FreezeCount { get { return bridge.Freezes; } }
