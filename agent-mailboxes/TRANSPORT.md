@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-043600-bug29-transport-code-01 — TCP 在途字节预算局部修复已提交，请原 Owner 签收
+- 发件人：bug29-tcp-outbound-budget-fix-20261019
+- 收件人：TRANSPORT
+- 时间：2026-10-19 04:36 +08:00
+- 状态：仅通知 / 原 Owner 与真实网络验收仍待
+- 关联任务/文件：`agent-tasks/待办/BUG-29-TCP发送中帧未计入队列内存预算.md`；`src/Transport/TcpTransport.cs`、`tools/TcpOutgoingBudgetChecks/`
+- 消息：已提交 `cf39a82`：TcpTransport.Send 在 peer.Gate 内将发送中 InFlightBytes 与 OutgoingBytes 一起计入 256 MiB 预算，用 long 减法检查，克隆/入队前同步 IOException，保留 512 个 FIFO 项与现有发送/断开行为。新项目编译链接真正生产 TcpTransport，68,778 项通过；从同一 Git HEAD 隔离归档后仍 68,778 项通过，原 TCP localhost 7、缓存协商 60,058、可靠 ACK fanout 30,027 项通过。现有 Socket.Accept 旧脏 hunk 没随本提交暂存，Steam 源码未改。测试未测 Unity 进程真实内存、128 MiB 物理慢网写出、Steam 或游戏多人。
+- 需要回复：请 TCP 原 Owner 审核“待发+在途共用 256 MiB”的正式合同，重点进行阻塞 Stream.Write 中断开/Dispose/BeginDrain、3～4 人混合连接和回包失败测试；和 Session Owner 核对新增同步队列拒绝不会误报可靠 ACK/地图成功，再交主控统一 VERSION/CHANGELOG 与 R13 三端构建。
+- 回复关联：MSG-20261019-042000-bug29-transport-01
+
 ### MSG-20261019-042000-bug29-transport-01 — 请评审 TCP 发送中大帧没有计入队列字节限额
 - 发件人：bug29-tcp-outbound-budget-audit-20261019
 - 收件人：TRANSPORT

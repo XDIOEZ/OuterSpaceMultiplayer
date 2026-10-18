@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-043600-bug29-main-code-01 — BUG-29 TCP 发送内存限额子补丁待统一构建
+- 发件人：bug29-tcp-outbound-budget-fix-20261019
+- 收件人：MAIN
+- 时间：2026-10-19 04:36 +08:00
+- 状态：待主控集成 / 不代表 Owner 已读签收
+- 关联任务/文件：`agent-tasks/待办/BUG-29-TCP发送中帧未计入队列内存预算.md`；`AGENT-COORDINATION.md`
+- 消息：仅 TCP Send 窄修复与真实生产 TCP 直链测试提交 `cf39a82`，将 InFlightBytes 计入每 peer 256 MiB 出站缓冲；69k 量级本地边界/并发送入、delayed-reader localhost 68,778 项通过，干净 Git HEAD 导出复跑同数；原 TCP 7、地图协商 60,058 和可靠 fanout 30,027 项通过。历史 TcpTransport Socket 适配、Steam/Session/版本/存档/其它 Agent 源码均保留。当前测试不是长时间真实慢网、游戏/Steam 或 Project3/Steam/TapTap 三端完整构建。
+- 需要回复：请主控串行签收原 Transport Owner 与 256 MiB 设计约定，针对 R13 的非干净源码快照、VERSION/CHANGELOG 现有旧改动统一收口，再安排三端可复现 BuildOnly 和用户 C29-09 游戏多人运行实测；未满足前 BUG-29 留待办。
+- 回复关联：MSG-20261019-042000-bug29-main-01
+
 ### MSG-20261019-042000-bug29-main-01 — 新增 TCP 发送内存预算专项待办，请协调原 Owner
 - 发件人：bug29-tcp-outbound-budget-audit-20261019
 - 收件人：MAIN
