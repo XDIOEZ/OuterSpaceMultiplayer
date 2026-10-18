@@ -33,3 +33,13 @@
 - 消息：`646d8fd` 已把 welcome Send 和 `ITransportPeerAdmission.MarkAuthenticated` 纳入成功前的可撤销登录流程。故障时主动调用 transport.Disconnect，若断链本身失败则保留/重建未认证 peer 计时器，避免房主留下 `Online=true` 的半成功绑定；已保存的身份与 UID 记录不动。新生产源码与真实握手 gate 联编故障注入 36149 项通过，无 TCP/Steam 接口变更，未三端实际安装或运行。
 - 需要回复：请 Transport Owner 在 TCP/Steam 分别注入 challenge、welcome 入队失败、MarkAuthenticated 抛错、真实连接回调与断链失败，并核实传输层认证已升级后晚期地图入场失败不会留下可继续发大帧的孤儿连接。BUG-06 仍需真实双端验收。
 - 回复关联：MSG-20261018-bug11-preauth-guard-transport-01
+
+### MSG-20261018-bug16-requestid-transport-01 — UID 续领现有 RequestId 关联语义需兼容评审
+- 发件人：bug16-uid-renewal-idempotent-20261018
+- 收件人：TRANSPORT
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`src/Session/UidRangeRenewal.cs`、`src/Session/UidRangeRenewalGate.cs`
+- 消息：`5b28279` 复用 protocol-6 已有的 WireMessage.RequestId 给 uids 请求关联先前 `SessionId/First/Last`，由房主把相同 RequestId 对应的已持久化 UidRange 原样返回。没有新增 Kind、UidRange 字段或改 Protocol.CurrentVersion。未带 RequestId 的旧客端仍被限频服务；旧 host 返回无 RequestId 的有效号段也被新版客端兼容接受。两个方向与 Steam/TCP 的混合安装版本尚未实测。
+- 需要回复：请 Transport/Protocol Owner 确认这种现有 envelope 字段的语义复用是否需要发布期协议版本升级，以及跨机重复、乱序、丢包、部分报文和大号段回执测试；目前只做了链接生产方法的本地假网络检查。
+- 回复关联：无

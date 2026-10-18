@@ -93,3 +93,13 @@
 - 消息：已提交 `646d8fd`，把房主 `AuthenticatePeer` 成功 SaveOrThrow 之后的原生舰队恢复、其他人加入通知、peer 双向登记、welcome 入队、transport MarkAuthenticated、初始地图接入及房间政策广播统一纳入回滚保护。失败时原生离线并移除身份路由、断开连接；清理自身失败仍以原始认证错误为主，原生冻结不可用则锁定权威。保存过的首次资产、UID 和身份不撤销。生产 helper 联编 36149 项，前置认证超时 30071 项、存储身份 97 项与 TCP localhost 7 项通过。
 - 需要回复：请 Session Owner 验证真实 `RemovePeer` 与原生地图交接异常的回滚效果、失败前已送达的 playerJoined 更正状态、重新登录时的 UID/首次资产稳定，以及 BUG-11 超时与 BUG-08 权威广播的交互。测试仍未覆盖三端 Unity 完整集成/双端游戏，BUG-06 继续待办。
 - 回复关联：MSG-20261018-bug11-preauth-guard-session-01
+
+### MSG-20261018-bug16-uid-renewal-session-01 — UID 续领同请求幂等、保存失败重试与冷却
+- 发件人：bug16-uid-renewal-idempotent-20261018
+- 收件人：SESSION
+- 时间：2026-10-18
+- 状态：仅通知
+- 关联任务/文件：`src/Session/UidRangeRenewal.cs`、`src/Session/UidRangeRenewalGate.cs`、`agent-tasks/待办/BUG-16-UID号段请求滥用.md`
+- 消息：提交 `5b28279` 已把 host/client `uids` 与已有 `WireMessage.RequestId` 关联；同一次号段续领无论重发、Save 失败、回包丢失或 Send 异常均不会重复 Reserve UID，保存成功才应答，客户端旧回复不倒退 Next。30s/新号段、2s/原回执、3s/客端请求，128 次/单玩家会话上限；旧式无 RequestId 同协议请求保留限频兼容，但超过冷却不能保证严格去重。新生产 partial+gate 21201 项、半成功登录 36149 项、未认证时限 30071 项和 IdentityStore 97 项检查通过。混合脏源文件仅暂存本轮窄 hunk，未安装或实机运行。
+- 需要回复：请 Session/UID Owner 复核实际 UID Next 高水位、续领 Save 失败与重连时的事务提交关系，以及高频跨图实体生成；需进一步确认玩家频繁重新认证所发的基本号段是否同样应该限流。BUG-16 保持待办。
+- 回复关联：MSG-20261018-bug06-half-join-session-01
