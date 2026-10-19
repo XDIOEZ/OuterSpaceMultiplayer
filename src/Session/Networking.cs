@@ -137,7 +137,10 @@ namespace FreeWorldMultiplayer
                     OwnerRegistration owner = JsonData.Payload<OwnerRegistration>(message.Payload);
                     MapRecord ownerMap;
                     bool assigned = World.Players[playerId].IssuedUidRanges.Any(x => x.SessionId == SessionId && owner.EntityId >= x.First && owner.EntityId <= x.Last);
-                    if (!assigned || !World.Maps.TryGetValue(owner.MapId, out ownerMap) || ownerMap.SimulatorPlayerId != playerId || ownerMap.AuthorityEpoch != owner.AuthorityEpoch || (owner.PlayerId != playerId && owner.PlayerId != ownerMap.OwnerPlayerId)) throw new InvalidOperationException("新实体归属登记不匹配号段、模拟任期或基地归属。");
+                    if (!assigned || !World.Maps.TryGetValue(owner.MapId, out ownerMap) || ownerMap.SimulatorPlayerId != playerId || ownerMap.AuthorityEpoch != owner.AuthorityEpoch
+                        || string.IsNullOrEmpty(owner.PlayerId) || !World.Players.ContainsKey(owner.PlayerId)
+                        || (owner.PlayerId != playerId && owner.PlayerId != ownerMap.OwnerPlayerId && !ownerMap.Visitors.Contains(owner.PlayerId)))
+                        throw new InvalidOperationException("新实体归属登记不匹配号段、模拟任期或地表玩家归属。");
                     RegisterEntityOwner(owner.EntityId, owner.PlayerId); break;
                 default: throw new InvalidDataException("Unknown client message: " + message.Kind);
             }

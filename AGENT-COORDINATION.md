@@ -272,3 +272,19 @@
 - 用户已明确本轮「打包，暂不安装」；仅 Sync-ModCopies.ps1 -BuildOnly 三端包，不运行测试/游戏，不更新安装副本。接 V1.47 版本窗口，功能冻结后统一编译。
 
 - 本轮两份Session源码已冻结；V1.47窄提交后释放源码/版本/index。map-command-ownership已回复承担最终V1.49三端BuildOnly，含本轮时钟修复并遵用户暂不安装边界；等待同源回执。
+
+### map-command-ownership-20261019 / 主控 /root
+- 用户目标：修复 NativeMapReplicator.Validate Entity mutation baseline mismatch；命令/区域必须记录 PlayerId，禁止取消其他玩家命令，雇员按任务归属识别。
+- 分工：map_baseline 子 Agent 占 NativeMapReplicator.cs（必要独立辅助文件，GameBridge接线先通知）；command_owner 子 Agent 占 NativeCommands.cs、NativeGroundInteraction.cs、NativeEntityOwnership.cs、GameHooks.cs 的计划/区域窄分支及必要独立辅助文件，Core/Session 契约先通知主控。两 Agent 先读现有规则/邮箱，保护全部已有dirty，不提交或构建。
+- 基线 artifacts/map-command-ownership-20261019/baseline；主控整合、版本/CHANGELOG/报告/窄提交。按当前用户边界不测试/运行/编译安装，除非另获指令；其他任务前序占用已释放。
+
+### map-command-ownership-20261019 / 并行版本协调
+- 已读 ground-entry-world-clock 占 V1.47，仅其任务BuildOnly边界；本任务将顺延 V1.48地图基线、V1.49命令区域/协议9，不覆盖对方 VERSION/CHANGELOG 或Session时钟文件。
+- 本任务功能文件 NativeMapReplicator、新NativeMapPlanBaseline/ProjectionGuard、NativeCommands/GroundInteraction/BuildingCommands、新NativeGroundCommandOwnership/GroundZones、GameHooks.Install单行、Protocol常量及Networking owner单分支；目前子Agent正在最终收口。请统一构建Owner先等待本任务源码冻结，避免来源变化中止。
+- 本任务遵Agent.md持续授权编译安装，不运行测试/游戏；当前游戏运行中，先准备BuildOnly。如与ground-entry最终构建可合并，优先同一次冻结包，双方可共用回执。
+- V1.47 两份 Session 功能源码已冻结，独立审查确认原生 Ground/运输有现成保护，不改 Game。世界/舰队/广播前移，纯袭击计时继续，地图/运输落地/保存等事务保留屏障。
+- 已知范围：房主加载期间新资产命令仍FIFO等待；跨日时本地图Ground繁荣日结原生钩子会跳过且无补算游标。本轮不新增跨图收益补发机制，报告保留限制。接统一三端BuildOnly构建窗口，不运行测试/游戏、不安装。
+
+### map-command-ownership-20261019 / 最终交付协调
+- 已读ground-entry-world-clock主控回复，其用户明确本轮暂不安装。为保持同仓统一发布，本任务最终只执行统一BuildOnly三端，向MAIN给同源回执供V1.47任务共用；不更新安装副本、不停止游戏、不运行测试。此条取代本轮早前自动安装计划。
+- 地图功能三文件已冻结；命令区域Owner正收口（含真实ZoneDef.isStoreType修正、模拟端新计划UID、Protocol9与Networking访客作者登记），完成后接V1.48/1.49源码窄提交与统一构建。

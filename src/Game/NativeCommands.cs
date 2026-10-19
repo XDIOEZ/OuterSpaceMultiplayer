@@ -21,6 +21,8 @@ namespace FreeWorldMultiplayer
         internal static void Install(Harmony harmony)
         {
             Methods.Clear();
+            NativeGroundCommandOwnership.Install(harmony);
+            NativeGroundZones.Install(harmony);
             string[] names = { "Product_SubmitMakeBean_LN", "Product_DelMakePlan_LN", "Product_MakeList_PlayPause", "Product_MakeList_TakeUp", "Product_WaterPlant_Submit_LN",
                 "order_Hero_EatThing", "order_Hero_UseMedicial", "order_Hero_ElectricSwitch", "order_Hero_OpenMedic", "order_Hero_GoBed", "order_Fight_Stand", "order_Fight_Patrol" };
             foreach (Type owner in new[] { typeof(LocalCoreHandle), typeof(RoleCommand) })
@@ -121,6 +123,7 @@ namespace FreeWorldMultiplayer
         }
         internal static void Execute(GameBridge bridge, GameCommand command)
         {
+            if (NativeGroundZones.TryExecute(bridge, command)) return;
             if (command.Kind == CommandKind.ConfigureBuilding)
             {
                 if (!bridge.Context.HasPermission(command.PlayerId, command.MapId, command.TargetEntityId, Permission.UseBuilding)) throw new InvalidOperationException("Production configuration denied.");
@@ -138,18 +141,29 @@ namespace FreeWorldMultiplayer
             {
                 if (!bridge.Context.HasPermission(command.PlayerId, command.MapId, -1, Permission.UseBuilding)) throw new InvalidOperationException("Construction permission denied.");
                 Plans plans = NativeWire.Parse<Plans>(command.PayloadJson);
+                if (plans == null || plans.Add == null || plans.Update == null || plans.Remove == null || plans.Add.Count + plans.Update.Count + plans.Remove.Count > 16384)
+                    throw new InvalidOperationException("Invalid construction plan mutation.");
                 List<FWPlanBean> added = plans.Add.Select(NativeWire.Unpack<FWPlanBean>).ToList();
                 List<FWPlanBean> updated = plans.Update.Select(NativeWire.Unpack<FWPlanBean>).ToList();
                 if (plans.Remove.Distinct().Count() != plans.Remove.Count || added.Concat(updated).Select(p => p.getUID()).Distinct().Count() != added.Count + updated.Count)
                     throw new InvalidOperationException("Duplicate construction plan mutation.");
+                if (plans.Remove.Intersect(added.Concat(updated).Select(p => p.getUID())).Any())
+                    throw new InvalidOperationException("Conflicting construction plan mutation.");
                 foreach (long uid in plans.Remove.Concat(updated.Select(p => p.getUID())))
                     if (MapManager.instance.planManager.getPlanGraphByUID(uid) == null) throw new InvalidOperationException("Plan to change does not exist.");
                 foreach (FWPlanBean plan in added)
                     if (MapManager.instance.planManager.getPlanGraphByUID(plan.getUID()) != null) throw new InvalidOperationException("New plan already exists.");
                 foreach (long uid in plans.Remove)
                     bridge.ValidateGroundPlanMutation(command.PlayerId, MapManager.instance.planManager.getPlanGraphByUID(uid).rolePlan.planBean, false);
-                foreach (FWPlanBean plan in updated) bridge.ValidateGroundPlanMutation(command.PlayerId, plan, false);
+                foreach (FWPlanBean plan in updated)
+                {
+                    bridge.ValidateGroundPlanMutation(command.PlayerId, MapManager.instance.planManager.getPlanGraphByUID(plan.getUID()).rolePlan.planBean, false);
+                    bridge.ValidateGroundPlanMutation(command.PlayerId, plan, false);
+                }
                 foreach (FWPlanBean plan in added) bridge.ValidateGroundPlanMutation(command.PlayerId, plan, true);
+                // Preview IDs belong to the issuing peer. Only the current simulator
+                // allocates IDs for newly committed entities in this map's epoch.
+                foreach (FWPlanBean plan in added) plan.setUid(bridge.Context.AllocateUid(command.MapId));
                 foreach (long uid in plans.Remove)
                 {
                     BasePlanGraph graph = MapManager.instance.planManager.getPlanGraphByUID(uid);
@@ -174,7 +188,9 @@ namespace FreeWorldMultiplayer
             {
                 if (!bridge.Context.HasPermission(command.PlayerId, command.MapId, command.EntityId, Permission.ControlOwnHero)) throw new InvalidOperationException("Cannot assign another player's employee.");
                 BaseHero hero = MapManager.instance.heroManager.getHeroByUID(command.EntityId);
+                if (hero == null) throw new InvalidOperationException("Worker is no longer present.");
                 BasePlanGraph graph = MapManager.instance.planManager.getPlanGraphByUID(command.TargetEntityId);
+                if (command.TargetEntityId >= 0 && graph == null) throw new InvalidOperationException("Work plan no longer exists.");
                 if (graph == null)
                 {
                     JObject payload = JObject.Parse(command.PayloadJson);
@@ -185,12 +201,17 @@ namespace FreeWorldMultiplayer
                         if (command.TargetEntityId >= 0 && plan.getUID() != command.TargetEntityId)
                             throw new InvalidOperationException("Work plan identity mismatch.");
                         graph = MapManager.instance.planManager.getPlanGraphByUID(plan.getUID());
-                        bridge.ValidateGroundPlanMutation(command.PlayerId, graph == null ? plan : graph.rolePlan.planBean, graph == null);
-                        if (graph == null) graph = LocalCoreHandle.Plan_addNewPlan_LN(plan);
+                        if (graph == null) bridge.ValidateGroundPlanMutation(command.PlayerId, plan, true);
+                        if (graph == null)
+                        {
+                            if (bridge.Context.OwnerOfEntity(plan.getUID()) != null) throw new InvalidOperationException("Work plan no longer exists.");
+                            plan.setUid(bridge.Context.AllocateUid(command.MapId));
+                            plan.setNewPlan(false); plan.setPlanStep(FWPlanBean.STEP_BLUEPRINT);
+                            graph = LocalCoreHandle.Plan_addNewPlan_LN(plan);
+                        }
                     }
                 }
                 if (hero == null || graph == null) throw new InvalidOperationException("Worker or plan is no longer present.");
-                bridge.ValidateGroundPlanMutation(command.PlayerId, graph.rolePlan.planBean, false);
                 if (!bridge.CanPerformGroundWork(hero, graph.rolePlan)) throw new InvalidOperationException("当前关系不允许该雇员执行这项工作。");
                 hero.doAction(graph.rolePlan); return;
             }

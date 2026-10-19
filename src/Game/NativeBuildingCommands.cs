@@ -61,6 +61,9 @@ namespace FreeWorldMultiplayer
             foreach (long uid in data.Targets)
             {
                 if (!bridge.IsBuildingConfigurationEntityInMap(command.MapId, uid)) throw new InvalidOperationException("建筑配置目标不在当前权威地图中：" + uid);
+                FWBaseBean ownedCommand = bridge.FindPersistentBean(uid) as FWBaseBean;
+                if ((ownedCommand is FWPlanBean || ownedCommand is FWAreaZoneBean) && !NativeGroundCommandOwnership.CanEdit(bridge, command.PlayerId, uid))
+                    throw new InvalidOperationException("只能修改自己发布的命令或区域。");
                 if (!bridge.Context.HasPermission(command.PlayerId, command.MapId, uid, Permission.UseBuilding)) throw new InvalidOperationException("没有该建筑的配置权限：" + uid);
             }
             if ((data.Operation == "Paste" || data.Operation == "BindStore") && data.Reference >= 0 && !bridge.IsBuildingConfigurationEntityInMap(command.MapId, data.Reference))

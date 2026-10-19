@@ -127,7 +127,7 @@ namespace FreeWorldMultiplayer
                         owner = bridge.Players.FirstOrDefault(p => p.Value.heros.Any(h => h.getUID() == NativeWire.Uid(bean))).Key;
                     else if (bean is FWAnimalBean)
                         owner = bridge.Players.FirstOrDefault(p => p.Value.animals.Any(a => a.getUID() == NativeWire.Uid(bean))).Key;
-                    else if (bean is FWBuildBean || bean is FWPlanBean)
+                    else if (bean is FWBuildBean || bean is FWPlanBean || bean is FWAreaZoneBean)
                         owner = bridge.Context.OwnerOfMap(mapId);
                     if (!string.IsNullOrEmpty(owner)) bridge.Context.RegisterEntityOwner(NativeWire.Uid(bean), owner);
                 }

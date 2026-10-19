@@ -25,12 +25,15 @@ namespace FreeWorldMultiplayer
             if (worker == null || plan == null) return true;
             string actor = Context.OwnerOfEntity(worker.getUID());
             if (string.IsNullOrEmpty(actor)) return true;
+            if (!NativeGroundCommandOwnership.CanWorkPlanZones(this, worker, plan)) return false;
+            if (plan.planBean == null && plan.getTaskType() == FWPlanBean.TASK_Grow && NativeGroundCommandOwnership.PlantZone(plan) != null)
+                return true; // Generated planting work follows its real zone, including an own zone on a visited map.
             BaseBuild assignedBuilding = plan.getPlanBuild();
             if (assignedBuilding != null && !CanUseGroundWorkTarget(worker, assignedBuilding.getUID())) return false;
             FWPlanBean bean = plan.planBean;
             if (bean != null)
             {
-                string author = Context.OwnerOfEntity(bean.getUID());
+                string author = NativeGroundCommandOwnership.Owner(this, bean.getUID());
                 if (!CanShareGroundWork(actor, author)) return false;
                 // A new own demolition/refuel order cannot grant access to a foreign
                 // building merely by placing the actor's identity on its plan.
@@ -73,8 +76,8 @@ namespace FreeWorldMultiplayer
         {
             if (plan == null) throw new InvalidOperationException("任务数据不存在。");
             string author = Context.OwnerOfEntity(plan.getUID());
-            if (!CanShareGroundWork(playerId, author ?? (creating ? playerId : Context.OwnerOfMap(CurrentMapId))))
-                throw new InvalidOperationException("不能修改其他中立或敌对玩家的工作。");
+            if (creating ? author != null && author != playerId : !NativeGroundCommandOwnership.CanEdit(this, playerId, plan.getUID()))
+                throw new InvalidOperationException("只能修改或取消自己发布的命令。");
             string target = plan.objectUID > 0 ? Context.OwnerOfEntity(plan.objectUID) : null;
             if (!CanShareGroundWork(playerId, target))
                 throw new InvalidOperationException("当前关系不允许对该玩家的设施安排工作。");
