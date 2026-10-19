@@ -25,6 +25,7 @@ namespace FreeWorldMultiplayer
             if (string.IsNullOrEmpty(actor)) return true; // Native NPC inventory remains native.
             if (!IsSimulator) { callback?.Invoke(Callback.FAILED); return false; }
             if (string.IsNullOrEmpty(owner) || actor == owner) return true;
+            if (!Context.CanLootGroundOwner(actor, owner, CurrentMapId)) { callback?.Invoke(Callback.FAILED); return false; }
             if (!EnsureGroundRaid(actor, CurrentMapId, roleBean.getUID())) { callback?.Invoke(Callback.FAILED); return false; }
             AttackRecord attack = Context.GetAttack(CurrentMapId);
             if (attack == null || !IsGroundRaidParticipant(attack, actor) || !GroundRaidHeroes(attack, actor).Contains(roleBean.getUID())

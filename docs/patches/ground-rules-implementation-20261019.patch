@@ -1015,7 +1015,7 @@
              if (!NativeLandings.TryGetValue(attack.LandingExpeditionId, out landing)) throw new InvalidOperationException("袭击落仓记录未随战场检查点恢复。");
 --- a/src/Game/NativeRaidLoot.cs
 +++ b/src/Game/NativeRaidLoot.cs
-@@ -21,13 +21,14 @@
+@@ -21,13 +21,15 @@
          internal bool HandlePickup(BaseRole role, FWRoleBean roleBean, FWThingBean item, int count, FWRoleBean.carryType carryType, callbackInt callback)
          {
              string actor = Context.OwnerOfEntity(roleBean.getUID());
@@ -1026,6 +1026,7 @@
 -            if (string.IsNullOrEmpty(owner) || actor == owner || Context.GetRelation(actor, owner) == Relation.Friendly) return true;
 +            if (!IsSimulator) { callback?.Invoke(Callback.FAILED); return false; }
 +            if (string.IsNullOrEmpty(owner) || actor == owner) return true;
++            if (!Context.CanLootGroundOwner(actor, owner, CurrentMapId)) { callback?.Invoke(Callback.FAILED); return false; }
 +            if (!EnsureGroundRaid(actor, CurrentMapId, roleBean.getUID())) { callback?.Invoke(Callback.FAILED); return false; }
              AttackRecord attack = Context.GetAttack(CurrentMapId);
 -            if (attack == null || attack.AttackerPlayerId != actor || !Context.HasPermission(actor, CurrentMapId, item.getUID(), Permission.Loot)
@@ -1035,7 +1036,7 @@
              { callback?.Invoke(Callback.FAILED); return false; }
              int reserved = LootReservations.Where(r => r.AttackId == attack.AttackId && r.SourceUid == item.getUID()).Sum(r => r.Count);
              if (item.getSum() - reserved < count) { callback?.Invoke(Callback.FAILED); return false; }
-@@ -81,7 +82,7 @@
+@@ -81,7 +83,7 @@
              foreach (LootReservation reservation in reservations)
              {
                  FWHeroBean hero = heroOf(reservation.HeroUid);
