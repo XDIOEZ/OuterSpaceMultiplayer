@@ -269,6 +269,11 @@ namespace FreeWorldMultiplayer
         private void PublishLocalMaps()
         {
             if (World == null || LocalPlayerId == null || personalInFlight.Count != 0 || nativeFault != null) return;
+            if (!IsHost && pendingMapOutbound != null)
+            {
+                if (StillPendingMap(pendingMapOutbound)) return;
+                ClearMapOutbound(); // A genuine host view/ACK already replaced this lease.
+            }
             foreach (MapRecord map in World.Maps.Values.Where(x => x.SimulatorPlayerId == LocalPlayerId && !x.AwaitingAuthorityReady).ToList())
             {
                 if (inFlightUpdates.ContainsKey(map.MapId)) continue;
@@ -284,7 +289,13 @@ namespace FreeWorldMultiplayer
                 update.EntityOwners = update.Checkpoint.EntityOwners;
                 if (update.Players == null) update.Players = new List<PlayerUpdate>();
                 if (IsHost) AcceptMapUpdate(LocalPlayerId, null, update);
-                else { inFlightUpdates[map.MapId] = update; Send("host", "map", WireMapUpdate(update)); }
+                else
+                {
+                    SendCapturedMapUpdate(update);
+                    // Preserve and retry this exact already-captured transaction
+                    // before capturing another potentially very large map frame.
+                    if (pendingMapOutbound != null) return;
+                }
             }
         }
         private static MapUpdate WireMapUpdate(MapUpdate update)
@@ -419,6 +430,7 @@ namespace FreeWorldMultiplayer
                 if (!inFlightUpdates.TryGetValue(map.MapId, out pending) || pending.CommitId != update.CommitId)
                     throw new InvalidOperationException("模拟地图提交回执没有对应的本地检查点。");
                 map.Checkpoint = pending.Checkpoint; localBaselines[map.MapId] = pending.Checkpoint; inFlightUpdates.Remove(map.MapId);
+                RetireMapOutbound(pending);
             }
         }
         private void RebaseMap(long mapId)
