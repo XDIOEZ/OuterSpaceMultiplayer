@@ -3,7 +3,7 @@ using System;
 namespace FreeWorldMultiplayer
 {
     /// <summary>A Steam host also exposes TCP; clients explicitly select one connection method.</summary>
-    public sealed class RoomTransport : ITransport, ITransportDrain, ITransportPeerAdmission
+    public sealed class RoomTransport : ITransport, ITransportDrain, ITransportPeerAdmission, ITransportSteamIdentity
     {
         private TcpTransport tcp;
         private SteamTransport steam;
@@ -13,6 +13,17 @@ namespace FreeWorldMultiplayer
         public string Name { get { return steam != null && tcp != null ? "TCP + Steam" : steam != null ? "Steam" : "TCP/IP"; } }
         public string LocalPeerId { get { return host ? "host" : clientSteam ? steam.LocalPeerId : tcp.LocalPeerId; } }
         public bool IsRunning { get { return (tcp != null && tcp.IsRunning) || (steam != null && steam.IsRunning); } }
+        // Host identity is resolved before StartHost; callers must first select UseSteam.
+        public string GetLocalSteamId() { return SteamTransport.GetCurrentLocalSteamId(); }
+        public string GetRemoteSteamId(string peerId)
+        {
+            // The prefix selects a channel only; the account must come from its socket.
+            if (peerId == null || !peerId.StartsWith("steam:", StringComparison.Ordinal)) return null;
+            if (!host || steam == null) throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
+            string identity = steam.GetRemoteSteamId(peerId);
+            if (identity == null) throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
+            return identity;
+        }
         public void MarkAuthenticated(string peerId)
         {
             if (!host || peerId == null) return;

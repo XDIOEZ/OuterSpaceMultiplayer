@@ -148,11 +148,13 @@ namespace FreeWorldMultiplayer
             if (World.RevokedCredentialIds.Contains(authentication.CredentialId)) throw new InvalidOperationException("该旧凭证已由房主撤销绑定。");
             if (!challenges.TryGetValue(peer, out challenge) || challenge.CredentialId != authentication.CredentialId) throw new InvalidOperationException("身份挑战不存在或已经失效。");
             challenges.Remove(peer);
-            PlayerRecord player = World.Players.Values.FirstOrDefault(x => x.CredentialId == authentication.CredentialId);
-            bool newPlayer = player == null;
-            string verifier = newPlayer ? authentication.Verifier : player.CredentialHash;
+            PlayerRecord credentialPlayer = World.Players.Values.FirstOrDefault(x => x.CredentialId == authentication.CredentialId);
+            string verifier = credentialPlayer == null ? authentication.Verifier : credentialPlayer.CredentialHash;
             string proof = CryptoData.Proof(verifier, SessionId + ":" + challenge.Nonce + ":" + authentication.CredentialId);
             if (!CryptoData.Equal(proof, authentication.Proof)) throw new InvalidOperationException("玩家身份凭证不匹配。");
+            string steamAccount = RemoteSteamAccount(peer);
+            PlayerRecord player = ResolveRemoteSteamAccount(credentialPlayer, steamAccount);
+            bool newPlayer = player == null;
             if (player != null && player.Online) throw new InvalidOperationException("该身份已有有效连接。");
             if (World.Players.Values.Count(x => x.Online) >= World.Options.MaxPlayers) throw new InvalidOperationException("房间人数已满。");
             if (newPlayer)
@@ -179,7 +181,7 @@ namespace FreeWorldMultiplayer
             player.CurrentMapId = ReconnectMap(player);
             // Save before confirming either first assets or newly allocated IDs. A failed handshake
             // keeps the exact player record in host memory; a retry never grants another asset set.
-            SaveOrThrow();
+            SaveWithSteamAccountBinding(player, steamAccount, newPlayer);
             CompleteAuthenticatedJoin(peer, player);
         }
         private long ReconnectMap(PlayerRecord player)

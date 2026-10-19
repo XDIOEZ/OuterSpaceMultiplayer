@@ -6,8 +6,8 @@ using UnityEngine.UI;
 
 namespace FreeWorldMultiplayer
 {
-    // Keep rarely used credential recovery out of the room's primary action
-    // hierarchy. This is presentation-only; the existing guarded handlers
+    // Steam account recovery is automatic; keep the fallback credential rebind
+    // out of the room's primary action hierarchy. The existing guarded handlers
     // still own authentication, confirmation and reliable persistence.
     public sealed partial class MultiplayerRoomDialog
     {
@@ -37,15 +37,18 @@ namespace FreeWorldMultiplayer
                 if (node == null)
                     throw new InvalidOperationException("房间身份恢复面板缺少控件：" + name);
                 recoveryDetailNodes.Add(node.gameObject);
+                if (name == "RecoveryHint")
+                    SetTextIfChanged(node.GetComponent<TMP_Text>(),
+                        "已绑定 Steam 账号进入游戏自动恢复；IP 直连或旧档未绑定时，可由房主备用重绑。");
             }
 
             recoveryDisclosureButton = MultiplayerUi.CloneButton(ButtonTemplate, root,
-                "FWM.RecoveryDisclosure", "展开身份恢复", ToggleRoomRecovery);
+                "FWM.RecoveryDisclosure", "备用身份重绑", ToggleRoomRecovery);
             MultiplayerUi.Top((RectTransform)recoveryDisclosureButton.transform, 0, 320, 258, 42);
             recoveryDisclosureCaption = OfficialModUi.Caption(recoveryDisclosureButton);
             recoveryDisclosureCaption.fontSize = 17;
             recoveryCollapsedHint = Label(root, "RecoveryCollapsedHint",
-                "身份恢复是低频高级操作。玩家可在设置中复制本机恢复码；只有房主能为离线玩家重绑登录身份。",
+                "Steam 身份自动恢复：绑定后，同一 Steam 账号换设备进入本世界，会恢复原角色与资产。",
                 17, 20, 379, 936, 56).gameObject;
             recoveryCollapsedHint.GetComponent<TMP_Text>().enableWordWrapping = true;
 
@@ -77,7 +80,7 @@ namespace FreeWorldMultiplayer
                 recoveryCollapsedHint.SetActive(!expanded);
             if (recoveryDisclosureCaption != null)
             {
-                SetTextIfChanged(recoveryDisclosureCaption, expanded ? "收起身份恢复" : "展开身份恢复");
+                SetTextIfChanged(recoveryDisclosureCaption, expanded ? "收起备用重绑" : "备用身份重绑");
                 SetColorIfChanged(recoveryDisclosureCaption, expanded ? HeadingColor : BodyColor);
             }
             if (recoveryDisclosureButton != null)
@@ -99,6 +102,24 @@ namespace FreeWorldMultiplayer
         {
             if (recoveryExpanded && (!HasRoomContext || page != Page.Room))
                 SetRoomRecoveryExpanded(false);
+
+            if (recoveryCollapsedHint != null && HasRoomContext)
+            {
+                var session = Runtime.Session;
+                PlayerRecord player = null;
+                if (session != null && session.World != null && !String.IsNullOrEmpty(session.LocalPlayerId))
+                    session.World.Players.TryGetValue(session.LocalPlayerId, out player);
+                bool steamBound = player != null && !String.IsNullOrWhiteSpace(player.SteamId);
+                bool steamRoom = !String.IsNullOrWhiteSpace(roomId);
+                SetTextIfChanged(recoveryCollapsedHint.GetComponent<TMP_Text>(),
+                    steamRoom
+                        ? steamBound
+                            ? "Steam 身份自动恢复：已绑定当前账号。同一 Steam 账号换设备进入本世界，会自动恢复原角色与资产。\nIP 直连仍使用本机凭证；凭证丢失时可由房主备用重绑。"
+                            : "Steam 身份尚未绑定。旧玩家须先用原凭证登录一次，绑定后同一 Steam 账号换设备会自动恢复。\n若原凭证已丢失，请由房主通过备用身份重绑找回原玩家。"
+                        : steamBound
+                            ? "当前为 IP 直连，身份由本机凭证恢复。已绑定的 Steam 账号可在 Steam 联机时跨设备自动恢复原角色与资产。\n凭证丢失时，请由房主使用备用身份重绑。"
+                            : "当前为 IP 直连，身份由本机凭证恢复。跨设备自动恢复须先用原凭证进入 Steam 房间，完成账号绑定。\n原凭证丢失且尚未绑定时，请由房主使用备用身份重绑。");
+            }
 
             // A TCP-only host, even one launched through Steam, has no Steam
             // lobby to invite friends into. Match the real transport capability.

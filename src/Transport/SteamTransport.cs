@@ -8,7 +8,7 @@ using Steamworks;
 namespace FreeWorldMultiplayer
 {
     /// <summary>Steam lobby discovery and reliable SteamNetworkingSockets P2P. Main thread only.</summary>
-    public sealed class SteamTransport : ITransport, ITransportDrain, ITransportPeerAdmission
+    public sealed class SteamTransport : ITransport, ITransportDrain, ITransportPeerAdmission, ITransportSteamIdentity
     {
         private const int VirtualPort = 17321;
         private const int FragmentPayload = 48 * 1024;
@@ -18,6 +18,8 @@ namespace FreeWorldMultiplayer
         private sealed class Peer
         {
             public string Id;
+            // Verified socket identity; never reconstructed from the public peer label.
+            public string SteamId;
             public HSteamNetConnection Connection;
             public bool Connected;
             public bool Authenticated;
@@ -48,6 +50,47 @@ namespace FreeWorldMultiplayer
         public string Name { get { return "Steam Lobby / SteamNetworkingSockets"; } }
         public string LocalPeerId { get; private set; }
         public bool IsRunning { get { return running; } }
+        public string GetLocalSteamId() { return GetCurrentLocalSteamId(); }
+
+        internal static string GetCurrentLocalSteamId()
+        {
+            // Use only the game's existing Steam initialization. An IP room must not
+            // initialize Steam, restart the game, or substitute a local credential.
+            try
+            {
+                if (!SteamAPI.IsSteamRunning() || SteamAPI.GetHSteamUser().m_HSteamUser == 0 ||
+                    SteamAPI.GetHSteamPipe().m_HSteamPipe == 0 || !SteamUser.BLoggedOn()) return null;
+                return ValidatedSteamId(SteamUser.GetSteamID());
+            }
+            catch (DllNotFoundException) { return null; }
+            catch (EntryPointNotFoundException) { return null; }
+            catch (BadImageFormatException) { return null; }
+            catch (InvalidOperationException) { return null; }
+            catch (TypeInitializationException) { return null; }
+        }
+
+        private static string ValidatedSteamId(CSteamID id)
+        {
+            return id.m_SteamID != 0 && id.IsValid() && id.GetEAccountType() == EAccountType.k_EAccountTypeIndividual
+                ? id.m_SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
+        }
+
+        public string GetRemoteSteamId(string peerId)
+        {
+            if (!host || !running) return null;
+            Peer peer;
+            if (peerId == null || !peers.TryGetValue(peerId, out peer) || !peer.Connected || peer.SteamId == null)
+                throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
+            SteamNetConnectionInfo_t info;
+            if (!SteamNetworkingSockets.GetConnectionInfo(peer.Connection, out info) ||
+                info.m_eState != ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected)
+                throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
+            string actual = ValidatedSteamId(info.m_identityRemote.GetSteamID());
+            if (actual == null || !String.Equals(actual, peer.SteamId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Steam 连接账号身份无效或已改变。");
+            return actual;
+        }
+
         public void MarkAuthenticated(string peerId)
         {
             if (!host || peerId == null) return;
@@ -108,12 +151,14 @@ namespace FreeWorldMultiplayer
                     lobby = new CSteamID(result.m_ulSteamIDLobby);
                     if (SteamMatchmaking.GetLobbyData(lobby, "fwm.protocol") != "1") { Fail("该房间不是兼容的 FreeWorldMultiplayer V1 房间。"); return; }
                     owner = SteamMatchmaking.GetLobbyOwner(lobby);
+                    string ownerSteamId = ValidatedSteamId(owner);
+                    if (ownerSteamId == null) { Fail("Steam 房主账号身份无效。"); return; }
                     var identity = new SteamNetworkingIdentity();
                     identity.SetSteamID(owner);
                     var connection = SteamNetworkingSockets.ConnectP2P(ref identity, VirtualPort, 0, null);
                     if (connection == HSteamNetConnection.Invalid) { Fail("连接 Steam 房主失败。"); return; }
                     if (!SteamNetworkingSockets.SetConnectionPollGroup(connection, pollGroup)) { SteamNetworkingSockets.CloseConnection(connection, 1000, "Poll group failed", false); Fail("加入 Steam 接收组失败。"); return; }
-                    peers.Add("host", new Peer { Id = "host", Connection = connection });
+                    peers.Add("host", new Peer { Id = "host", SteamId = ownerSteamId, Connection = connection });
                 });
                 joined.Set(SteamMatchmaking.JoinLobby(new CSteamID(room)));
             }
@@ -143,15 +188,20 @@ namespace FreeWorldMultiplayer
             if (state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connecting && host && change.m_info.m_hListenSocket == listener)
             {
                 CSteamID remote = change.m_info.m_identityRemote.GetSteamID();
-                string id = "steam:" + remote.m_SteamID;
+                string remoteSteamId = ValidatedSteamId(remote);
+                if (remoteSteamId == null) { SteamNetworkingSockets.CloseConnection(change.m_hConn, 1001, "Steam identity invalid", false); return; }
+                string id = "steam:" + remoteSteamId;
                 if (draining || peers.Count >= maxPeers || peers.ContainsKey(id) || !IsLobbyMember(remote)) { SteamNetworkingSockets.CloseConnection(change.m_hConn, 1001, "Room full or membership invalid", false); return; }
                 if (SteamNetworkingSockets.AcceptConnection(change.m_hConn) != EResult.k_EResultOK || !SteamNetworkingSockets.SetConnectionPollGroup(change.m_hConn, pollGroup)) { SteamNetworkingSockets.CloseConnection(change.m_hConn, 1002, "Accept failed", false); return; }
-                peer = new Peer { Id = id, Connection = change.m_hConn };
+                peer = new Peer { Id = id, SteamId = remoteSteamId, Connection = change.m_hConn };
                 peers.Add(id, peer);
             }
             if (peer == null) return;
             if (state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected)
             {
+                string remoteSteamId = ValidatedSteamId(change.m_info.m_identityRemote.GetSteamID());
+                if (remoteSteamId == null || !String.Equals(remoteSteamId, peer.SteamId, StringComparison.Ordinal))
+                { Disconnect(peer.Id, "Steam 连接账号身份无效或已改变。"); return; }
                 if (!peer.Connected) { peer.Connected = true; events.Enqueue(new TransportEvent { Kind = TransportEventKind.Connected, PeerId = peer.Id }); }
             }
             else if (state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer || state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally)

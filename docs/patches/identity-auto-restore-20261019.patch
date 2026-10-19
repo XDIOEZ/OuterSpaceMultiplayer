@@ -1,0 +1,415 @@
+--- a/src/Session/Networking.cs
++++ b/src/Session/Networking.cs
+@@ -239,11 +239,13 @@
+             if (World.RevokedCredentialIds.Contains(authentication.CredentialId)) throw new MessageRejectionException("该旧凭证已由房主撤销绑定。");
+             if (!challenges.TryGetValue(peer, out challenge) || challenge.CredentialId != authentication.CredentialId) throw new MessageRejectionException("身份挑战不存在或已经失效。");
+             challenges.Remove(peer);
+-            PlayerRecord player = World.Players.Values.FirstOrDefault(x => x.CredentialId == authentication.CredentialId);
+-            bool newPlayer = player == null;
+-            string verifier = newPlayer ? authentication.Verifier : player.CredentialHash;
++            PlayerRecord credentialPlayer = World.Players.Values.FirstOrDefault(x => x.CredentialId == authentication.CredentialId);
++            string verifier = credentialPlayer == null ? authentication.Verifier : credentialPlayer.CredentialHash;
+             string proof = CryptoData.Proof(verifier, SessionId + ":" + challenge.Nonce + ":" + authentication.CredentialId);
+             if (!CryptoData.Equal(proof, authentication.Proof)) throw new MessageRejectionException("玩家身份凭证不匹配。");
++            string steamAccount = RemoteSteamAccount(peer);
++            PlayerRecord player = ResolveRemoteSteamAccount(credentialPlayer, steamAccount);
++            bool newPlayer = player == null;
+             if (player != null && player.Online) throw new MessageRejectionException("该身份已有有效连接。");
+             if (World.Players.Values.Count(x => x.Online) >= World.Options.MaxPlayers) throw new MessageRejectionException("房间人数已满。");
+             if (newPlayer)
+@@ -277,7 +279,7 @@
+             // Save before confirming either first assets or newly allocated IDs. A failed handshake
+             // keeps the exact player record in host memory; a retry never grants another asset set.
+             MessageStage("auth.persist-player", player.CurrentMapId, player.PlayerId);
+-            SaveOrThrow();
++            SaveWithSteamAccountBinding(player, steamAccount, newPlayer);
+             CompleteAuthenticatedJoin(peer, player);
+         }
+         private long ReconnectMap(PlayerRecord player)
+--- a/src/Session/MultiplayerSession.cs
++++ b/src/Session/MultiplayerSession.cs
+@@ -176,11 +176,13 @@
+             if (!options.JoinHostGalaxyOnFirstSpawn.HasValue) options.JoinHostGalaxyOnFirstSpawn = ModSettingsStore.Load(storageRoot).JoinHostGalaxyOnFirstSpawn;
+             ModSettingsStore.ValidateStartingEmployeeCount(options.StartingEmployeeCount.Value);
+             ModSettingsStore.ValidateMaxBasesPerPlayer(options.MaxBasesPerPlayer);
++            string steamAccount = RequireLocalSteamAccount(transportOptions);
+             IsHost = true;
+             LocalPlayerId = Guid.NewGuid().ToString("N");
+             SessionId = Guid.NewGuid().ToString("N");
+             World = new WorldState { WorldId = Guid.NewGuid().ToString("N"), Name = options.Name, HostPlayerId = LocalPlayerId, Options = options };
+             var host = NewPlayer(LocalPlayerId, identity.CredentialId, CryptoData.Hash(identity.Secret), identity.Nickname);
++            host.SteamId = steamAccount;
+             host.Online = true;
+             World.Players.Add(host.PlayerId, host);
+             host.Uids = ReserveUidRange(false);
+@@ -206,13 +208,7 @@
+             ModSettingsStore.ValidateMaxBasesPerPlayer(World.Options.MaxBasesPerPlayer);
+             PlayerRecord host;
+             if (!World.Players.TryGetValue(World.HostPlayerId, out host)) throw new InvalidDataException("联机存档缺少明确的房主记录。");
+-            if (resolveLocalHostIdentity != null)
+-            {
+-                LocalIdentity resolved = resolveLocalHostIdentity(host);
+-                if (resolved != null) identity = resolved; // Only this session; never its default profile.
+-            }
+-            if (host.CredentialId != identity.CredentialId || !CryptoData.Equal(host.CredentialHash, CryptoData.Hash(identity.Secret)))
+-                throw new InvalidOperationException("本机凭证不属于该世界房主，不能按昵称接管。");
++            string steamAccount = ResolveLocalHostSteamAccount(host, transportOptions, resolveLocalHostIdentity);
+             IsHost = true; LocalPlayerId = host.PlayerId; SessionId = Guid.NewGuid().ToString("N");
+             foreach (PlayerRecord player in World.Players.Values) { player.Online = false; player.Uids = null; player.IssuedUidRanges.Clear(); }
+             foreach (MapRecord map in World.Maps.Values)
+@@ -233,7 +229,7 @@
+             ProjectNativeBaseOwnership();
+             RecoverPlayerFleetBattles();
+             foreach (RelationshipRecord relationship in World.Relationships) Require(bridge.ApplyRelationship(relationship), "恢复玩家关系");
+-            SaveOrThrow();
++            SaveWithSteamAccountBinding(host, steamAccount);
+             transportOptions.MaxPlayers = World.Options.MaxPlayers;
+             transport.StartHost(transportOptions); IsConnected = true;
+             host.CurrentMapId = ReconnectMap(host);
+--- a/src/Transport/SteamTransport.cs
++++ b/src/Transport/SteamTransport.cs
+@@ -8,7 +8,7 @@
+ namespace FreeWorldMultiplayer
+ {
+     /// <summary>Steam lobby discovery and reliable SteamNetworkingSockets P2P. Main thread only.</summary>
+-    public sealed class SteamTransport : ITransport, ITransportDrain, ITransportPeerAdmission
++    public sealed class SteamTransport : ITransport, ITransportDrain, ITransportPeerAdmission, ITransportSteamIdentity
+     {
+         private const int VirtualPort = 17321;
+         private const int FragmentPayload = 48 * 1024;
+@@ -18,6 +18,8 @@
+         private sealed class Peer
+         {
+             public string Id;
++            // Verified socket identity; never reconstructed from the public peer label.
++            public string SteamId;
+             public HSteamNetConnection Connection;
+             public bool Connected;
+             public bool Authenticated;
+@@ -48,6 +50,47 @@
+         public string Name { get { return "Steam Lobby / SteamNetworkingSockets"; } }
+         public string LocalPeerId { get; private set; }
+         public bool IsRunning { get { return running; } }
++        public string GetLocalSteamId() { return GetCurrentLocalSteamId(); }
++
++        internal static string GetCurrentLocalSteamId()
++        {
++            // Use only the game's existing Steam initialization. An IP room must not
++            // initialize Steam, restart the game, or substitute a local credential.
++            try
++            {
++                if (!SteamAPI.IsSteamRunning() || SteamAPI.GetHSteamUser().m_HSteamUser == 0 ||
++                    SteamAPI.GetHSteamPipe().m_HSteamPipe == 0 || !SteamUser.BLoggedOn()) return null;
++                return ValidatedSteamId(SteamUser.GetSteamID());
++            }
++            catch (DllNotFoundException) { return null; }
++            catch (EntryPointNotFoundException) { return null; }
++            catch (BadImageFormatException) { return null; }
++            catch (InvalidOperationException) { return null; }
++            catch (TypeInitializationException) { return null; }
++        }
++
++        private static string ValidatedSteamId(CSteamID id)
++        {
++            return id.m_SteamID != 0 && id.IsValid() && id.GetEAccountType() == EAccountType.k_EAccountTypeIndividual
++                ? id.m_SteamID.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
++        }
++
++        public string GetRemoteSteamId(string peerId)
++        {
++            if (!host || !running) return null;
++            Peer peer;
++            if (peerId == null || !peers.TryGetValue(peerId, out peer) || !peer.Connected || peer.SteamId == null)
++                throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
++            SteamNetConnectionInfo_t info;
++            if (!SteamNetworkingSockets.GetConnectionInfo(peer.Connection, out info) ||
++                info.m_eState != ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected)
++                throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
++            string actual = ValidatedSteamId(info.m_identityRemote.GetSteamID());
++            if (actual == null || !String.Equals(actual, peer.SteamId, StringComparison.Ordinal))
++                throw new InvalidOperationException("Steam 连接账号身份无效或已改变。");
++            return actual;
++        }
++
+         public void MarkAuthenticated(string peerId)
+         {
+             if (!host || peerId == null) return;
+@@ -109,12 +152,14 @@
+                     string remoteProtocol = SteamMatchmaking.GetLobbyData(lobby, "fwm.protocol");
+                     if (remoteProtocol != Protocol.CurrentVersionText) { Fail(Protocol.IncompatibleVersion(remoteProtocol)); return; }
+                     owner = SteamMatchmaking.GetLobbyOwner(lobby);
++                    string ownerSteamId = ValidatedSteamId(owner);
++                    if (ownerSteamId == null) { Fail("Steam 房主账号身份无效。"); return; }
+                     var identity = new SteamNetworkingIdentity();
+                     identity.SetSteamID(owner);
+                     var connection = SteamNetworkingSockets.ConnectP2P(ref identity, VirtualPort, 0, null);
+                     if (connection == HSteamNetConnection.Invalid) { Fail("连接 Steam 房主失败。"); return; }
+                     if (!SteamNetworkingSockets.SetConnectionPollGroup(connection, pollGroup)) { SteamNetworkingSockets.CloseConnection(connection, 1000, "Poll group failed", false); Fail("加入 Steam 接收组失败。"); return; }
+-                    peers.Add("host", new Peer { Id = "host", Connection = connection });
++                    peers.Add("host", new Peer { Id = "host", SteamId = ownerSteamId, Connection = connection });
+                 });
+                 joined.Set(SteamMatchmaking.JoinLobby(new CSteamID(room)));
+             }
+@@ -144,15 +189,20 @@
+             if (state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connecting && host && change.m_info.m_hListenSocket == listener)
+             {
+                 CSteamID remote = change.m_info.m_identityRemote.GetSteamID();
+-                string id = "steam:" + remote.m_SteamID;
++                string remoteSteamId = ValidatedSteamId(remote);
++                if (remoteSteamId == null) { SteamNetworkingSockets.CloseConnection(change.m_hConn, 1001, "Steam identity invalid", false); return; }
++                string id = "steam:" + remoteSteamId;
+                 if (draining || peers.Count >= maxPeers || peers.ContainsKey(id) || !IsLobbyMember(remote)) { SteamNetworkingSockets.CloseConnection(change.m_hConn, 1001, "Room full or membership invalid", false); return; }
+                 if (SteamNetworkingSockets.AcceptConnection(change.m_hConn) != EResult.k_EResultOK || !SteamNetworkingSockets.SetConnectionPollGroup(change.m_hConn, pollGroup)) { SteamNetworkingSockets.CloseConnection(change.m_hConn, 1002, "Accept failed", false); return; }
+-                peer = new Peer { Id = id, Connection = change.m_hConn };
++                peer = new Peer { Id = id, SteamId = remoteSteamId, Connection = change.m_hConn };
+                 peers.Add(id, peer);
+             }
+             if (peer == null) return;
+             if (state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected)
+             {
++                string remoteSteamId = ValidatedSteamId(change.m_info.m_identityRemote.GetSteamID());
++                if (remoteSteamId == null || !String.Equals(remoteSteamId, peer.SteamId, StringComparison.Ordinal))
++                { Disconnect(peer.Id, "Steam 连接账号身份无效或已改变。"); return; }
+                 if (!peer.Connected) { peer.Connected = true; events.Enqueue(new TransportEvent { Kind = TransportEventKind.Connected, PeerId = peer.Id }); }
+             }
+             else if (state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer || state == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+--- a/src/Transport/RoomTransport.cs
++++ b/src/Transport/RoomTransport.cs
+@@ -3,7 +3,7 @@
+ namespace FreeWorldMultiplayer
+ {
+     /// <summary>A Steam host also exposes TCP; clients explicitly select one connection method.</summary>
+-    public sealed class RoomTransport : ITransport, ITransportDrain, ITransportPeerAdmission
++    public sealed class RoomTransport : ITransport, ITransportDrain, ITransportPeerAdmission, ITransportSteamIdentity
+     {
+         private TcpTransport tcp;
+         private SteamTransport steam;
+@@ -13,6 +13,17 @@
+         public string Name { get { return steam != null && tcp != null ? "TCP + Steam" : steam != null ? "Steam" : "TCP/IP"; } }
+         public string LocalPeerId { get { return host ? "host" : clientSteam ? steam.LocalPeerId : tcp.LocalPeerId; } }
+         public bool IsRunning { get { return (tcp != null && tcp.IsRunning) || (steam != null && steam.IsRunning); } }
++        // Host identity is resolved before StartHost; callers must first select UseSteam.
++        public string GetLocalSteamId() { return SteamTransport.GetCurrentLocalSteamId(); }
++        public string GetRemoteSteamId(string peerId)
++        {
++            // The prefix selects a channel only; the account must come from its socket.
++            if (peerId == null || !peerId.StartsWith("steam:", StringComparison.Ordinal)) return null;
++            if (!host || steam == null) throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
++            string identity = steam.GetRemoteSteamId(peerId);
++            if (identity == null) throw new InvalidOperationException("Steam 连接身份尚未验证或连接已结束。");
++            return identity;
++        }
+         public void MarkAuthenticated(string peerId)
+         {
+             if (!host || peerId == null) return;
+--- a/src/Entry/MultiplayerRoomDisclosure.cs
++++ b/src/Entry/MultiplayerRoomDisclosure.cs
+@@ -6,8 +6,8 @@
+ 
+ namespace FreeWorldMultiplayer
+ {
+-    // Keep rarely used credential recovery out of the room's primary action
+-    // hierarchy. This is presentation-only; the existing guarded handlers
++    // Steam account recovery is automatic; keep the fallback credential rebind
++    // out of the room's primary action hierarchy. The existing guarded handlers
+     // still own authentication, confirmation and reliable persistence.
+     public sealed partial class MultiplayerRoomDialog
+     {
+@@ -37,15 +37,18 @@
+                 if (node == null)
+                     throw new InvalidOperationException("房间身份恢复面板缺少控件：" + name);
+                 recoveryDetailNodes.Add(node.gameObject);
++                if (name == "RecoveryHint")
++                    SetTextIfChanged(node.GetComponent<TMP_Text>(),
++                        "已绑定 Steam 账号进入游戏自动恢复；IP 直连或旧档未绑定时，可由房主备用重绑。");
+             }
+ 
+             recoveryDisclosureButton = MultiplayerUi.CloneButton(ButtonTemplate, root,
+-                "FWM.RecoveryDisclosure", "展开身份恢复", ToggleRoomRecovery);
++                "FWM.RecoveryDisclosure", "备用身份重绑", ToggleRoomRecovery);
+             MultiplayerUi.Top((RectTransform)recoveryDisclosureButton.transform, 0, 320, 258, 42);
+             recoveryDisclosureCaption = OfficialModUi.Caption(recoveryDisclosureButton);
+             recoveryDisclosureCaption.fontSize = 17;
+             recoveryCollapsedHint = Label(root, "RecoveryCollapsedHint",
+-                "身份恢复是低频高级操作。玩家可在设置中复制本机恢复码；只有房主能为离线玩家重绑登录身份。",
++                "Steam 身份自动恢复：绑定后，同一 Steam 账号换设备进入本世界，会恢复原角色与资产。",
+                 17, 20, 379, 936, 56).gameObject;
+             recoveryCollapsedHint.GetComponent<TMP_Text>().enableWordWrapping = true;
+ 
+@@ -77,7 +80,7 @@
+                 recoveryCollapsedHint.SetActive(!expanded);
+             if (recoveryDisclosureCaption != null)
+             {
+-                SetTextIfChanged(recoveryDisclosureCaption, expanded ? "收起身份恢复" : "展开身份恢复");
++                SetTextIfChanged(recoveryDisclosureCaption, expanded ? "收起备用重绑" : "备用身份重绑");
+                 SetColorIfChanged(recoveryDisclosureCaption, expanded ? HeadingColor : BodyColor);
+             }
+             if (recoveryDisclosureButton != null)
+@@ -100,6 +103,24 @@
+             if (recoveryExpanded && (!HasRoomContext || page != Page.Room))
+                 SetRoomRecoveryExpanded(false);
+ 
++            if (recoveryCollapsedHint != null && HasRoomContext)
++            {
++                var session = Runtime.Session;
++                PlayerRecord player = null;
++                if (session != null && session.World != null && !String.IsNullOrEmpty(session.LocalPlayerId))
++                    session.World.Players.TryGetValue(session.LocalPlayerId, out player);
++                bool steamBound = player != null && !String.IsNullOrWhiteSpace(player.SteamId);
++                bool steamRoom = !String.IsNullOrWhiteSpace(roomId);
++                SetTextIfChanged(recoveryCollapsedHint.GetComponent<TMP_Text>(),
++                    steamRoom
++                        ? steamBound
++                            ? "Steam 身份自动恢复：已绑定当前账号。同一 Steam 账号换设备进入本世界，会自动恢复原角色与资产。\nIP 直连仍使用本机凭证；凭证丢失时可由房主备用重绑。"
++                            : "Steam 身份尚未绑定。旧玩家须先用原凭证登录一次，绑定后同一 Steam 账号换设备会自动恢复。\n若原凭证已丢失，请由房主通过备用身份重绑找回原玩家。"
++                        : steamBound
++                            ? "当前为 IP 直连，身份由本机凭证恢复。已绑定的 Steam 账号可在 Steam 联机时跨设备自动恢复原角色与资产。\n凭证丢失时，请由房主使用备用身份重绑。"
++                            : "当前为 IP 直连，身份由本机凭证恢复。跨设备自动恢复须先用原凭证进入 Steam 房间，完成账号绑定。\n原凭证丢失且尚未绑定时，请由房主使用备用身份重绑。");
++            }
++
+             // A TCP-only host, even one launched through Steam, has no Steam
+             // lobby to invite friends into. Match the real transport capability.
+             bool hasSteamLobby = connected && !Busy && !String.IsNullOrWhiteSpace(roomId);
+--- a/src/Entry/MultiplayerLobbyPages.cs
++++ b/src/Entry/MultiplayerLobbyPages.cs
+@@ -209,7 +209,7 @@
+             settingsJoinHostGalaxyOnFirstSpawn = settings.JoinHostGalaxyOnFirstSpawn;
+             SetCaption(settingsSteamButton, "默认 Steam 好友房间：" + (settingsSteam ? "开" : "关"));
+             SetCaption(settingsSpawnNearHostButton, "新玩家与房主同星系出生：" + (settingsJoinHostGalaxyOnFirstSpawn ? "开" : "关"));
+-            settingsHint.text = "设置保存在本机。登录恢复码用于房主恢复原玩家身份，请妥善保管。";
++            settingsHint.text = "设置保存在本机。绑定 Steam 后，同一账号换设备进入 Steam 房间会自动恢复原角色与资产。恢复码仅供 IP 直连或未绑定旧档备用重绑，请妥善保管。";
+         }
+         private void SaveGlobalSettings()
+         {
+@@ -228,7 +228,7 @@
+         private void CopyRecoveryCode()
+         {
+             GUIUtility.systemCopyBuffer = Runtime.GetRecoveryCode(nickname.text);
+-            localFeedback = "已复制本机登录恢复码。需要恢复原资产时，请交给房主重绑原离线玩家。";
++            localFeedback = "已复制备用登录恢复码。Steam 已绑定账号会自动恢复；IP 直连或未绑定旧档需要恢复时，再交给房主重绑原离线玩家。";
+         }
+     }
+ }
+--- /dev/null
++++ b/src/Core/TransportSteamIdentity.cs
+@@ -0,0 +1,12 @@
++namespace FreeWorldMultiplayer
++{
++    /// <summary>Account identities obtained from Steam itself, never from wire payloads or peer labels.</summary>
++    public interface ITransportSteamIdentity
++    {
++        // Returns null when Steam is not ready. Only request this for a Steam-enabled room.
++        string GetLocalSteamId();
++        // Hosts only: TCP returns null; a Steam route without a verified connected
++        // socket throws InvalidOperationException instead of falling back to TCP login.
++        string GetRemoteSteamId(string peerId);
++    }
++}
+--- /dev/null
++++ b/src/Session/SteamAccountIdentity.cs
+@@ -0,0 +1,105 @@
++using System;
++using System.Linq;
++
++namespace FreeWorldMultiplayer
++{
++    public sealed partial class MultiplayerSession
++    {
++        private string RequireLocalSteamAccount(TransportOptions options)
++        {
++            if (options == null) throw new ArgumentNullException(nameof(options));
++            if (!options.UseSteam) return null;
++            var accounts = transport as ITransportSteamIdentity;
++            string account = accounts == null ? null : accounts.GetLocalSteamId();
++            if (string.IsNullOrWhiteSpace(account))
++                throw new InvalidOperationException("当前 Steam 账号尚未完成登录，无法绑定联机身份；请登录后重试，或选择 IP 直连。");
++            return account;
++        }
++
++        private string RemoteSteamAccount(string peer)
++        {
++            // This capability is supplied by the live Steam P2P connection, never
++            // by a nickname, a client payload or a TCP peer's self-reported ID.
++            var accounts = transport as ITransportSteamIdentity;
++            return accounts == null ? null : accounts.GetRemoteSteamId(peer);
++        }
++
++        private PlayerRecord FindSteamAccountPlayer(string account)
++        {
++            if (string.IsNullOrWhiteSpace(account)) return null;
++            PlayerRecord[] matches = World.Players.Values.Where(p => p.SteamId == account).Take(2).ToArray();
++            if (matches.Length > 1)
++                throw new MessageRejectionException("该 Steam 账号在存档中存在多个玩家绑定，已拒绝自动选择，请由房主检查原存档。");
++            return matches.Length == 0 ? null : matches[0];
++        }
++
++        private PlayerRecord ResolveRemoteSteamAccount(PlayerRecord credentialPlayer, string account)
++        {
++            PlayerRecord accountPlayer = FindSteamAccountPlayer(account);
++            if (!string.IsNullOrWhiteSpace(account) && credentialPlayer != null)
++            {
++                if (!string.IsNullOrWhiteSpace(credentialPlayer.SteamId) && credentialPlayer.SteamId != account)
++                    throw new MessageRejectionException("当前本机凭证已属于另一 Steam 账号，不能改绑或接管原资产。");
++                if (accountPlayer != null && accountPlayer.PlayerId != credentialPlayer.PlayerId)
++                    throw new MessageRejectionException("当前 Steam 账号与本机凭证分别绑定了不同玩家，不能自动合并资产。");
++            }
++            PlayerRecord player = accountPlayer ?? credentialPlayer;
++            if (player != null && player.PlayerId == World.HostPlayerId)
++                throw new MessageRejectionException("房主身份不能作为客人加入，请由房主继续该世界。");
++            return player;
++        }
++
++        private string ResolveLocalHostSteamAccount(PlayerRecord host, TransportOptions options,
++            Func<PlayerRecord, LocalIdentity> resolveLocalHostIdentity)
++        {
++            string account = RequireLocalSteamAccount(options);
++            PlayerRecord accountPlayer = FindSteamAccountPlayer(account);
++            if (accountPlayer != null && accountPlayer.PlayerId != host.PlayerId)
++                throw new InvalidOperationException("当前 Steam 账号属于此世界的其他玩家，不能接管房主。");
++            if (!string.IsNullOrWhiteSpace(account) && !string.IsNullOrWhiteSpace(host.SteamId))
++            {
++                if (host.SteamId != account)
++                    throw new InvalidOperationException("当前 Steam 账号不属于此世界房主，请切换为原房主账号。");
++                return account;
++            }
++            // An old world without an account binding can only be claimed after
++            // proving its original local credential. Never infer ownership.
++            if (resolveLocalHostIdentity != null)
++            {
++                LocalIdentity resolved = resolveLocalHostIdentity(host);
++                if (resolved != null) identity = resolved;
++            }
++            if (host.CredentialId != identity.CredentialId || !CryptoData.Equal(host.CredentialHash, CryptoData.Hash(identity.Secret)))
++                throw new InvalidOperationException(account == null ? "本机凭证不属于该世界房主，不能按昵称接管。"
++                    : "本机凭证不属于该世界房主；旧存档首次绑定 Steam 账号需要原房主凭证。");
++            return account;
++        }
++
++        private void SaveWithSteamAccountBinding(PlayerRecord player, string account, bool newlyCreated = false)
++        {
++            string previous = player.SteamId;
++            long previousGeneration = World.SaveGeneration;
++            if (!string.IsNullOrWhiteSpace(account)) player.SteamId = account;
++            try { SaveOrThrow(); }
++            catch
++            {
++                // A failed first bind must not be picked up by a later autosave.
++                // SaveStore restores its generation on a failed commit. If a
++                // post-commit notification fails, retain the committed binding.
++                if (World.SaveGeneration == previousGeneration)
++                {
++                    player.SteamId = previous;
++                    if (newlyCreated && !string.IsNullOrWhiteSpace(account))
++                    {
++                        // The native starter assets already exist. A second device
++                        // must not enroll the same account again before those assets
++                        // and its binding have been committed in one generation.
++                        try { LockNativeFault("Steam 新玩家的初始资产与账号绑定未成功保存，请关闭房间并从最后完整存档续开后重试。"); }
++                        catch (Exception) { } // Lock fields are set before notification; retain the original save error.
++                    }
++                }
++                throw;
++            }
++        }
++    }
++}

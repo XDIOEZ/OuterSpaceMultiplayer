@@ -279,3 +279,8 @@
 ### feedback-errors-20261019 — V1.41三端BuildOnly完成与窗口释放
 - 五份Entry源码冻结，底部关键原因/展开滚动详情/复制完整脱敏错误已完成；未安装或运行游戏。三端同源160209A34C9BAB2BE47E3ADCD6AF5934087FF440485DAF276D15D8A4CEF1F5F9，独立回执 artifacts/feedback-errors-20261019/copy-sync.json。
 - 本轮保留所有历史dirty/untracked，仅精准tracked等效窄改+完整本轮patch入Git，未纳入玩家下拉两处ESC。当前本地commit完成后立即释放src/VERSION/CHANGELOG/index/构建；relation-player-dropdown可接手V1.42，identity/host-airdrop后续与该任务协调，不需等本轮再次构建。
+
+### identity-auto-restore-20261019 — V1.43源码冻结，提交后释放给文档与空投诊断
+- Steam账号跨设备自动恢复源码已完整落盘冻结，Protocol=8，VERSION=1.43。旧档先凭原凭证登录一次自动绑定，以后同账号自动恢复原玩家；IP/TapTap保持本机凭证。首次保存/账号冲突/并发登录/失效socket均收口，原凭证不覆盖。
+- host-airdrop的Tick catch与Commands诊断已实际看见，身份没有覆盖其内容。身份只做本地窄提交，完成后立即在MAIN报告哈希并释放index/版本；MOD兼容设计文档可接短index窗口后交host-airdrop升下一版本，最后统一BuildOnly包含所有冻结代码，不安装/测试/游戏。
+- 完整身份源增量见docs/patches/identity-auto-restore-20261019.patch；详见docs/reports/Steam账号自动恢复身份-20261019.md。其它历史dirty/untracked保留。

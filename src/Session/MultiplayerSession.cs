@@ -93,11 +93,13 @@ namespace FreeWorldMultiplayer
             if (options == null) throw new ArgumentNullException(nameof(options));
             if (transportOptions == null) throw new ArgumentNullException(nameof(transportOptions));
             if (options.MaxPlayers < 1 || options.MaxPlayers > 64) throw new ArgumentOutOfRangeException(nameof(options.MaxPlayers));
+            string steamAccount = RequireLocalSteamAccount(transportOptions);
             IsHost = true;
             LocalPlayerId = Guid.NewGuid().ToString("N");
             SessionId = Guid.NewGuid().ToString("N");
             World = new WorldState { WorldId = Guid.NewGuid().ToString("N"), Name = options.Name, HostPlayerId = LocalPlayerId, Options = options };
             var host = NewPlayer(LocalPlayerId, identity.CredentialId, CryptoData.Hash(identity.Secret), identity.Nickname);
+            host.SteamId = steamAccount;
             host.Online = true;
             World.Players.Add(host.PlayerId, host);
             host.Uids = ReserveUidRange(false);
@@ -119,8 +121,8 @@ namespace FreeWorldMultiplayer
             EnsureIdle();
             World = saves.Load(worldId);
             PlayerRecord host;
-            if (!World.Players.TryGetValue(World.HostPlayerId, out host) || host.CredentialId != identity.CredentialId || !CryptoData.Equal(host.CredentialHash, CryptoData.Hash(identity.Secret)))
-                throw new InvalidOperationException("本机凭证不属于该世界房主，不能按昵称接管。");
+            if (!World.Players.TryGetValue(World.HostPlayerId, out host)) throw new InvalidOperationException("联机存档缺少明确的房主记录。");
+            string steamAccount = ResolveLocalHostSteamAccount(host, transportOptions, null);
             IsHost = true; LocalPlayerId = host.PlayerId; SessionId = Guid.NewGuid().ToString("N");
             foreach (PlayerRecord player in World.Players.Values) { player.Online = false; player.Uids = null; player.IssuedUidRanges.Clear(); }
             foreach (MapRecord map in World.Maps.Values)
@@ -139,7 +141,7 @@ namespace FreeWorldMultiplayer
                 Require(bridge.SetPlayerOnline(player.PlayerId, player.Online), "恢复舰队在线状态");
             }
             foreach (RelationshipRecord relationship in World.Relationships) Require(bridge.ApplyRelationship(relationship), "恢复玩家关系");
-            SaveOrThrow();
+            SaveWithSteamAccountBinding(host, steamAccount);
             transportOptions.MaxPlayers = World.Options.MaxPlayers;
             transport.StartHost(transportOptions); IsConnected = true;
             host.CurrentMapId = ReconnectMap(host);

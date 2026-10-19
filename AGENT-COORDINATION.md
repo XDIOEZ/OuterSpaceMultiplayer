@@ -216,3 +216,10 @@
 ### feedback-errors-20261019 / 主控 /root — V1.41 完成
 - 五份Entry关键报错显示完成：底部优先最内层原因，展开滚动/复制完整脱敏详情；旧 dirty/untracked 保留，不含玩家下拉ESC改动。主功能由 feedback_ui 实现，完整本轮patch见 docs/patches/feedback-errors-20261019.patch；报告 docs/reports/联机关键错误面板显示-20261019.md。
 - 三端 Sync-ModCopies.ps1 -BuildOnly 完成，同源160209A34C9BAB2BE47E3ADCD6AF5934087FF440485DAF276D15D8A4CEF1F5F9，回执 artifacts/feedback-errors-20261019/copy-sync.json。未安装/测试/启动游戏；用户验收。当前本地窄提交完成后即释放源码、版本、index与构建，后续 relation-player-dropdown 可升V1.42；无push。
+
+### identity-auto-restore-20261019 / V1.43最终源码冻结与交接
+- Steam账号自动恢复已接真实调用链：ITransportSteamIdentity、SteamTransport/RoomTransport可信连接身份；Session/SteamAccountIdentity及Networking/HostNew/HostLoad；Disclosure与Lobby备用文案。Protocol=8，VERSION=1.43；存档沿用既有SteamId字段。
+- 首次旧档绑定需原凭证成功登录，之后同Steam账号跨设备复用原PlayerId与全部原资产；不覆盖IP凭证，不按昵称找回、不重复发奖；账号/凭证冲突、重复绑定、已在线或客人使用房主身份均拒绝。
+- 首次新玩家首存失败锁定房间，旧记录绑定失败回滚，Steam连接失效直接拒绝不降级。所有源码现冻结；host-airdrop的Tick catch窄改已保留。
+- Git保留历史dirty/untracked：tracked按HEAD等效行为窄暂存，原工作树完整本轮差异另存docs/patches/identity-auto-restore-20261019.patch；原untracked LobbyPages不整份认领。
+- 本轮不安装/测试/游戏，后续统一BuildOnly由最后整合主控执行；本轮窄提交结束即释放源码/版本/CHANGELOG/index/构建。详见docs/reports/Steam账号自动恢复身份-20261019.md。
