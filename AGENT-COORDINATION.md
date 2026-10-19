@@ -1,5 +1,9 @@
 # Agent 协作记录
 
+### relation-player-dropdown-20261019 / 主控 /root
+- 范围：新 MultiplayerPlayerDropdown.cs、MultiplayerRelationVisual.cs 两处接线、RoomDialog 两处 ESC 先收起下拉；功能 relation_dropdown 已落盘冻结，主控已补齐 ESC。旧 untracked RoomPages 未改，保留所有历史 dirty，不运行测试或游戏。
+- V1.42 源码完成；下拉已随 V1.41 三端 BuildOnly 编译完成。V1.42 P3完成、Steam编译后因其他Game输入变化触发来源保护，未取得三端一致包，不继续竞争重试；回执 artifacts/relation-player-dropdown-20261019/build-receipt.json。按用户安排后续统一打包安装，本轮不安装/测试/游戏；窄提交结束后立即释放全部占用给后续任务。
+
 用于本仓库各 Agent 共享规划、文件分工、接口约定和阻塞信息。需求以 `docs/plans/联机方案 V1.md` 为准，开发与同步边界见 `AGENTS.md`、`Agent.md`；本文件不替代需求，也不代表游戏已验收。
 
 ## 使用方式

@@ -39,6 +39,7 @@ namespace FreeWorldMultiplayer
             relationPeerCount = Label(root, "RelationshipPeerCount", "", 16, 650, 0, 334, 34);
             relationPeerCount.alignment = TextAlignmentOptions.MidlineRight;
             relationPeerCount.color = MutedColor;
+            InstallPlayerDropdown();
         }
 
         private static Button RequiredRelationButton(Transform root, string name)
@@ -52,6 +53,7 @@ namespace FreeWorldMultiplayer
 
         private void RefreshRelationVisual()
         {
+            RefreshPlayerDropdown();
             if (relationStateText == null || page != Page.World || Runtime == null) return;
 
             MultiplayerSession session = Runtime.Session;

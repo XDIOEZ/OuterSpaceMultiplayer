@@ -396,8 +396,8 @@ namespace FreeWorldMultiplayer
             field.text = initial; return field;
         }
         internal static void SetInvitation(string roomId) { if (open != null && open.room != null) { open.room.text = roomId; open.SetTab(0); } }
-        public override bool triggerKeyboard(KeyCode sourceKc, KeyCode execKc) { if (execKc == KeyCode.Escape) closeDialog(); return true; }
-        public override bool keyEventESCToClose() { closeDialog(); return true; }
+        public override bool triggerKeyboard(KeyCode sourceKc, KeyCode execKc) { if (execKc == KeyCode.Escape && !ClosePlayerDropdown()) closeDialog(); return true; }
+        public override bool keyEventESCToClose() { if (!ClosePlayerDropdown()) closeDialog(); return true; }
         public override void OnDestroy()
         {
             if (open == this) open = null;
