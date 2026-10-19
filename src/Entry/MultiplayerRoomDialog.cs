@@ -297,7 +297,7 @@ namespace FreeWorldMultiplayer
         private void Safe(Action action)
         {
             try { localFeedback = null; action(); }
-            catch (Exception error) { localFeedback = error.Message; if (Runtime != null) Runtime.ReportUiFailure(localFeedback); }
+            catch (Exception error) { localFeedback = MultiplayerDiagnostics.RedactForDisplay(error.ToString()); if (Runtime != null) Runtime.ReportUiFailure(localFeedback); }
         }
         public override void uiUpdate() { RefreshState(); }
         private void RefreshState()
@@ -358,7 +358,7 @@ namespace FreeWorldMultiplayer
             }
             string runtimeFeedback = Runtime == null ? "" : Runtime.Feedback;
             if (lastRuntimeFeedback != runtimeFeedback) { lastRuntimeFeedback = runtimeFeedback; localFeedback = null; }
-            if (status != null) status.text = localFeedback ?? runtimeFeedback;
+            if (status != null) SetFeedbackContent(localFeedback ?? runtimeFeedback);
         }
         private static string Clock(double seconds) { return ((int)Math.Ceiling(seconds) / 60).ToString("00") + ":" + ((int)Math.Ceiling(seconds) % 60).ToString("00"); }
         private void SetCaption(UnityEngine.UI.Button button, string caption) { if (button == null) return; foreach (TMP_Text text in button.GetComponentsInChildren<TMP_Text>(true)) text.text = caption; }

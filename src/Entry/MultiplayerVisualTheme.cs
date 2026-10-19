@@ -32,6 +32,9 @@ namespace FreeWorldMultiplayer
         private Button joinIpButton, joinSteamButton, saveSettingsButton;
         private TMP_Text copyFeedbackCaption, expandFeedbackCaption, feedbackHeading, copyRoomCaption;
         private string copiedFeedback, copiedRoomId;
+        private string feedbackDetail = String.Empty, feedbackSummary = String.Empty;
+        private ScrollRect feedbackScroll;
+        private TMP_Text feedbackDetailText;
         private double copiedFeedbackUntil, copiedRoomUntil;
         private bool feedbackExpanded, lastFeedbackExpanded;
         private Image feedbackSurfaceImage;
@@ -71,9 +74,35 @@ namespace FreeWorldMultiplayer
             feedbackSurface.transform.SetSiblingIndex(status.transform.GetSiblingIndex());
             feedbackDot = MakeDot(feedbackSurface.transform, "FWM.FeedbackDot", 18, 20, 8);
             MultiplayerUi.Top(status.rectTransform, 64, 739, 662, 50);
-            feedbackHeading = Label(transform, "FeedbackExpandedHeading", "操作反馈", 19, 64, 603, 500, 30);
+            feedbackHeading = Label(transform, "FeedbackExpandedHeading", "操作反馈（滚轮查看完整详情）", 19, 64, 603, 700, 30);
             feedbackHeading.color = HeadingColor;
             feedbackHeading.gameObject.SetActive(false);
+            GameObject scrollRoot = MultiplayerUi.Node("FWM.FeedbackDetails", transform);
+            MultiplayerUi.Top((RectTransform)scrollRoot.transform, 64, 640, 916, 82);
+            feedbackScroll = scrollRoot.AddComponent<ScrollRect>();
+            feedbackScroll.horizontal = false;
+            feedbackScroll.movementType = ScrollRect.MovementType.Clamped;
+            feedbackScroll.scrollSensitivity = 28;
+            GameObject viewport = MultiplayerUi.Node("Viewport", scrollRoot.transform);
+            MultiplayerUi.Stretch((RectTransform)viewport.transform, 0, 0, 0, 0);
+            viewport.AddComponent<Image>();
+            viewport.AddComponent<Mask>().showMaskGraphic = false;
+            GameObject content = MultiplayerUi.Node("Content", viewport.transform);
+            RectTransform contentRect = (RectTransform)content.transform;
+            contentRect.anchorMin = new Vector2(0, 1); contentRect.anchorMax = Vector2.one;
+            contentRect.pivot = new Vector2(0.5f, 1); contentRect.sizeDelta = Vector2.zero;
+            var layout = content.AddComponent<VerticalLayoutGroup>();
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = true; layout.childForceExpandHeight = false;
+            content.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            feedbackDetailText = Label(content.transform, "Detail", "", 17, 0, 0, 916, 82);
+            feedbackDetailText.richText = false;
+            feedbackDetailText.enableWordWrapping = true;
+            feedbackDetailText.overflowMode = TextOverflowModes.Overflow;
+            feedbackDetailText.alignment = TextAlignmentOptions.TopLeft;
+            feedbackDetailText.raycastTarget = false;
+            feedbackScroll.viewport = (RectTransform)viewport.transform; feedbackScroll.content = contentRect;
+            scrollRoot.SetActive(false);
             expandFeedbackButton = MultiplayerUi.CloneButton(ButtonTemplate, transform, "FWM.ExpandFeedback",
                 "展开", ToggleFeedback);
             MultiplayerUi.Top((RectTransform)expandFeedbackButton.transform, 742, 741, 100, 43);
@@ -156,13 +185,12 @@ namespace FreeWorldMultiplayer
 
         private void CopyFeedback()
         {
-            if (status == null || String.IsNullOrWhiteSpace(status.text)) return;
+            if (String.IsNullOrWhiteSpace(feedbackDetail)) return;
             try
             {
-                // Only copy the short text already presented to the player,
-                // never session internals, credentials or raw exception traces.
-                GUIUtility.systemCopyBuffer = status.text;
-                copiedFeedback = status.text;
+                // Runtime/local feedback is already redacted before storage.
+                GUIUtility.systemCopyBuffer = feedbackDetail;
+                copiedFeedback = feedbackDetail;
                 copiedFeedbackUntil = Time.unscaledTimeAsDouble + 2.5;
                 SetTextIfChanged(copyFeedbackCaption, "已复制");
             }
@@ -191,6 +219,21 @@ namespace FreeWorldMultiplayer
             ApplyFeedbackLayout();
         }
 
+        private void SetFeedbackContent(string value)
+        {
+            value = value ?? String.Empty;
+            if (feedbackDetail == value) return;
+            feedbackDetail = value;
+            feedbackSummary = MultiplayerUi.BriefFeedback(value);
+            SetTextIfChanged(status, feedbackSummary);
+            SetTextIfChanged(feedbackDetailText, feedbackSummary == value ? value : feedbackSummary + "\n\n" + value);
+            if (feedbackScroll != null)
+            {
+                feedbackScroll.StopMovement();
+                feedbackScroll.content.anchoredPosition = Vector2.zero;
+            }
+        }
+
         private void ApplyFeedbackLayout()
         {
             if (feedbackSurfaceImage == null || lastFeedbackExpanded == feedbackExpanded) return;
@@ -198,9 +241,8 @@ namespace FreeWorldMultiplayer
             feedbackSurfaceImage.raycastTarget = feedbackExpanded; // Block clicks through the expanded message.
             MultiplayerUi.Top((RectTransform)feedbackSurfaceImage.transform,
                 28, feedbackExpanded ? 594 : 726, 984, feedbackExpanded ? 202 : 70);
-            MultiplayerUi.Top(status.rectTransform, 64,
-                feedbackExpanded ? 640 : 739, feedbackExpanded ? 916 : 662, feedbackExpanded ? 82 : 50);
-            status.maxVisibleLines = feedbackExpanded ? 6 : 2;
+            status.gameObject.SetActive(!feedbackExpanded);
+            feedbackScroll.gameObject.SetActive(feedbackExpanded);
             feedbackHeading.gameObject.SetActive(feedbackExpanded);
             SetTextIfChanged(expandFeedbackCaption, feedbackExpanded ? "收起" : "展开");
         }
@@ -280,17 +322,19 @@ namespace FreeWorldMultiplayer
 
         private void RefreshFeedbackPresentation()
         {
-            string message = status.text ?? String.Empty;
+            string message = feedbackSummary;
             bool warning = message.IndexOf("失败", StringComparison.Ordinal) >= 0
                 || message.IndexOf("错误", StringComparison.Ordinal) >= 0
                 || message.IndexOf("无法", StringComparison.Ordinal) >= 0
                 || message.IndexOf("未完成", StringComparison.Ordinal) >= 0
-                || message.IndexOf("拒绝", StringComparison.Ordinal) >= 0;
+                || message.IndexOf("拒绝", StringComparison.Ordinal) >= 0
+                || MultiplayerUi.HasDiagnosticDetail(message);
             bool positive = !warning && (message.IndexOf("成功", StringComparison.Ordinal) >= 0
                 || message.IndexOf("已保存", StringComparison.Ordinal) >= 0
                 || message.IndexOf("已连接", StringComparison.Ordinal) >= 0);
             SetColorIfChanged(feedbackDot, warning ? WarningColor : positive ? PositiveColor : AccentColor);
             SetColorIfChanged(status, warning ? WarningColor : BodyColor);
+            SetColorIfChanged(feedbackDetailText, warning ? WarningColor : BodyColor);
             if (feedbackExpanded && String.IsNullOrWhiteSpace(message))
             {
                 feedbackExpanded = false;
@@ -305,7 +349,7 @@ namespace FreeWorldMultiplayer
             if (copyFeedbackButton != null)
             {
                 copyFeedbackButton.interactable = !String.IsNullOrWhiteSpace(message);
-                SetTextIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable && message == copiedFeedback
+                SetTextIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable && feedbackDetail == copiedFeedback
                     && Time.unscaledTimeAsDouble < copiedFeedbackUntil
                     ? "已复制" : "复制提示");
                 SetColorIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable ? BodyColor : DisabledColor);

@@ -25,7 +25,8 @@ namespace FreeWorldMultiplayer
         internal GameBridge Bridge { get; private set; }
         internal RoomTransport Transport { get; private set; }
         internal string StorageRoot { get; private set; }
-        internal string Feedback { get; private set; }
+        private string feedback;
+        internal string Feedback { get { return feedback; } private set { if (feedback != value) feedback = MultiplayerDiagnostics.RedactForDisplay(value); } }
         internal string PendingInvite { get; private set; }
         private Callback<GameLobbyJoinRequested_t> inviteCallback;
         private UnityEngine.UI.Button entryButton;
@@ -83,7 +84,7 @@ namespace FreeWorldMultiplayer
                     Logger.LogErrorEngine("[FreeWorldMultiplayer][startup] " + startupFailureContext + "\n" + original);
                     try { FinalizeSession(); }
                     catch (Exception cleanup) { Logger.LogErrorEngine("[FreeWorldMultiplayer][startup-cleanup] 原始失败=" + original + "\n清理失败=" + cleanup); }
-                    Feedback = startupFailureContext + " " + (original ?? "").Split('\n')[0].TrimEnd('\r');
+                    Feedback = startupFailureContext + "\n" + original;
                 }
                 MultiplayerRoomDialog.RefreshOpenState();
             }
@@ -366,7 +367,7 @@ namespace FreeWorldMultiplayer
         }
         private void ShowError(string context, Exception error)
         {
-            Feedback = context + " " + error.Message;
+            Feedback = context + "\n" + error;
             string signature = context + error.GetType().Name + error.Message;
             if (signature == lastLoggedError) return;
             lastLoggedError = signature;

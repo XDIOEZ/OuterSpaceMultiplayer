@@ -1,0 +1,300 @@
+--- a/src/Entry/MultiplayerUi.cs
++++ b/src/Entry/MultiplayerUi.cs
+@@ -1,4 +1,5 @@
+ using System;
++using System.Text;
+ using TMPro;
+ using UnityEngine;
+ 
+@@ -14,19 +15,32 @@
+         }
+         internal static string BriefError(string value)
+         {
+-            if (String.IsNullOrWhiteSpace(value)) return "操作未完成，请查看游戏日志。";
+-            if (value.IndexOf("Native archive type", StringComparison.Ordinal) >= 0)
+-                return "联机数据初始化失败，详细原因已写入游戏日志。";
+-            if (HasDiagnosticDetail(value)) return "操作未完成，详细原因已写入游戏日志。";
+-            return BriefFeedback(value);
++            if (String.IsNullOrWhiteSpace(value)) return "操作未完成，未收到具体错误原因。";
++            return BriefFeedback(MultiplayerDiagnostics.RedactForDisplay(value));
+         }
+         internal static string BriefFeedback(string value)
+         {
+             if (String.IsNullOrWhiteSpace(value)) return "";
+-            if (HasDiagnosticDetail(value)) return BriefError(value);
+-            int end = value.IndexOfAny(new[] { '\r', '\n' });
+-            string first = (end < 0 ? value : value.Substring(0, end)).Replace('\t', ' ').Trim();
+-            return first.Length > 160 ? first.Substring(0, 157) + "…" : first;
++            // Exception.ToString may put the real cause behind one or more reflection
++            // wrappers. Keep that cause and its multiline message, discard stack frames.
++            string[] lines = value.Replace("\r\n", "\n").Replace('\r', '\n').Replace(" ---> ", "\n").Split('\n');
++            string first = null;
++            var reason = new StringBuilder();
++            foreach (string source in lines)
++            {
++                string line = source.Replace('\t', ' ').Trim();
++                if (line.Length == 0 || line.StartsWith("at ", StringComparison.Ordinal)
++                    || line.StartsWith("---", StringComparison.Ordinal) || line.StartsWith("[0x", StringComparison.Ordinal)) continue;
++                if (first == null) first = line;
++                if (line.IndexOf("Exception", StringComparison.Ordinal) >= 0
++                    || line.IndexOf("Native archive type", StringComparison.Ordinal) >= 0) reason.Length = 0;
++                if (reason.Length > 0) reason.Append(" ");
++                reason.Append(line);
++            }
++            string summary = reason.ToString();
++            if (String.IsNullOrWhiteSpace(summary)) return "操作未完成，未收到具体错误原因。";
++            if (first != null && !HasDiagnosticDetail(first) && !summary.StartsWith(first, StringComparison.Ordinal)) summary += "（" + first + "）";
++            return summary.Length > 320 ? summary.Substring(0, 317) + "…" : summary;
+         }
+         internal static TMP_Text SetButtonCaption(UnityEngine.UI.Button button, string caption)
+         {
+--- a/src/Entry/MultiplayerDiagnostics.cs
++++ b/src/Entry/MultiplayerDiagnostics.cs
+@@ -250,6 +250,20 @@
+             return Regex.Replace(value, SensitiveFieldPattern, "$1[redacted]", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+         }
+         private string[] GetSecrets() { lock (gate) { return secrets.ToArray(); } }
++        internal static string RedactForDisplay(string value)
++        {
++            if (String.IsNullOrEmpty(value)) return value ?? "";
++            try
++            {
++                MultiplayerDiagnostics owner;
++                lock (RegistrationGate) { owner = current; }
++                string safe = Redact(value, owner == null ? new string[0] : owner.GetSecrets());
++                // A recovery-code JSON contains Verifier rather than the raw Secret.
++                string recoveryPattern = SensitiveFieldPattern.Replace("secret|", "credentialid|verifier|recovery[_-]?code|恢复码|secret|");
++                return Regex.Replace(safe, recoveryPattern, "$1[redacted]", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
++            }
++            catch { return "操作未完成；错误详情脱敏失败，暂时无法安全显示。"; }
++        }
+         private void Fail(string reason)
+         {
+             lock (gate) { FailLocked(reason); if (!workerFinished) wake.Set(); }
+--- a/src/Entry/ModPluginLauncher.cs
++++ b/src/Entry/ModPluginLauncher.cs
+@@ -26,7 +26,7 @@
+         internal RoomTransport Transport { get; private set; }
+         internal string StorageRoot { get; private set; }
+         private string feedback;
+-        internal string Feedback { get { return feedback; } private set { feedback = MultiplayerUi.BriefFeedback(value); } }
++        internal string Feedback { get { return feedback; } private set { if (feedback != value) feedback = MultiplayerDiagnostics.RedactForDisplay(value); } }
+         internal string PendingInvite { get; private set; }
+         private Callback<GameLobbyJoinRequested_t> inviteCallback;
+         private UnityEngine.UI.Button entryButton;
+@@ -94,7 +94,7 @@
+                     Logger.LogErrorEngine("[FreeWorldMultiplayer][startup] " + startupFailureContext + "\n" + original);
+                     try { FinalizeSession(); }
+                     catch (Exception cleanup) { Logger.LogErrorEngine("[FreeWorldMultiplayer][startup-cleanup] 原始失败=" + original + "\n清理失败=" + cleanup); }
+-                    Feedback = startupFailureContext + " " + MultiplayerUi.BriefError(original);
++                    Feedback = startupFailureContext + "\n" + original;
+                 }
+                 MultiplayerRoomDialog.RefreshOpenState();
+             }
+@@ -209,11 +209,11 @@
+         private void CommandCompleted(CommandResult result)
+         {
+             if (!result.Success && MultiplayerUi.HasDiagnosticDetail(result.Error)) LogDetailedError("操作未完成。", result.Error);
+-            Feedback = !result.Success ? "操作未完成：" + MultiplayerUi.BriefError(result.Error) : result.Saved ? "操作完成，已保存。" : result.Applied ? "操作已执行，等待下一次统一保存。" : "操作已提交，等待房主执行回执。";
++            Feedback = !result.Success ? "操作未完成：\n" + (String.IsNullOrWhiteSpace(result.Error) ? "未收到具体错误原因。" : result.Error) : result.Saved ? "操作完成，已保存。" : result.Applied ? "操作已执行，等待下一次统一保存。" : "操作已提交，等待房主执行回执。";
+         }
+         internal void ReportUiFailure(Exception error)
+         {
+-            Feedback = MultiplayerUi.BriefError(error.Message);
++            Feedback = "界面操作未完成。\n" + error;
+             // Once at the explicit user-action boundary; never from RefreshState/uiUpdate.
+             // Input/state refusals retain their full exception for diagnosis without a false Error.
+             bool refusal = error is ArgumentException || error is FormatException || error is Newtonsoft.Json.JsonReaderException
+@@ -221,7 +221,7 @@
+             LogDetailedError("界面操作未完成。", error.ToString(), !refusal);
+         }
+         // The direct-launch channel refusal is already a plain, intentional business message.
+-        internal void ReportUiFailure(string message) { Feedback = MultiplayerUi.BriefError(message); }
++        internal void ReportUiFailure(string message) { Feedback = message; }
+         internal string GetRecoveryCode(string nickname)
+         {
+             if (Session != null) return Session.GetLocalRecoveryCode();
+@@ -426,7 +426,7 @@
+         }
+         private void ShowError(string context, Exception error)
+         {
+-            Feedback = context + " " + MultiplayerUi.BriefError(error.Message);
++            Feedback = context + "\n" + error;
+             LogDetailedError(context, error.ToString());
+         }
+         private void LogDetailedError(string context, string detail, bool isError = true)
+@@ -467,7 +467,7 @@
+             if (diagnostics == null || !diagnostics.TryTakeFailure(out reason)) return;
+             // The failed mirror has stopped accepting entries, so this once-only
+             // native Console error cannot feed back into its own failure path.
+-            Feedback = "独立诊断日志写入失败，请同时保留原生 Unity 日志。";
++            Feedback = "独立诊断日志写入失败。\n" + reason;
+             Logger.LogErrorEngine("[FreeWorldMultiplayer][diagnostics] " + reason);
+         }
+         private void StopDiagnostics()
+--- a/src/Entry/MultiplayerRoomDialog.cs
++++ b/src/Entry/MultiplayerRoomDialog.cs
+@@ -112,7 +112,7 @@
+             BuildSettings(pages[(int)Page.Settings].transform, defaults);
+             Section(transform, "FeedbackRule", 28, 720, 984, 1);
+             status = Label(transform, "Feedback", "", 17, 28, 736, 984, 64);
+-            status.enableWordWrapping = true; status.overflowMode = TextOverflowModes.Ellipsis;
++            status.richText = false; status.enableWordWrapping = true; status.overflowMode = TextOverflowModes.Ellipsis;
+             status.maxVisibleLines = 2; status.alignment = TextAlignmentOptions.TopLeft;
+             InstallVisualTheme();
+             // ContinueWorldMode refreshes its save list when explicitly opened.
+@@ -166,7 +166,12 @@
+         private void Safe(Action action)
+         {
+             try { localFeedback = null; action(); if (localFeedback != null && Runtime != null) lastRuntimeFeedback = Runtime.Feedback; }
+-            catch (Exception error) { localFeedback = MultiplayerUi.BriefError(error.Message); if (Runtime != null) Runtime.ReportUiFailure(error); }
++            catch (Exception error)
++            {
++                localFeedback = null;
++                if (Runtime != null) Runtime.ReportUiFailure(error);
++                else localFeedback = MultiplayerDiagnostics.RedactForDisplay("界面操作未完成。\n" + error);
++            }
+         }
+         public override void uiUpdate()
+         {
+@@ -227,7 +232,7 @@
+                 RefreshCreateState(); RefreshRoomState();
+                 string feedback = Runtime.Feedback;
+                 if (lastRuntimeFeedback != feedback) { lastRuntimeFeedback = feedback; localFeedback = null; }
+-                status.text = MultiplayerUi.BriefFeedback(localFeedback ?? feedback);
++                SetFeedbackContent(localFeedback ?? feedback);
+                 RefreshVisualTheme();
+             }
+             finally { refreshing = false; }
+--- a/src/Entry/MultiplayerVisualTheme.cs
++++ b/src/Entry/MultiplayerVisualTheme.cs
+@@ -32,6 +32,9 @@
+         private Button joinIpButton, joinSteamButton, saveSettingsButton;
+         private TMP_Text copyFeedbackCaption, expandFeedbackCaption, feedbackHeading, copyRoomCaption;
+         private string copiedFeedback, copiedRoomId;
++        private string feedbackDetail = String.Empty, feedbackSummary = String.Empty;
++        private ScrollRect feedbackScroll;
++        private TMP_Text feedbackDetailText;
+         private double copiedFeedbackUntil, copiedRoomUntil;
+         private bool feedbackExpanded, lastFeedbackExpanded;
+         private Image feedbackSurfaceImage;
+@@ -71,9 +74,35 @@
+             feedbackSurface.transform.SetSiblingIndex(status.transform.GetSiblingIndex());
+             feedbackDot = MakeDot(feedbackSurface.transform, "FWM.FeedbackDot", 18, 20, 8);
+             MultiplayerUi.Top(status.rectTransform, 64, 739, 662, 50);
+-            feedbackHeading = Label(transform, "FeedbackExpandedHeading", "操作反馈", 19, 64, 603, 500, 30);
++            feedbackHeading = Label(transform, "FeedbackExpandedHeading", "操作反馈（滚轮查看完整详情）", 19, 64, 603, 700, 30);
+             feedbackHeading.color = HeadingColor;
+             feedbackHeading.gameObject.SetActive(false);
++            GameObject scrollRoot = MultiplayerUi.Node("FWM.FeedbackDetails", transform);
++            MultiplayerUi.Top((RectTransform)scrollRoot.transform, 64, 640, 916, 82);
++            feedbackScroll = scrollRoot.AddComponent<ScrollRect>();
++            feedbackScroll.horizontal = false;
++            feedbackScroll.movementType = ScrollRect.MovementType.Clamped;
++            feedbackScroll.scrollSensitivity = 28;
++            GameObject viewport = MultiplayerUi.Node("Viewport", scrollRoot.transform);
++            MultiplayerUi.Stretch((RectTransform)viewport.transform, 0, 0, 0, 0);
++            viewport.AddComponent<Image>();
++            viewport.AddComponent<Mask>().showMaskGraphic = false;
++            GameObject content = MultiplayerUi.Node("Content", viewport.transform);
++            RectTransform contentRect = (RectTransform)content.transform;
++            contentRect.anchorMin = new Vector2(0, 1); contentRect.anchorMax = Vector2.one;
++            contentRect.pivot = new Vector2(0.5f, 1); contentRect.sizeDelta = Vector2.zero;
++            var layout = content.AddComponent<VerticalLayoutGroup>();
++            layout.childControlWidth = layout.childControlHeight = true;
++            layout.childForceExpandWidth = true; layout.childForceExpandHeight = false;
++            content.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
++            feedbackDetailText = Label(content.transform, "Detail", "", 17, 0, 0, 916, 82);
++            feedbackDetailText.richText = false;
++            feedbackDetailText.enableWordWrapping = true;
++            feedbackDetailText.overflowMode = TextOverflowModes.Overflow;
++            feedbackDetailText.alignment = TextAlignmentOptions.TopLeft;
++            feedbackDetailText.raycastTarget = false;
++            feedbackScroll.viewport = (RectTransform)viewport.transform; feedbackScroll.content = contentRect;
++            scrollRoot.SetActive(false);
+             expandFeedbackButton = MultiplayerUi.CloneButton(ButtonTemplate, transform, "FWM.ExpandFeedback",
+                 "展开", ToggleFeedback);
+             MultiplayerUi.Top((RectTransform)expandFeedbackButton.transform, 742, 741, 100, 43);
+@@ -156,13 +185,12 @@
+ 
+         private void CopyFeedback()
+         {
+-            if (status == null || String.IsNullOrWhiteSpace(status.text)) return;
++            if (String.IsNullOrWhiteSpace(feedbackDetail)) return;
+             try
+             {
+-                // Only copy the short text already presented to the player,
+-                // never session internals, credentials or raw exception traces.
+-                GUIUtility.systemCopyBuffer = status.text;
+-                copiedFeedback = status.text;
++                // Runtime/local feedback is already redacted before storage.
++                GUIUtility.systemCopyBuffer = feedbackDetail;
++                copiedFeedback = feedbackDetail;
+                 copiedFeedbackUntil = Time.unscaledTimeAsDouble + 2.5;
+                 SetTextIfChanged(copyFeedbackCaption, "已复制");
+             }
+@@ -189,6 +217,21 @@
+             if (status == null || String.IsNullOrWhiteSpace(status.text)) return;
+             feedbackExpanded = !feedbackExpanded;
+             ApplyFeedbackLayout();
++        }
++
++        private void SetFeedbackContent(string value)
++        {
++            value = value ?? String.Empty;
++            if (feedbackDetail == value) return;
++            feedbackDetail = value;
++            feedbackSummary = MultiplayerUi.BriefFeedback(value);
++            SetTextIfChanged(status, feedbackSummary);
++            SetTextIfChanged(feedbackDetailText, feedbackSummary == value ? value : feedbackSummary + "\n\n" + value);
++            if (feedbackScroll != null)
++            {
++                feedbackScroll.StopMovement();
++                feedbackScroll.content.anchoredPosition = Vector2.zero;
++            }
+         }
+ 
+         private void ApplyFeedbackLayout()
+@@ -198,9 +241,8 @@
+             feedbackSurfaceImage.raycastTarget = feedbackExpanded; // Block clicks through the expanded message.
+             MultiplayerUi.Top((RectTransform)feedbackSurfaceImage.transform,
+                 28, feedbackExpanded ? 594 : 726, 984, feedbackExpanded ? 202 : 70);
+-            MultiplayerUi.Top(status.rectTransform, 64,
+-                feedbackExpanded ? 640 : 739, feedbackExpanded ? 916 : 662, feedbackExpanded ? 82 : 50);
+-            status.maxVisibleLines = feedbackExpanded ? 6 : 2;
++            status.gameObject.SetActive(!feedbackExpanded);
++            feedbackScroll.gameObject.SetActive(feedbackExpanded);
+             feedbackHeading.gameObject.SetActive(feedbackExpanded);
+             SetTextIfChanged(expandFeedbackCaption, feedbackExpanded ? "收起" : "展开");
+         }
+@@ -280,17 +322,19 @@
+ 
+         private void RefreshFeedbackPresentation()
+         {
+-            string message = status.text ?? String.Empty;
++            string message = feedbackSummary;
+             bool warning = message.IndexOf("失败", StringComparison.Ordinal) >= 0
+                 || message.IndexOf("错误", StringComparison.Ordinal) >= 0
+                 || message.IndexOf("无法", StringComparison.Ordinal) >= 0
+                 || message.IndexOf("未完成", StringComparison.Ordinal) >= 0
+-                || message.IndexOf("拒绝", StringComparison.Ordinal) >= 0;
++                || message.IndexOf("拒绝", StringComparison.Ordinal) >= 0
++                || MultiplayerUi.HasDiagnosticDetail(message);
+             bool positive = !warning && (message.IndexOf("成功", StringComparison.Ordinal) >= 0
+                 || message.IndexOf("已保存", StringComparison.Ordinal) >= 0
+                 || message.IndexOf("已连接", StringComparison.Ordinal) >= 0);
+             SetColorIfChanged(feedbackDot, warning ? WarningColor : positive ? PositiveColor : AccentColor);
+             SetColorIfChanged(status, warning ? WarningColor : BodyColor);
++            SetColorIfChanged(feedbackDetailText, warning ? WarningColor : BodyColor);
+             if (feedbackExpanded && String.IsNullOrWhiteSpace(message))
+             {
+                 feedbackExpanded = false;
+@@ -305,7 +349,7 @@
+             if (copyFeedbackButton != null)
+             {
+                 copyFeedbackButton.interactable = !String.IsNullOrWhiteSpace(message);
+-                SetTextIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable && message == copiedFeedback
++                SetTextIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable && feedbackDetail == copiedFeedback
+                     && Time.unscaledTimeAsDouble < copiedFeedbackUntil
+                     ? "已复制" : "复制提示");
+                 SetColorIfChanged(copyFeedbackCaption, copyFeedbackButton.interactable ? BodyColor : DisabledColor);

@@ -208,3 +208,7 @@
 - 本轮本地窄提交完成后释放源码、VERSION/CHANGELOG、构建与Git index；feedback-errors 可接续下一版本。未push，实机由用户验收。
 
 - guest-conscript 最终结果：本地窄提交 `dd5575f` 已完成；未push。版本/index/源码/构建占用在本交接提交结束后全部释放；后续按用户安排统一构建安装。
+
+### feedback-errors-20261019 / 主控 /root — V1.41 完成
+- 五份Entry关键报错显示完成：底部优先最内层原因，展开滚动/复制完整脱敏详情；旧 dirty/untracked 保留，不含玩家下拉ESC改动。主功能由 feedback_ui 实现，完整本轮patch见 docs/patches/feedback-errors-20261019.patch；报告 docs/reports/联机关键错误面板显示-20261019.md。
+- 三端 Sync-ModCopies.ps1 -BuildOnly 完成，同源160209A34C9BAB2BE47E3ADCD6AF5934087FF440485DAF276D15D8A4CEF1F5F9，回执 artifacts/feedback-errors-20261019/copy-sync.json。未安装/测试/启动游戏；用户验收。当前本地窄提交完成后即释放源码、版本、index与构建，后续 relation-player-dropdown 可升V1.42；无push。

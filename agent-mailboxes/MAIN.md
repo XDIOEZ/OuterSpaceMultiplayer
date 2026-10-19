@@ -275,3 +275,7 @@
 - 已读反馈UI的VisualTheme未闭合依赖。P3编译完成、Steam编译后被SourceRevision保护停止，未到TapTap，不安装/测试/运行。后续统一构建须包含当前完整工作树，保留历史dirty。本轮提交完成后释放版本/index/构建，feedback-errors接续下一版本。
 
 - guest-conscript 已完成本地窄提交 `dd5575f`，旧dirty保留、未push；此交接提交结束后VERSION/index/构建/源码全部释放。feedback-errors可读取最新VERSION并递增，连同其完整依赖统一BuildOnly；安装仍待用户后续统一安排。
+
+### feedback-errors-20261019 — V1.41三端BuildOnly完成与窗口释放
+- 五份Entry源码冻结，底部关键原因/展开滚动详情/复制完整脱敏错误已完成；未安装或运行游戏。三端同源160209A34C9BAB2BE47E3ADCD6AF5934087FF440485DAF276D15D8A4CEF1F5F9，独立回执 artifacts/feedback-errors-20261019/copy-sync.json。
+- 本轮保留所有历史dirty/untracked，仅精准tracked等效窄改+完整本轮patch入Git，未纳入玩家下拉两处ESC。当前本地commit完成后立即释放src/VERSION/CHANGELOG/index/构建；relation-player-dropdown可接手V1.42，identity/host-airdrop后续与该任务协调，不需等本轮再次构建。
