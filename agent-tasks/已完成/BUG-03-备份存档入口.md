@@ -1,6 +1,6 @@
 # BUG-03 / P2 · 备份代有效但继续游戏列表不可选
 
-- **来源：** [静态 BUG 交接 BUG-03](../../docs/联机MOD静态BUG审计与Agent修复交接-20261017.md)。
+- **来源：** [静态 BUG 交接 BUG-03](../../docs/audits/联机MOD静态BUG审计与Agent修复交接-20261017.md)。
 - **状态：已完成代码修复与合成存档验收（2026-10-17）**。未进行游戏内 UI/跨机实测，不代表整个 V1 已验收。
 - **证据：** `SaveStore.ListWorlds` 只看 `active.json`，但 `SaveStore.Load` 可尝试 `active.json.bak`；Entry 对 `WorldSummary.Error` 禁止 `HostLoad`。
 - **需要：** 列表与真实 `Load` 共用**只读可恢复性判断**，显式说明回退代；没有合法备份时不可虚报“可恢复”，浏览列表不得自动修复或覆盖损坏索引。

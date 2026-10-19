@@ -1,6 +1,6 @@
 # BUG-23 / P1 · 重复玩家个人差量导致地图事务半提交
 
-- **来源：** [第六轮静态 BUG 审计](../../docs/联机MOD第六轮静态BUG审计与Agent修复交接-20261017.md)。
+- **来源：** [第六轮静态 BUG 审计](../../docs/audits/联机MOD第六轮静态BUG审计与Agent修复交接-20261017.md)。
 - **代码任务状态：已完成并归档（2026-10-17）。** 双端实机事务验收仍在 [BUG-23-实际双端事务验收](../待办/BUG-23-实际双端事务验收.md)。
 - **目标：** 接收 `MapUpdate.Players` 时，缺列表、空项、无效 ID、重复 `PlayerId` 必须在任何原生地图或个人修改前拒绝，合法空列表、单人更新和不同人员的多行更新不受影响。
 - **修复范围：** `src/Session/Authority.cs` 中 `AcceptMapUpdate` 前置唯一性检验，`src/Session/MapTransactionPlayerValidation.cs`、`tools/OptimizationChecks/`、版本及日志。完整 Map/Player apply、ACK/重连与真实游戏验收不在本卡宣称通过。

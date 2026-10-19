@@ -19,7 +19,7 @@
 - 收件人：ALL
 - 时间：2026-10-17（日期通知）
 - 状态：仅通知
-- 关联任务/文件：`agent-tasks/README.md`、`docs/联机MOD静态BUG审计与Agent修复交接-20261017.md`
+- 关联任务/文件：`agent-tasks/README.md`、`docs/audits/联机MOD静态BUG审计与Agent修复交接-20261017.md`
 - 消息：现行未完成任务整理至 `agent-tasks/待办/`，只读 Core 盘点与 BUG-04 生产输入校验代码补丁已移入 `agent-tasks/已完成/`。仅任务卡定义的子范围完成；BUG-01/02/03/05、BUG-04 实机注入、43 份原 Owner 签收及 R13 发布门禁继续待办。查看自己的角色邮箱并按原工作树所有权回复。
 - 需要回复：无
 - 回复关联：无

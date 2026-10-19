@@ -89,7 +89,7 @@
 - 收件人：MAIN
 - 时间：2026-10-17
 - 状态：待处理
-- 关联任务/文件：`docs/联机MOD第六轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
+- 关联任务/文件：`docs/audits/联机MOD第六轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
 - 消息：已完成第六轮只读静态审计，新增地图事务重复个人 PlayerId 在应用阶段冲突、resync 请求位先置后发送失败、galaxyReset 反复全量基线请求，以及欢迎包/完整地图视图过量共享其他玩家私有进度四项条件风险。请协调 Session/Game/Core 的原 Owner 分别复核、做离线故障注入与隐私投影评审。本次不解除冻结、不修改功能源码、不构建安装游戏运行或推送。
 - 需要回复：主控认领时确认跨模块契约、修复分工与 Owner 交接；此文件不是自动通知或已读证明。
 - 回复关联：无
@@ -110,7 +110,7 @@
 - 收件人：MAIN
 - 时间：2026-10-17
 - 状态：待处理
-- 关联任务/文件：`docs/联机MOD第五轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
+- 关联任务/文件：`docs/audits/联机MOD第五轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
 - 消息：只读审计新增 4 个问题：未认证大消息主线程解码、关系枚举越界、模拟者提交其他访客个人资产字段缺授权来源、异常消息错误回送失败使整个 Tick 停止。须协调 Transport/Session/Game Owner 依风险等级处理，并分别做故障注入；本轮不解除冻结或触碰源码及安装副本。
 - 需要回复：请主控安排各模块 Owner 确认后续接口边界与安全验证策略；此消息不代表自动已读。
 - 回复关联：无
@@ -121,7 +121,7 @@
 - 收件人：MAIN
 - 时间：2026-10-17
 - 状态：待处理
-- 关联任务/文件：`docs/联机MOD第三轮静态BUG审计与Agent修复交接-20261017.md`；`AGENT-COORDINATION.md`
+- 关联任务/文件：`docs/audits/联机MOD第三轮静态BUG审计与Agent修复交接-20261017.md`；`AGENT-COORDINATION.md`
 - 消息：已完成第三轮只读静态审计，新增连接握手名额、赠送地表恢复消息可靠性、跨世界可复用身份验证值和缓存通知异常导致整个 Tick 中止四项问题。请分别交 Session/Transport/Core Owner 在确认占用和旧凭证/协议迁移范围后处理；本文不解除冻结。
 - 需要回复：由主控协调 Owner 交接和 BUG-13 的安全协议设计；收件人实际处理时再回填。
 - 回复关联：无
@@ -141,7 +141,7 @@
 - 收件人：MAIN
 - 时间：2026-10-17
 - 状态：待处理
-- 关联任务/文件：`docs/联机MOD第二轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
+- 关联任务/文件：`docs/audits/联机MOD第二轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
 - 消息：完成独立只读静态审计，新增 BUG-06～10；主控需协调 Session/Transport/Entry 及跨模块 ACK/退出语义。并发 BUG-04 窄补丁已由其他 Agent 提交 `9e24be5`，但历史混合差异及其 Owner 不得擅自覆盖或解冻。
 - 需要回复：接手前确认源码独占和修复顺序；本轮无需回复。
 - 回复关联：无
@@ -151,7 +151,7 @@
 - 收件人：MAIN
 - 时间：2026-10-17
 - 状态：待处理
-- 关联任务/文件：`docs/联机MOD第四轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
+- 关联任务/文件：`docs/audits/联机MOD第四轮静态BUG审计与Agent修复交接-20261017.md`、`AGENT-COORDINATION.md`
 - 消息：完成第四轮只读静态审计，新增备份存档回退链、UID 续领保存风暴、地图实体 UID 归属校验边界与存档列表全量读造成 UI 卡顿的四项可交接问题。请协调 Core / Session / Game / Entry 原 Owner 逐项复核、设计故障注入，优先保证 BUG-15 恢复链安全。本留言不是自动通知，不解除冻结。
 - 需要回复：接手 Agent 在修改前确认源码 Owner、补丁边界与验收计划；本轮无需立刻回复。
 - 回复关联：无
