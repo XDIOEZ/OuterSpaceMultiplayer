@@ -49,6 +49,11 @@ namespace FreeWorldMultiplayer
                 tracedLocalFleetCommands[command.CommandId] = command.EntityId;
             }
             FleetCommandTrace.Emit(stage, command.CommandId, command.EntityId, IsHost, outcome);
+            if (stage == "session.defer.map")
+                FleetCommandTrace.Emit("session.defer.map-state", command.CommandId, command.EntityId, IsHost,
+                    "nativeInit=" + (nativeMapLoad != null) + ";cacheWaiting=" + waitingMapCaches.Count
+                    + ";queuedMessages=" + loadingMessages.Count + ";resyncWaiting=" + loadingResyncs.Count
+                    + ";failed=" + mapLoadingFailed);
         }
 
         private void TraceHostFleetResult(GameCommand command, CommandResult result)

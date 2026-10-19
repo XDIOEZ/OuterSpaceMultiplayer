@@ -19,8 +19,17 @@ namespace FreeWorldMultiplayer
             }
             foreach (var pair in offeredMapViews.ToList())
             {
+                OfferedMapView current;
+                if (!offeredMapViews.TryGetValue(pair.Key, out current) || !ReferenceEquals(current, pair.Value)) continue;
                 pair.Value.Elapsed += seconds;
-                if (pair.Value.Elapsed < 60) continue;
+                if (pair.Value.Elapsed < 60)
+                {
+                    // Cache discovery is optional. Before the client's 60-second
+                    // deadline, fill the SAME ViewId/FIFO slot with the retained
+                    // complete checkpoint, without assuming any cached chunks.
+                    if (pair.Value.Elapsed >= 30) TryFallbackMapCacheOffer(pair.Key, pair.Value);
+                    continue;
+                }
                 retainedMapViewBytes -= pair.Value.RetainedBytes;
                 offeredMapViews.Remove(pair.Key);
                 string peer;

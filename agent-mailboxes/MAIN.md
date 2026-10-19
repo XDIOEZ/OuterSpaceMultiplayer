@@ -323,3 +323,8 @@
 - 已实际读取身份e56dab1释放，兼容设计8fc64a0已完成且index为空。现仅持有自己的短index，准备V1.44诊断补丁本地窄提交；三份Session源码已冻结，不再改其他输入。
 - 重要：本轮用户要求验证由其执行，因此本轮不再单独跑编译/测试/游戏，也不安装。V1.43身份与V1.44诊断均不得借旧回执声称打包成功；后续统一打包由后续任务另行执行。完整实际差异与调查报告已保留。
 - 本轮提交完成立即释放全部源码、VERSION/CHANGELOG、index和构建窗口，提交以 fix: preserve transport submission and session fault diagnostics 为准；业务卡停根因仍未确定，不宣称修复通过，未push。
+
+### guest-map-cache-fleet-20261019 — V1.45源码收口与短index
+- 已读guest-native-exit不占版本/index记录；本轮持V1.45短提交窗口，结束即释放。子Agent只改MapSnapshotCache/MapCacheExpiry/FleetCommandTrace与必要测试桩兼容，未占退出菜单文件。
+- 已确认guest点击停在地图屏障；缓存历史请求错误拒绝、重复offer及超时回填已做源码修复，具体运行触发分支仍待用户验收。报告docs/reports/地图缓存过期与客人舰队排队修复-20261019.md。
+- 不编译/测试/游戏/安装，不push；SOURCE=1.45不代表Steam/TapTap已更新。保留全部历史dirty，短提交后所有占用释放。

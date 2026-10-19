@@ -15,6 +15,7 @@ namespace FreeWorldMultiplayer
             internal double Elapsed;
             internal long RetainedBytes;
             internal string Player;
+            internal bool FullSnapshotFallbackAttempted;
         }
         private sealed class RecoveryQueryAttempt { internal bool TransportEnqueueFailed; }
         private RecoveryQueryAttempt activeRecoveryQueryAttempt;
@@ -124,17 +125,30 @@ namespace FreeWorldMultiplayer
             cacheOutboundRetry.TrySend(MapCacheOutboundKind.Offer, query.ViewId,
                 query.MapId, query.AuthorityEpoch, query.Revision, encoded, bytes => transport.Send("host", bytes));
         }
-        private void ReceiveMapCacheOffer(string peer, string player, MapCacheOffer offer)
+        private void ReceiveMapCacheOffer(string peer, string player, MapCacheOffer offer, bool fullSnapshotFallback = false)
         {
-            OfferedMapView pending;
-            MapRecord map;
-            if (offer == null || offer.WorldId != World.WorldId || !offeredMapViews.TryGetValue(offer.ViewId ?? "", out pending) || pending.Player != player
-                || offer.ViewId != pending.Query.ViewId || offer.MapId != pending.Query.MapId
-                || !World.Maps.TryGetValue(offer.MapId, out map) || !map.Visitors.Contains(player))
-                throw new MessageRejectionException("地图缓存清单对应的访问请求已过期。");
+            if (offer == null || offer.WorldId != World.WorldId || !IsViewId(offer.ViewId))
+                throw new MessageRejectionException("地图缓存清单对应的访问请求已过期（世界或请求标识不匹配）。");
             if (offer.AvailableChunks == null || offer.AvailableChunks.Count > MapSnapshotDeltaCodec.MaxChunks
                 || offer.AvailableChunks.Any(x => !MapSnapshotDeltaCodec.IsHash(x))) throw new InvalidDataException("Invalid cache chunk offer.");
-            pending.Query.FullTerrain |= offer.FullTerrain;
+            OfferedMapView pending;
+            if (!offeredMapViews.TryGetValue(offer.ViewId, out pending))
+            {
+                MapCacheQuery sent;
+                // A late offer can follow our full-snapshot fallback. Its exact
+                // already-sent view fills the client's original FIFO slot once.
+                if (sentMapViews.TryGetValue(player + ":" + offer.ViewId, out sent)
+                    && sent.WorldId == offer.WorldId && sent.ViewId == offer.ViewId && sent.MapId == offer.MapId) return;
+                throw new MessageRejectionException("地图缓存清单对应的访问请求已过期（请求不存在或已回收）。");
+            }
+            if (pending.Player != player)
+                throw new MessageRejectionException("地图缓存清单对应的访问请求已过期（请求归属不匹配）。");
+            if (offer.ViewId != pending.Query.ViewId || offer.MapId != pending.Query.MapId || !World.Maps.ContainsKey(offer.MapId))
+                throw new MessageRejectionException("地图缓存清单对应的访问请求已过期（地块不匹配或不存在）。");
+            // This exact checkpoint was authorized when its query was issued.
+            // A later LeaveMap must not strand that earlier reliable-stream slot;
+            // following policies/transactions still replay after this full view.
+            pending.Query.FullTerrain |= offer.FullTerrain || fullSnapshotFallback;
             MapSnapshot wire = pending.Query.FullTerrain ? pending.View.Snapshot : bridge.PrepareNetworkMap(pending.View.Snapshot);
             RequireFullCheckpoint(wire, pending.View.Access.MapId);
             if (wire.Revision != pending.View.Access.Revision) throw new InvalidOperationException("Prepared network map changed its canonical revision.");
@@ -149,10 +163,46 @@ namespace FreeWorldMultiplayer
             RecordMapCacheTransfer(transfer);
             var outgoing = new MapView { Access = pending.View.Access, Players = pending.View.Players, ViewId = pending.Query.ViewId,
                 FullTerrain = pending.Query.FullTerrain, Cache = transfer };
-            Send(peer, "view", outgoing);
-            offeredMapViews.Remove(pending.Query.ViewId); retainedMapViewBytes -= pending.RetainedBytes;
+            byte[] frame = EncodeMessage("view", outgoing, null);
+            // The fallback is attempted once. Only a transport enqueue rejection
+            // may wait for a late offer/the original bounded timeout; preparation
+            // and encoding faults retain their normal failure semantics.
+            try { transport.Send(peer, frame); }
+            catch (IOException error) when (fullSnapshotFallback) { ReportMapCacheFallbackFailure(error); return; }
+            catch (InvalidOperationException error) when (fullSnapshotFallback) { ReportMapCacheFallbackFailure(error); return; }
+            if (!MapCacheOutboundRetry.RemoveIfSame(offeredMapViews, pending.Query.ViewId, pending)) return;
+            retainedMapViewBytes -= pending.RetainedBytes;
             sentMapViews[player + ":" + pending.Query.ViewId] = pending.Query;
             if (sentMapViews.Count > 512) sentMapViews.Remove(sentMapViews.Keys.First());
+        }
+        private void TryFallbackMapCacheOffer(string viewId, OfferedMapView pending)
+        {
+            string peer, boundPlayer;
+            if (pending.FullSnapshotFallbackAttempted || !IsHost || !IsConnected || nativeFault != null
+                || !playerPeers.TryGetValue(pending.Player, out peer)
+                || !peers.TryGetValue(peer, out boundPlayer) || boundPlayer != pending.Player) return;
+            pending.FullSnapshotFallbackAttempted = true;
+            try
+            {
+                ReceiveMapCacheOffer(peer, boundPlayer, new MapCacheOffer
+                {
+                    WorldId = pending.Query.WorldId, ViewId = viewId,
+                    MapId = pending.Query.MapId, FullTerrain = true
+                }, true);
+            }
+            catch (Exception error)
+            {
+                // This optional fallback uses only the retained full snapshot:
+                // it never invokes native preparation, Apply, Save, or an ACK.
+                // A codec/encoding fault must not abort every player's Tick.
+                // Preserve the original request and its final timeout instead.
+                ReportMapCacheFallbackFailure(error);
+            }
+        }
+        private void ReportMapCacheFallbackFailure(Exception error)
+        {
+            try { MessageFaulted?.Invoke("[map-cache] 完整地图回退未完成，保留原请求等待清单或超时；异常类型=" + error.GetType().Name); }
+            catch (Exception) { } // Optional diagnostics cannot stop the room.
         }
         private void ReceiveMapCacheRetry(string player, MapCacheRetry retry)
         {
@@ -187,7 +237,9 @@ namespace FreeWorldMultiplayer
             if (view == null || view.Access == null || view.Cache == null || view.Snapshot != null
                 || !waitingMapCaches.TryGetValue(view.ViewId ?? "", out expected)
                 || view.Access.MapId != expected.MapId || view.Access.AuthorityEpoch != expected.AuthorityEpoch || view.Access.Revision != expected.Revision
-                || view.FullTerrain != (expected.FullTerrain || requiresFullTerrain.Contains(expected.MapId)))
+                // The host may upgrade an unanswered query to its full native
+                // checkpoint. Never accept a downgrade of required full terrain.
+                || !view.FullTerrain && (expected.FullTerrain || requiresFullTerrain.Contains(expected.MapId)))
                 throw new MessageRejectionException("旧地图内容已被新的访问请求替代。");
             try
             {

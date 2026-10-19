@@ -237,3 +237,9 @@
 - V1.44诊断补丁源码冻结：MultiplayerSession Tick阶段/原异常、Commands运输确认6阶段/关键错误、新SessionFaultDiagnostics独立故障去重与每10秒一次gift等待状态。已保留原始双端日志与备份；调查报告 docs/reports/空投卡停调查与诊断补齐-20261019.md、完整当前工作树patch docs/patches/host-airdrop-freeze-20261019.patch。
 - 本次业务卡停尚未定位，不改变扣源、模拟权、屏障或资产规则。用户明确验证自行执行，本轮不编译、测试、启动或安装；不能引用V1.41等旧构建回执代表当前版本。
 - 历史dirty全部保留，只暂存本轮可分离增量+完整patch；本地提交 fix: preserve transport submission and session fault diagnostics 完成即释放全部源码、版本、index/构建。不push。后续统一更新双方后按原步骤复现，查transport-submit/session-fault/gift-checkpoint-wait。
+
+### guest-map-cache-fleet-20261019 / 主控 /root
+- 用户报告缓存清单访问请求过期和客人舰队不动；cache_fix完成MapSnapshotCache/MapCacheExpiry的历史请求履行、重复清单幂等和30秒完整快照回填；fleet_fix仅FleetCommandTrace屏障诊断；barrier_audit只读审查，没有扩大清理FIFO或绕过屏障。
+- V1.45源码冻结。日志确认客人命令停在session.defer.map；本次过期文案具体触发分支没有日志闭环，不宣称实机已修好。报告 docs/reports/地图缓存过期与客人舰队排队修复-20261019.md。
+- 历史dirty/untracked全部保留，仅暂存本轮可分离改动。用户自行验证，本轮不编译/测试/游戏/安装，不以V1.39旧DLL代表本轮成果；不push。
+- 本地窄提交完成后立即释放源码、VERSION/CHANGELOG、index和构建占用；guest-native-exit可继续其独立文件与后续版本。基线/双端旧日志/patch位于artifacts/guest-map-cache-fleet-20261019。

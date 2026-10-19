@@ -30,6 +30,9 @@ namespace FreeWorldMultiplayer
         // The cache retry producer lives in the other production partial.
         // This test project links expiry alone and does not simulate that producer.
         private void TickCacheNegotiationOutbound(double seconds) { }
+        // Full snapshot fallback is produced by MapSnapshotCache, not this
+        // expiry-only fixture; this stub does not validate fallback behavior.
+        private void TryFallbackMapCacheOffer(string viewId, OfferedMapView pending) { }
 
         internal void SeedOffer(string key, string player, double elapsed, long bytes)
         {
