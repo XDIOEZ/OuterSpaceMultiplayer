@@ -242,4 +242,4 @@
 - 用户报告缓存清单访问请求过期和客人舰队不动；cache_fix完成MapSnapshotCache/MapCacheExpiry的历史请求履行、重复清单幂等和30秒完整快照回填；fleet_fix仅FleetCommandTrace屏障诊断；barrier_audit只读审查，没有扩大清理FIFO或绕过屏障。
 - V1.45源码冻结。日志确认客人命令停在session.defer.map；本次过期文案具体触发分支没有日志闭环，不宣称实机已修好。报告 docs/reports/地图缓存过期与客人舰队排队修复-20261019.md。
 - 历史dirty/untracked全部保留，仅暂存本轮可分离改动。用户自行验证，本轮不编译/测试/游戏/安装，不以V1.39旧DLL代表本轮成果；不push。
-- 本地窄提交完成后立即释放源码、VERSION/CHANGELOG、index和构建占用；guest-native-exit可继续其独立文件与后续版本。基线/双端旧日志/patch位于artifacts/guest-map-cache-fleet-20261019。
+- 本地提交 da8fbfe 已完成，源码/版本/index/构建占用立即全部释放；guest-native-exit可继续其独立文件与后续版本。基线/双端旧日志/patch位于artifacts/guest-map-cache-fleet-20261019。
