@@ -17,7 +17,7 @@ namespace FreeWorldMultiplayer
         {
             internal double Remaining = HandshakeSeconds;
             internal double RetryRemaining;
-            internal bool Expired;
+            internal bool Expired, Disconnecting;
         }
 
         private readonly Dictionary<string, Pending> pending =
@@ -69,39 +69,59 @@ namespace FreeWorldMultiplayer
                 }
                 else record.RetryRemaining -= seconds;
 
-                if (!record.Expired || record.RetryRemaining > 1e-9) continue;
+                if (!record.Expired || record.Disconnecting || record.RetryRemaining > 1e-9) continue;
                 if (overdue == null) overdue = new List<KeyValuePair<string, Pending>>();
                 overdue.Add(entry);
             }
 
             if (overdue == null) return 0;
-            int disconnected = 0;
+            int closeRequests = 0;
             foreach (var entry in overdue)
             {
                 Pending current;
                 if (!pending.TryGetValue(entry.Key, out current) || !ReferenceEquals(current, entry.Value))
                     continue;
+                // A transport close request can complete before its
+                // Disconnected event reaches the session. Keep the expired
+                // peer quarantined, and reserve the next retry BEFORE calling
+                // transport (whose callbacks may reenter this Tick).
+                entry.Value.RetryRemaining = DisconnectRetrySeconds;
+                entry.Value.Disconnecting = true;
                 try
                 {
                     disconnect(entry.Key);
-                    // Transport may synchronously produce a disconnected event;
-                    // never delete a reconnected peer sharing the old key.
-                    if (pending.TryGetValue(entry.Key, out current) && ReferenceEquals(current, entry.Value))
-                        pending.Remove(entry.Key);
-                    disconnected++;
+                    // Only the real Disconnected handler (Forget) or successful
+                    // authentication (Complete) releases an admission slot.
+                    // Returning from Disconnect alone is not a close receipt.
+                    closeRequests++;
                 }
                 catch (IOException error)
                 {
-                    entry.Value.RetryRemaining = DisconnectRetrySeconds;
-                    if (reportDisconnectFailure != null) reportDisconnectFailure(entry.Key, error);
+                    ReportDisconnectFailure(reportDisconnectFailure, entry.Key, error);
                 }
                 catch (InvalidOperationException error)
                 {
-                    entry.Value.RetryRemaining = DisconnectRetrySeconds;
-                    if (reportDisconnectFailure != null) reportDisconnectFailure(entry.Key, error);
+                    ReportDisconnectFailure(reportDisconnectFailure, entry.Key, error);
                 }
+                catch
+                {
+                    // Preserve the previous behavior for unexpected transport
+                    // faults: propagate, and allow the next Tick to try again.
+                    entry.Value.RetryRemaining = 0;
+                    throw;
+                }
+                finally { entry.Value.Disconnecting = false; }
             }
-            return disconnected;
+            return closeRequests;
+        }
+
+        private static void ReportDisconnectFailure(Action<string, Exception> report,
+            string peer, Exception error)
+        {
+            if (report == null) return;
+            // Diagnostics cannot cancel the cleanup of a different peer.
+            try { report(peer, error); }
+            catch (Exception) { }
         }
     }
 

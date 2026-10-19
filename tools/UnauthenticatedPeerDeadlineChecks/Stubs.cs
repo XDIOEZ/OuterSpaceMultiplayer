@@ -9,6 +9,8 @@ namespace FreeWorldMultiplayer
         internal readonly List<string> Disconnected = new List<string>();
         internal readonly Dictionary<string, int> Failures = new Dictionary<string, int>(StringComparer.Ordinal);
         internal readonly HashSet<string> Active = new HashSet<string>(StringComparer.Ordinal);
+        internal Action<string> OnDisconnected;
+        internal bool AutomaticallyDeliverDisconnected = true;
         internal void Disconnect(string peer, string reason)
         {
             int count;
@@ -19,6 +21,8 @@ namespace FreeWorldMultiplayer
             }
             Active.Remove(peer);
             Disconnected.Add(peer);
+            if (AutomaticallyDeliverDisconnected && OnDisconnected != null)
+                OnDisconnected(peer);
         }
     }
 
@@ -29,6 +33,7 @@ namespace FreeWorldMultiplayer
         private readonly Dictionary<string, string> rejectedPeers = new Dictionary<string, string>();
         private readonly FakeTransport transport = new FakeTransport();
         private readonly List<string> errors = new List<string>();
+        internal MultiplayerSession() { transport.OnDisconnected = PeerLeft; }
         private void Error(string description) { errors.Add(description); }
 
         internal int Connect(string peer)

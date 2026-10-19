@@ -30,7 +30,12 @@ internal static class Program
         gate.Begin("peerA"); // This must not extend the original lifetime.
         gate.Tick(14.99, peer => kicked++);
         Check(!gate.IsExpired("peerA") && kicked == 0, "29.99s handshake still allowed");
-        gate.Tick(0.01, peer => { Check(peer == "peerA", "original ID at timeout"); kicked++; });
+        gate.Tick(0.01, peer =>
+        {
+            Check(peer == "peerA", "original ID at timeout");
+            kicked++;
+            gate.Forget(peer); // Simulate the transport's Disconnected event.
+        });
         Check(kicked == 1 && gate.Count == 0, "absolute thirty-second timeout closes a silent connection");
         Check(!gate.IsExpired("peerA"), "disconnected peer cannot retain old expired state");
         Check(gate.Begin("peerA"), "new transport generation can use same peer ID");
@@ -97,6 +102,31 @@ internal static class Program
         Check(client.TestTransport.Active.Contains("host")
             && client.TestTransport.Disconnected.Count == 0,
             "guest never kicks its authoritative host from guest-side ticks");
+
+        // TCP/Steam may enqueue Disconnected for the next session poll. Even
+        // if the transport requested/started close, host authentication stays
+        // expired until that event is actually delivered.
+        var delayedHost = new MultiplayerSession();
+        delayedHost.TestTransport.AutomaticallyDeliverDisconnected = false;
+        delayedHost.Connect("async");
+        delayedHost.Challenge("async");
+        delayedHost.Tick(30);
+        Check(delayedHost.PendingCount == 1 && delayedHost.Expired("async")
+            && delayedHost.TestTransport.Disconnected.Count == 1 && !delayedHost.HasChallenge("async"),
+            "production host Tick retains expired peer while its transport close event is pending");
+        delayedHost.Connect("async");
+        Check(delayedHost.Expired("async") && delayedHost.PendingCount == 1,
+            "another Connected notification cannot reset the expired handshake");
+        delayedHost.Tick(1.99);
+        Check(delayedHost.TestTransport.Disconnected.Count == 1,
+            "session does not retry a successful close request on every Tick");
+        delayedHost.Tick(.01);
+        Check(delayedHost.TestTransport.Disconnected.Count == 2
+            && delayedHost.PendingCount == 1 && delayedHost.Expired("async"),
+            "missing close receipt is retried without admitting an expired peer");
+        delayedHost.PeerLeft("async");
+        Check(delayedHost.PendingCount == 0 && !delayedHost.Expired("async"),
+            "confirmed transport Disconnected event releases the pending admission slot");
     }
 
     private static void CapacityAndRecovery()
@@ -123,6 +153,55 @@ internal static class Program
 
     private static void DisconnectionFaults()
     {
+        // A successful Disconnect request is not proof that the queued
+        // Disconnected event has been processed. Until that event, the peer
+        // must stay expired and must not free an admission slot.
+        var delayed = new UnauthenticatedPeerDeadline();
+        Check(delayed.Begin("delayed"), "delayed disconnect setup");
+        int attempts = 0;
+        delayed.Tick(30, _ => attempts++);
+        Check(attempts == 1 && delayed.Count == 1 && delayed.IsExpired("delayed"),
+            "successfully requested disconnect stays expired until actual Disconnected event");
+        Check(delayed.Begin("delayed") && delayed.Count == 1 && delayed.IsExpired("delayed"),
+            "duplicate Connected cannot revive a still-open expired socket");
+        delayed.Tick(1.99, _ => attempts++);
+        Check(attempts == 1, "unconfirmed successful disconnect respects retry cooldown");
+        delayed.Tick(.01, _ => attempts++);
+        Check(attempts == 2 && delayed.IsExpired("delayed"),
+            "unconfirmed disconnect is retried after two seconds without permitting auth");
+        delayed.Forget("delayed");
+        Check(delayed.Count == 0 && !delayed.IsExpired("delayed"),
+            "only confirmed Disconnected frees an expired socket's slot");
+        Check(delayed.Begin("delayed") && !delayed.IsExpired("delayed"),
+            "subsequent new transport generation receives a fresh handshake deadline");
+
+        // A transport implementation may synchronously reenter the session
+        // while its Disconnect method is still running. Even a nested Tick
+        // advancing more than the retry interval cannot close the same lease
+        // twice in one call stack.
+        var nested = new UnauthenticatedPeerDeadline();
+        nested.Begin("reentrant");
+        int nestedCloseCalls = 0;
+        nested.Tick(30, peer =>
+        {
+            nestedCloseCalls++;
+            nested.Tick(3, _ => nestedCloseCalls++);
+        });
+        Check(nestedCloseCalls == 1 && nested.IsExpired("reentrant") && nested.Count == 1,
+            "nested transport Tick cannot duplicate an in-progress disconnect");
+        nested.Forget("reentrant");
+
+        // Admission capacity cannot be recycled by fake success receipts.
+        var capacity = new UnauthenticatedPeerDeadline();
+        for (int i = 0; i < UnauthenticatedPeerDeadline.MaxPendingPeers; i++)
+            Check(capacity.Begin("held" + i), "setup expired capacity " + i);
+        capacity.Tick(30, _ => { });
+        Check(!capacity.Begin("new") && capacity.Count == UnauthenticatedPeerDeadline.MaxPendingPeers,
+            "unconfirmed disconnects cannot release all 32 unauthenticated admission slots");
+        capacity.Forget("held0");
+        Check(capacity.Begin("new") && !capacity.IsExpired("new"),
+            "actual Disconnected event releases exactly one slot for a new handshake");
+
         var host = new MultiplayerSession();
         host.Connect("congested");
         host.Challenge("congested");
@@ -149,8 +228,21 @@ internal static class Program
             closes++;
         })), "unexpected programming errors are not silently swallowed");
         Check(guard.Count == 2, "unexpected disconnect fault cannot fake successful cleanup");
-        guard.Tick(0, id => closes++);
+        guard.Tick(0, id => { closes++; guard.Forget(id); });
         Check(closes == 2 && guard.Count == 0, "subsequent retry can release both peers");
+
+        var reporting = new UnauthenticatedPeerDeadline();
+        reporting.Begin("one");
+        reporting.Begin("two");
+        int attempted = 0;
+        reporting.Tick(30, id =>
+        {
+            attempted++;
+            throw new IOException("simulated failing disconnect");
+        }, (id, error) => throw new InvalidOperationException("broken optional logger"));
+        Check(attempted == 2 && reporting.Count == 2
+            && reporting.IsExpired("one") && reporting.IsExpired("two"),
+            "faulty diagnostic observer cannot prevent retrying another expired peer");
     }
 
     private static void ReentrantAndRandom()
@@ -169,7 +261,7 @@ internal static class Program
             "synchronous transport callback cannot delete a newer same-ID connection");
         gate.Tick(29, peer => {});
         Check(!gate.IsExpired("old"), "new generation retains a full independent handshake lifetime");
-        gate.Tick(1, peer => {});
+        gate.Tick(1, peer => gate.Forget(peer));
         Check(gate.Count == 0, "new generation eventually expires normally");
 
         var random = new Random(20261018);
@@ -183,7 +275,7 @@ internal static class Program
             int complete = random.Next(0, count);
             pending.Complete("peer" + complete);
             int closed = 0;
-            pending.Tick(31 - elapsed, peer => { closed++; });
+            pending.Tick(31 - elapsed, peer => { closed++; pending.Forget(peer); });
             Check(closed == Math.Min(count, UnauthenticatedPeerDeadline.MaxPendingPeers)
                 - (complete < UnauthenticatedPeerDeadline.MaxPendingPeers ? 1 : 0),
                 "random legitimate completion never falls into expired-peer eviction " + round);
