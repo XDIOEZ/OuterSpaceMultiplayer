@@ -364,3 +364,8 @@
 - 目标：未认证连接 30 秒到期后，`Disconnect` 成功返回仅代表已经请求关闭；原来立刻从 deadline 字典移除，可能在传输层 `Disconnected` 事件尚未处理前让旧连接绕开过期状态/释放准入名额。改为只由真实 `Disconnected` /认证成功回调释放，保留每 2 秒失败/无确认重试、同 PeerId 重连不会误删、超时拒绝 hello/auth。加入真生产 helper 及模拟异步断链事件检查。
 - 当前用户要求仅源码小范围优化：不递增 VERSION、无三端 BuildOnly / 安装、游戏启动或 Git push。测试、窄提交后回填证据并释放源码/index。
 - 收口：旧逻辑的延迟 Disconnected 负向回归先失败，修复后保留 Expired + 32 个未认证占用，只有真实事件 Forget 才清除；成功请求也间隔 2 秒重试，递归 Tick 只处理一次，日志回调异常不影响别的 peer。链接生产 `UnauthenticatedPeerDeadline` 本地检查 **30,119 项通过**、关联 `AuthenticatedJoinRollbackChecks` **36,149 项通过**、生产 TCP localhost 认证前检查 **7 项通过**。本轮仅三文件代码/回归提交 `8242300`，未修改 Networking/半成功登录业务、版本、协议或存档；未三端构建/安装/运行游戏/推送。原有脏文件保留，源码与 Git index 占用释放。半成功登录的独立生命周期/实机验收仍按 BUG-06 待办。
+
+### optimization-rejected-peer-retry-20261019 / 主控 /root
+- 本轮独占 `src/Session/RejectedPeerEvictionGate.cs`、`tools/RejectedPeerEvictionChecks/Program.cs` 两个原本干净的文件；避免隔离连接的 Tick 每帧分配快照，以及原生断线回调重入时重复断链。维持真实 Disconnected 事件释放、2 秒重试、同 PeerId 新会话隔离的既有合同；不动已有 Networking/MultiplayerSession/Transport、版本、协议或存档。
+- 仅链接生产源码执行本地 .NET 检查，按用户最新要求不构建/打包/安装三端、不启动游戏；窄 Git 提交，不 push，不夹带任何历史 dirty/untracked。完成后回填实际检查结果并释放占用。
+- 完成：原生产逻辑被新负向用例复现为重入 Tick 重复 Disconnect；改为断线请求执行期防重入、只为已到期条目建立安全快照，并在回调修改连接表后校验同一对象及最新倒计时。链接生产 `RejectedPeerEvictionChecks` **180,042 项通过**，含两个同时到期连接、同步递归与延迟 Disconnected；合成单隔离连接 4,000 次未到期 Tick 路径测得 0 B 托管分配。源码及测试独立提交 `7b750af`，未修改版本/协议/存档，未构建/安装/运行游戏或 push，旧 dirty/untracked 保留；本轮源码与 Git index 占用已释放。真实 TCP/Steam 多玩家断链回归仍按 BUG-22 等待实机验收。
