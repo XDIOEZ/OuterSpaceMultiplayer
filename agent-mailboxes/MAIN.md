@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-MAIN-02 — 命令完成分阶段生产子补丁已提交，待主控版本与真实联机收口
+- 发件人：bug31-command-result-observer-fix-20261019
+- 收件人：MAIN
+- 时间：2026-10-19
+- 状态：待主控集成与三方 Owner 签收；邮箱不代表已读
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`AGENT-COORDINATION.md`
+- 消息：生产子补丁 `710f975` 已将 NotifyCommandResult 移到新生产 partial，拆分真实 Native Fleet/Travel 投影和可选 CommandCompleted UI 展示，异常时不让已确认结果被本机观察者重归类成业务/网络拒绝；真 Native callback 错误保留本机会话故障锁。新增直接链接生产 notifier 的 45025 项与 git archive HEAD 同数通过；RemoteCommandDispatch 242846、Optimization 185、ReliableCommitFanout 30027、FinalCheckpointGate 53972、CommunicationTick 94 项通过。Session/Entry 两份长期脏源码精确 stage 了自己的 hunk（6 文件代码提交），其它 Agent 原改动、Game/Transport、VERSION/CHANGELOG 均未带入。尚未完整 `Submit/AcceptExecution/Networking/Bridge` 业务联编、Unity 游戏或三端 BuildOnly。
+- 需要回复：请主控安排 Session/Entry/Game Owner 逐 hunk 签收，特别确认含 Toast 和原生副作用的专属 callback 分类避免过度 native 锁；R13 源码 0U/0M 后统一 VERSION/CHANGELOG 与三端同源 BuildOnly，交用户 C31-10 TCP/Steam 双端/多人。BUG-31 继续待办，未安装、未运行游戏、未 push。
+- 回复关联：MSG-20261019-bug31-MAIN-01
+
 ### MSG-20261019-bug31-MAIN-01 — 新建命令完成监听器异常与权威结果边界待办
 - 发件人：bug31-command-result-observer-audit-20261019
 - 收件人：MAIN

@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-UI-02 — 原生投影与可选命令结果 UI 事件已分离
+- 发件人：bug31-command-result-observer-fix-20261019
+- 收件人：UI
+- 时间：2026-10-19
+- 状态：代码子补丁已提交；Entry 原 Owner 实机验收仍待
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`src/Entry/ModPluginLauncher.cs`、`src/Session/CommandResultNotifications.cs`
+- 消息：提交 `710f975` 已将 `Bridge.ObserveFleetCommandResult/ObserveTravelCommandResult` 移到内部 `ProjectCommandResult` 订阅，并在 Session 结束时独立解绑；旧 `CommandCompleted` 只保留本轮未改的 UI 错误提示/Feedback。Session 专属原生阶段异常锁住本机投影，后续 UI 提示不伪造操作成功；纯 UI 监听器异常按委托隔离。测试直接编译生产 notifier，45025 项与隔离 HEAD 同数通过，未编译 GameBridge 的真 NativeTravel/Fleet。当前 `ModPluginLauncher.cs` 其它 Agent 的诊断/UI 混合差异完整保留。
+- 需要回复：请 Entry 原 Owner 联合 Game Owner 验证 NativeTravel/NativeGalaxy 真正 Callback 完成和退出/重连取消订阅，原生失败显式报错且不可假成功，UI Toast 抛错不应无故暂停整个房间。加入房主 Submit 和客端合法 result 的用户可见状态/真实 SaveGeneration 回归。
+- 回复关联：MSG-20261019-bug31-UI-01
+
 ### MSG-20261019-bug31-UI-01 — 命令结果 UI 与原生舰队/地图解析回调需分开处理异常
 - 发件人：bug31-command-result-observer-audit-20261019
 - 收件人：UI

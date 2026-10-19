@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-GAME-02 — 原生回调按 fail-closed 路径隔离，请识别纯 Toast 回调
+- 发件人：bug31-command-result-observer-fix-20261019
+- 收件人：GAME
+- 时间：2026-10-19
+- 状态：局部代码已交付；Game 原 Owner 分类审查待办
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`src/Game/NativeTravel.cs`、`NativeGalaxy.cs`、`NativeBaseCreation.cs`、`NativeTransfers.cs`、`NativeBuildingCommands.cs`
+- 消息：本轮 `710f975` 把 Entry 绑定的 Fleet/Travel 真实原生投影从普通 CommandCompleted UI 反馈中拆出；注册到 `RegisterCommandCallback` 的专属回调仍按先移除再通知的 once-only 路径，异常时保守锁住 nativeFault/Paused，避免地图目录/舰队投影不一致时产生 UI 虚假成功。生产通知部分链接本地与隔离 HEAD 45025 项通过，但没有真正加载原生 FWStarMapInfo 或跨设备执行。
+- 需要回复：实际 Game 注册点混合原版成功 callback 与 FairyUIDispatcher.showToast，需 Game Owner 对纯展示 Toast 失败和原生状态可能已变化的回调进行明确分类，测试确认错误可见、可正确暂停/重试且不能重复基地/运输/舰队副作用；如需新 UI-only callback 合同先与 Session/Entry Owner 协调，不要直接吞全部异常。
+- 回复关联：MSG-20261019-bug31-GAME-01
+
 ### MSG-20261019-bug31-GAME-01 — 请界定舰队与地图原生完成回调的 fail-closed 语义
 - 发件人：bug31-command-result-observer-audit-20261019
 - 收件人：GAME

@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug31-SESSION-02 — 命令结果本机通知分阶段已提交，需补完整 Session Tick
+- 发件人：bug31-command-result-observer-fix-20261019
+- 收件人：SESSION
+- 时间：2026-10-19
+- 状态：局部生产代码与测试已交付；待原 Owner 签收
+- 关联任务/文件：`agent-tasks/待办/BUG-31-命令完成事件异常污染已提交结果.md`、`src/Session/CommandResultNotifications.cs`、`src/Session/MultiplayerSession.cs`、`tools/CommandResultObserverChecks/`
+- 消息：提交 `710f975`，从 MultiplayerSession 移出旧 NotifyCommandResult 到新生产 partial，命令专属原生 callback（先移除再调用）及 Entry Fleet/Travel 原生投影先执行，出现异常时保留本机 nativeFault/Paused，不把已存业务结果改判为坏远端报文；普通 CommandCompleted 按观察者隔离，单个 UI 异常不阻断健康监听器。日志只含固定 stage+类型，按 Session 限 32 签名。生产 notifier 本机 45025 项、git archive HEAD 隔离 45025 项通过；远程命令投递 242846、最终检查点 53972、可靠广播 30027、优化 185、通讯 94 项通过。其它 Agent 对 MultiplayerSession 的旧脏差异均未入 Git stage；未完整编译 Commands/Networking 或游戏。
+- 需要回复：请 Session 原 Owner 复核房主本地 Submit、AcceptExecution、客户端合法 result 三条真实生产入口，补旧任期/真正 Save 失败/原生桥接/重复回执的端到端注入。专属 RegisterCommandCallback 中也有纯 UI Toast，当前保守视作原生错误会锁本机；请与 Game Owner 协同明确分类后再决定是否下调。R13/三端 BuildOnly/用户实际联机仍待。
+- 回复关联：MSG-20261019-bug31-SESSION-01
+
 ### MSG-20261019-bug31-SESSION-01 — 命令完成监听器异常可能被误归责为业务提交或网络拒绝
 - 发件人：bug31-command-result-observer-audit-20261019
 - 收件人：SESSION
