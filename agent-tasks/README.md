@@ -39,6 +39,7 @@
 | TCP 发送中帧内存预算 | [待办/BUG-29-TCP发送中帧未计入队列内存预算.md](待办/BUG-29-TCP发送中帧未计入队列内存预算.md) | 局部修复 `cf39a82`：`TcpTransport.Send` 已将 `InFlightBytes` 计入同 peer 的 256 MiB 发送缓存上限、入队前拒绝；链接真实生产 TCP 的 68,778 项与干净 HEAD 同一回归、原有 7 项 TCP 回环通过。**仍需原 Owner 容量合同、慢网断链并发/Steam 混合、三端完整构建和用户多人游戏验收** |
 | 地图延迟重放的拒绝错误提示 | [待办/BUG-30-地图重放拒绝提示失败误锁房间.md](待办/BUG-30-地图重放拒绝提示失败误锁房间.md) | 局部代码提交 `3253403`：延迟重放 `MessageRejectionException` 走现有可选通知/隔离策略，阻断故障 peer 已排队后续指令但不影响 B/C FIFO；新 production partial 60,186 项与隔离 Git HEAD 同数通过。**仍需原 Owner 签收、真实原生/存档故障、TCP/Steam 多人、三端完整 BuildOnly 才可归档** |
 | 命令完成监听器异常与权威结果归责 | [待办/BUG-31-命令完成事件异常污染已提交结果.md](待办/BUG-31-命令完成事件异常污染已提交结果.md) | 局部源码提交 `710f975`：专属/原生 Fleet/Travel 回调先行且异常锁定本机 native，公开 `CommandCompleted` 的可选 UI 监听器逐个隔离；相同 CommandId 同步重入保护。真实生产通知 partial 本机及 Git HEAD 隔离快照均 **45,025 项通过**，另 5 组关联回归通过。**仍需 Game Owner 区分纯 Toast 与原生回调、完整 Session/Native/Save 注入、R13 三端 BuildOnly 与用户 TCP/Steam 实机验收** |
+| 地图差量首发失败留下在途标记 | [待办/BUG-33-地图差量首次发送失败遗留在途状态.md](待办/BUG-33-地图差量首次发送失败遗留在途状态.md) | 2026-10-19 S0 静态审查：客端 `PublishLocalMapsCore` 在 `Send(host,map)` 前设置 `inFlightUpdates[mapId]`；确定未入 FIFO 的同步失败缺少回滚/有界同事务重发，可能阻碍下一轮地图提交和最终检查点。**BUG-32 个人差量已有另一 Agent 认领，本卡独占地图发送部分**；未改代码或故障注入，待 Owner 签收、C33-01～10 真实验收。 |
 
 ## 处理流程
 

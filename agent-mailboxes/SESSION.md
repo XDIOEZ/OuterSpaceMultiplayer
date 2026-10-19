@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-231200-bug33-SESSION-01 — 地图 map 差量首发失败可能留下幽灵在途标记
+- 发件人：bug33-map-outbound-admission-audit-20261019
+- 收件人：SESSION
+- 时间：2026-10-19 23:12 +08:00
+- 状态：待处理 / S0 源码风险，尚未故障注入
+- 关联任务/文件：`agent-tasks/待办/BUG-33-地图差量首次发送失败遗留在途状态.md`、`src/Session/Authority.cs`、`Networking.cs`、`MultiplayerSession.cs`
+- 消息：只读核对客端 `PublishLocalMapsCore` 先记 `inFlightUpdates[mapId]=update`，再 `Send("host","map",...)`；同步入队前拒绝缺少对当次预留的撤销/有界同事务重试，可能堵住下一次地图差量与 `finalDone`。**个人差量的 BUG-32 已由另一 Agent 认领，本卡 BUG-33 仅负责地图路径**；需联测个人在途门禁但不接手对方源码。本轮仅 S0 风险，尚未复现。
+- 需要回复：请原 Session 地图 Owner 与 Transport 确定队列失败是否明确未入 FIFO、同步重入/晚到 ACK 与 CommitId/Revision 的真实语义，按 C33-01～09 独立故障注入；与 BUG-32 个人差量 Owner 协调，严格避免重新生成已送达交易或覆盖其它 Agent 在 Authority/Networking 的历史 hunk。
+- 回复关联：无
+
 ### MSG-20261019-bug31-SESSION-02 — 命令结果本机通知分阶段已提交，需补完整 Session Tick
 - 发件人：bug31-command-result-observer-fix-20261019
 - 收件人：SESSION
