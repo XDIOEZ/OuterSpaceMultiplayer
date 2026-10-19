@@ -13,6 +13,7 @@ namespace FreeWorldMultiplayer
         {
             internal string Reason;
             internal double RetryAfter;
+            internal bool Disconnecting;
         }
         private readonly Dictionary<string, Entry> quarantined =
             new Dictionary<string, Entry>(StringComparer.Ordinal);
@@ -42,10 +43,12 @@ namespace FreeWorldMultiplayer
         {
             if (disconnect == null) throw new ArgumentNullException(nameof(disconnect));
             Entry entry;
-            if (peer == null || !quarantined.TryGetValue(peer, out entry)) return false;
+            if (peer == null || !quarantined.TryGetValue(peer, out entry) || entry.Disconnecting)
+                return false;
             // Set the retry deadline BEFORE calling transport: callbacks may
             // synchronously deliver an event, modify the table or throw.
             entry.RetryAfter = RetrySeconds;
+            entry.Disconnecting = true;
             try { disconnect(peer, entry.Reason); return true; }
             catch (Exception ex)
             {
@@ -53,6 +56,7 @@ namespace FreeWorldMultiplayer
                 catch (Exception) { } // Diagnostics can never cancel eviction.
                 return false;
             }
+            finally { entry.Disconnecting = false; }
         }
 
         internal void Tick(double seconds,
@@ -63,17 +67,27 @@ namespace FreeWorldMultiplayer
             if (disconnect == null) throw new ArgumentNullException(nameof(disconnect));
             if (quarantined.Count == 0) return;
 
-            // Snapshot entry identities. If callbacks Forget/Track the SAME
-            // peer ID, its newly registered connection must receive a fresh
-            // full retry interval, not inherit the old entry's expired timer.
-            var snapshot = new List<KeyValuePair<string, Entry>>(quarantined);
-            foreach (var item in snapshot)
+            // No callback runs while enumerating the live dictionary. Create
+            // a snapshot only when at least one retry is due: a quarantined
+            // socket waiting for its close event must not allocate each frame.
+            List<KeyValuePair<string, Entry>> due = null;
+            foreach (var item in quarantined)
             {
-                Entry entry;
-                if (!quarantined.TryGetValue(item.Key, out entry) ||
-                    !Object.ReferenceEquals(entry, item.Value)) continue;
-                entry.RetryAfter -= seconds;
-                if (entry.RetryAfter > 1e-9) continue;
+                if (item.Value.Disconnecting) continue;
+                item.Value.RetryAfter -= seconds;
+                if (item.Value.RetryAfter > 1e-9) continue;
+                if (due == null) due = new List<KeyValuePair<string, Entry>>();
+                due.Add(item);
+            }
+            if (due == null) return;
+            // A callback may Forget/Track this peer ID or reenter Tick. Do
+            // not act on an obsolete generation or retry a just-issued close.
+            foreach (var item in due)
+            {
+                Entry current;
+                if (!quarantined.TryGetValue(item.Key, out current) ||
+                    !Object.ReferenceEquals(current, item.Value) ||
+                    current.Disconnecting || current.RetryAfter > 1e-9) continue;
                 TryDisconnect(item.Key, disconnect, reportError);
             }
         }

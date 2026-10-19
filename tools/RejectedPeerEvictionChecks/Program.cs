@@ -183,6 +183,59 @@ internal static class Program
             "guest can clean state after its host disconnect callback");
     }
 
+    private static void ReentrantCloseAndIdleAllocations()
+    {
+        var recursive = new RejectedPeerEvictionGate();
+        Check(recursive.Track("nested", "invalid command"),
+            "reentrant close setup");
+        int attempts = 0;
+        recursive.Tick(2, (id, reason) =>
+        {
+            attempts++;
+            recursive.Tick(2, (_, __) => attempts++, null);
+        }, null);
+        Check(attempts == 1 && recursive.Contains("nested"),
+            "synchronous Tick reentry cannot disconnect the same quarantined connection twice");
+        recursive.Tick(0, (_, __) => attempts++, null);
+        recursive.Tick(1.999, (_, __) => attempts++, null);
+        Check(attempts == 1, "reentrant callback must not consume the next retry interval");
+        recursive.Tick(.001, (_, __) => attempts++, null);
+        Check(attempts == 2 && recursive.Contains("nested"),
+            "unconfirmed disconnect remains quarantined and retries after two seconds");
+        recursive.Forget("nested");
+
+        // With two due peers, a callback may reenter Tick while the outer
+        // snapshot still contains the second one. It may close each peer
+        // at most once even though both snapshots have the same identities.
+        var both = new RejectedPeerEvictionGate();
+        both.Track("A", "bad A");
+        both.Track("B", "bad B");
+        var closes = new List<string>();
+        both.Tick(2, (id, reason) =>
+        {
+            closes.Add(id);
+            if (id == "A")
+                both.Tick(2, (other, _) => closes.Add(other), null);
+        }, null);
+        Check(closes.Count == 2 && closes.Contains("A") && closes.Contains("B"),
+            "recursive batch may not close another already-handled peer twice");
+        Check(both.Contains("A") && both.Contains("B"),
+            "both successful close requests remain quarantined awaiting real events");
+
+        // In a congested room, one quarantined socket can wait for many
+        // frames. Do not allocate a dictionary-copy List on every idle frame.
+        var idle = new RejectedPeerEvictionGate();
+        idle.Track("pending", "invalid frame");
+        Action<string, string> neverDue = (_, __) =>
+            throw new InvalidOperationException("unexpected early disconnect");
+        for (int i = 0; i < 64; i++) idle.Tick(0, neverDue, null);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 4000; i++) idle.Tick(.0001, neverDue, null);
+        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        Check(bytes == 0 && idle.Contains("pending"),
+            "quarantined idle Tick does not allocate per-frame snapshot garbage: " + bytes);
+    }
+
     private static void RandomFaultBatches()
     {
         var rng = new Random(20261019);
@@ -222,6 +275,7 @@ internal static class Program
             OriginalErrorAndOtherPlayers();
             SynchronousCallbackReentrancy();
             GuestNeverEvictsHost();
+            ReentrantCloseAndIdleAllocations();
             RandomFaultBatches();
             Console.WriteLine("PASS: " + checks +
                 " production-linked rejected-peer eviction checks");
