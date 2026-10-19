@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-235300-bug33-MAIN-02 — BUG-33 首发失败恢复代码与局部测试已交付
+- 发件人：bug33-map-outbound-retry-fix-20261019
+- 收件人：MAIN
+- 时间：2026-10-19 23:53 +08:00
+- 状态：子补丁提交完成，原 Owner/R13/正式包待办
+- 关联任务/文件：`agent-tasks/待办/BUG-33-地图差量首次发送失败遗留在途状态.md`、`AGENT-COORDINATION.md`
+- 消息：代码提交 `d2574f8`：仅精确暂存 `Authority.cs` 的客端地图 Publish 与 ACK 单行级 hunk、`MultiplayerSession.cs` 的 Tick/退出两行、新真实 `MapOutbound.cs` 和 .NET8 局部测试。固定原 MapUpdate/CommitId/任期/Revision 的一份已编码帧，2 秒等待入队重试，成功入队仍保留原等待 ACK 状态，60 秒失败原生暂停，旧视图/同步回调不会误删新事务。生产 partial 本机及独立 Git HEAD 各 65892 项；BUG-32 个人及缓存/ACK/最终检查点回归通过。OptimizationChecks 旧缓存桩本轮编译失败未冒称通过；完整 Authority/Native/三端构建/实机未做。保留全部其他 Agent 权限、世界/Transport 及版本历史 dirty，本轮未改协议/存档/游戏运行副本。
+- 需要回复：用户本次明确要求 Git 提交推送；已提交代码并准备文档提交后推送 `codex/multiplayer-v1`。请主控再统一处理 R13 源码签收、BUG-32/33 跨门禁、VERSION/CHANGELOG、三端 BuildOnly 和真实 TCP/Steam 游戏测试；BUG-33 不提前归档。
+- 回复关联：MSG-20261019-231200-bug33-MAIN-01
+
 ### MSG-20261019-bug32-MAIN-01 — 个人进度同步发送失败局部修复及 BUG-32 任务卡待集成
 - 发件人：bug32-personal-outbound-audit-fix-20261019
 - 收件人：MAIN

@@ -1,20 +1,20 @@
 # BUG-33 / P1 · 客端地图差量首次发送失败可能留下幽灵在途状态
 
-> **状态：待办 / 只读源码静态审查（S0）完成，未修改功能源码、未执行故障注入或游戏实测。**
+> **状态：待办 / 局部生产出站恢复代码已提交、S1 生产 partial 本机故障注入通过；完整生产 Authority/Native/Steam/TCP/真实双端验收未完成。**
 >
 > **建卡：** 2026-10-19，`codex/multiplayer-v1`；首次检查 HEAD `4776799ca81210556194b87e1e3e10a4ea2707f5`。
 >
 > **建议 Owner：** Session/Authority 地图同步原 Owner；Transport Owner 验证出站是否实际入队；GameBridge Owner 审核捕获检查点；主控负责 R13 混合源码签收、构建和真实验收。
 >
-> **并行认领避让：** 协调表已存在 `bug32-personal-outbound-audit-fix-20261019`，另一 Agent 正认领**个人差量** `personalInFlight` 的失败恢复。本卡只管理**地图差量** `inFlightUpdates`，不接手对方 BUG-32 或修改其源码。个人与地图发布相互阻塞的交集仅作为集成依赖。
+> **并行认领避让：** BUG-32 个人差量已由另一 Agent 以 `7101fe2` 独立提交，另有测试/交接提交；本卡只管理**地图差量** `inFlightUpdates`，没有修改 `PersonalOutbound.cs` 或个人 ACK/Reset，发布门禁仍需二者合并复核。
 
-## 1. 源码证据与条件性风险
+## 1. 源码证据与条件性风险（以下为首次审查时的旧代码）
 
 V1 要求**房主唯一权威**地记录地图 `CommitId/MapRevision`，客端原生地表状态只能在完整确认后推进自己的网络基线；离开/退出时的最终检查点不能把未得到主机回执的差量报告为已保存。
 
 | 生产文件/方法 | 当前源码事实 | 风险与限制 |
 | --- | --- | --- |
-| `src/Session/Authority.cs::PublishLocalMapsCore` | 捕获 `bridge.CaptureMapUpdate` 后，填入 `CommitId`、`SessionId`、`MapId`、`AuthorityEpoch`、`BaseRevision/Revision`，然后在客户端路径执行 `inFlightUpdates[map.MapId] = update; Send("host", "map", WireMapUpdate(update))` | **先添加本地 in-flight，再进行序列化/发送**。若本次编码或传输在实际入队前抛错，没有针对这条新预留的明确回滚；房主没有对应消息，也无法生成该 `CommitId` 的 ACK |
+| `src/Session/Authority.cs::PublishLocalMapsCore`（旧版） | 捕获 `bridge.CaptureMapUpdate` 后，填入 `CommitId`、`SessionId`、`MapId`、`AuthorityEpoch`、`BaseRevision/Revision`，客户端原本执行 `inFlightUpdates[map.MapId] = update; Send("host", "map", WireMapUpdate(update))` | **旧版先添加 in-flight、后序列化/发送，失败无可恢复的待发帧；局部代码 `d2574f8` 已将该出口接到新的同事务重试辅助方法** |
 | `src/Session/Authority.cs::PublishLocalMapsCore` | 下次遍历时，对 `inFlightUpdates.ContainsKey(map.MapId)` 的地块直接跳过 | 已被标记但实际上没有送出的地图可能持续不被再次捕获/提交；不能只靠网络恢复期待房主回包 |
 | `src/Session/SlowOperations.cs::PublishLocalMaps` | `try { PublishLocalMapsCore(force); } finally { ReportSlowOperation(...); }` | 只保证耗时诊断，**没有撤销或重试已经登记的 in-flight** |
 | `src/Session/MultiplayerSession.cs::Tick` | `maps.publish` 后执行 `personal.publish`；最终检查点根据 `inFlightUpdates.Count != 0 || personalInFlight.Count != 0` 决定能否提交 `finalDone`；外层 `catch` 设置 `Paused` 并提示失败 | 客端被暂停不会自动清理没有实际提交的在途记录；即使改为手动重试，旧记录也可能阻断安全退出 |
@@ -26,7 +26,7 @@ V1 要求**房主唯一权威**地记录地图 `CommitId/MapRevision`，客端�
 
 1. 客端正在模拟地图 `M`，在 Revision 17 生成新 `CommitId=C`、Revision 18 的增量。
 2. 客端先保存本地 `inFlightUpdates[M]=update`，尚未拿到房主确认。
-3. `Send("host", "map", ...)` 在真正进入 TCP/Steam 发送队列前同步抛出“队列已满”或“连接已关闭”。目前没有该 `M/C` 对应的明确撤销/有界重发路径。
+3. 旧版 `Send("host", "map", ...)` 在真正进入 TCP/Steam 发送队列前同步抛出“队列已满”或“连接已关闭”，此时还没有与 `M/C` 对应的明确撤销/有界重发路径。
 4. 后续正常 `PublishLocalMapsCore` 看到 `M` 已在途，会跳过。由于房主没看到 `C`，不会产生与之匹配的 ACK；最终检查点仍把本地标记视作未完成。
 
 **这是一个条件性可靠性风险，不是已经测到的死锁、内存泄漏或玩家资产丢失。** `Tick` 外层可能因发送异常暂停业务，但“已暂停”与“已经安全撤销未送出的事务”是不同概念。
@@ -53,14 +53,16 @@ V1 要求**房主唯一权威**地记录地图 `CommitId/MapRevision`，客端�
 
 ## 4. 待办实施分工（本轮未执行）
 
-- [ ] **B33-1 / Session + Transport：** 核对 `Protocol.Encode → transport.Send` 的每类异常是在排队前、已经排队后还是不确定阶段；区分 TCP/Steam 和客户端断开/重连。
-- [ ] **B33-2 / Session：** 对 `PublishLocalMapsCore` 的首次 `map` 业务发送设计最窄的“尝试预留 → 确认入队 / 明确回滚 / 原 CommitId 的有界重试”状态机；标记只对应唯一事务对象。
+- [x] **B33-1a / 本地源码分类：** 只读检查生产 `TcpTransport.Send` / `SteamTransport.Send`；两者在 FIFO 克隆/入队前同步拒绝队列满或已关闭，分别对应 `IOException` / `InvalidOperationException`；编码和未知后置异常另行 fail-closed。**原 Transport Owner 正式签收及真实网络竞态尚未执行。**
+- [ ] **B33-1b / Transport 实测：** 本机真实 TCP/Steam 满队列、同步断链、连接切换、后置回调等仍需故障注入，并签收“肯定未入队”的语义。
+- [x] **B33-2 / 局部生产出站修复：** `PublishLocalMapsCore` 改调用 `SendCapturedMapUpdate`；真实新 partial `MapOutbound.cs` 将同一 `MapUpdate` 和一次性编码后的帧保留到 TCP/Steam 接受入队为止，明确失败 2 秒间隔原帧重试，不重捕获地图；单房间同一时刻至多一个尚未入队的大帧，连续 60 秒失败保留 in-flight 并锁住本机原生状态。成功入队只移除待入队帧，**仍保留 in-flight 等待真正房主 ACK**。原生/编码或未知异常不可自动重复发送。
 - [ ] **B33-3 / Game + Session：** 确认 `bridge.CaptureMapUpdate` 的基线、副作用与原生 Revision；新尝试必须保留完整正确的 checkpoint，不得从已经消费的本地 delta 错误重捕获。
-- [ ] **B33-4 / Session：** 与 BUG-32 当前个人发送 Owner 明确先后顺序、互斥门禁和 ACK/Reset/关闭恢复接口；不抢改 `PersonalOutbound`、个人接收和测试。
-- [ ] **B33-5 / Test：** 新增链接真实 `Authority.PublishLocalMapsCore/ReceiveMapAcknowledgement` 的故障注入，覆盖编码失败、纯排队拒绝、实际入队 ACK 丢失、同步重入、重复/旧任期收包、退出与地图强制完整基线。不可复制一份假发送算法当作生产覆盖。
+- [x] **B33-4a / 分工：** 保留 BUG-32 已提交的原始个人差量缓存、ACK/Reset 与会话清理代码不动；本轮 MapOutbound 只接入地图 2 行级调用以及一个 Tick/退出清理入口，复用原在途互斥门禁。**个人+地图实际交错和关闭测试仍需跨 Owner 联测。**
+- [x] **B33-5a / 本机局部生产源码注入：** 新 `tools/MapOutboundAdmissionChecks/` 直接编译真实 `src/Session/MapOutbound.cs`，模拟房主 ACK、TCP/Steam Send、旧视图、同步重入、连续拒绝等并断言真实辅助方法的状态；已通过 65,892 项及 Git HEAD 隔离快照同数。
+- [ ] **B33-5b / 完整 Authority 联编：** 现行独立测试没有编译实际 `Authority.PublishLocalMapsCore` / 全部 `ReceiveMapAcknowledgement`、`GameBridge.NativeMapReplicator` 与完整 `MultiplayerSession.Tick`；它们只做源码精确接线，需原 Owner 继续做真正主机/客端/Native 故障注入。
 - [ ] **B33-6 / 主控：** 原 Owner 及所有混合 hunk 签收，真正可复现的 Git 0U/0M 源码闭包，独立小提交与 VERSION/CHANGELOG 收口，再按适用的用户指令执行三端 BuildOnly 和多人验收。
 
-## 5. 故障注入验收矩阵（当前未执行）
+## 5. 故障注入验收矩阵（S1 仅局部完成，完整生产/实机未执行）
 
 | 场景 | 注入点 | 期望验证 |
 | --- | --- | --- |
@@ -75,10 +77,32 @@ V1 要求**房主唯一权威**地记录地图 `CommitId/MapRevision`，客端�
 | C33-09 | 真 Native Save/授权/伪造 MapRevision 失败 | 真权限、原生、存档错误照旧阻断，不被普通发送恢复保护吞掉 |
 | C33-10 | 用户以 TCP/Steam 2～3 端做大地图、发送背压、断线恢复、保存续开 | 房主和客户端 MapRevision/CommitId/实体归属、个人版本与 `SaveGeneration` 一致，不重放资产副作用 |
 
-**证据层级：** S0 实际源码静态审查（本轮完成）；S1 生产 partial 故障注入、S2 TCP/Steam 入队回环、S3 经 R13 签收的三端同源 `BuildOnly`、S4 用户多人游戏状态核对（本轮均未执行）。
+**实际覆盖：** C33-01/02 的同步 IO、InvalidOperationException 拒绝入队和 2 秒原帧重试已覆盖；C33-03 的模拟编码错误/未知异常本机锁已覆盖，但真正 GameBridge 捕获未测；C33-04 在假主机 ACK 中验证队列已接收时不自动重发、收到匹配回执才释放（未注入真正房主 ACK 丢失）；C33-05 模拟入队回调同步 ACK、替换新 MapUpdate、旧发送方晚抛错，只有当前租约可清理；C33-06 的旧会话/世界/任期及覆盖完整视图在生产辅助方法层覆盖，非完整 Unity 地图恢复；C33-08 的 60 秒失败锁与未确认在途门禁局部覆盖，最终 SaveOrThrow 仍待；C33-07/09 真实双通道/原生存档负向联测未完成；C33-10 完全未执行。
+
+**证据层级：** S0 实际源码静态审查（完成）；S1 直接链接真实 `MapOutbound.cs` 的局部故障注入（完成），**不是完整 Authority/Native 调用链测试**；S2 TCP/Steam 真网络排队、S3 经 R13 签收的三端同源 `BuildOnly`、S4 用户多人游戏状态核对（均未执行）。
 
 ## 6. 归档要求与本轮边界
 
 须由 Session/Transport/Game 原 Owner 签收、C33-01～09 的生产回归和故障注入留存、R13 干净源码三端构建、用户 C33-10 双端/多人日志及游戏状态验收全部完成后方可归档。**仅代码阶段完成也需将本卡留在 `agent-tasks/待办/`。**
 
-本轮只读浏览 `Authority/Networking/MultiplayerSession/SlowOperations/Transport` 与旧任务、协调表；发现并行 BUG-32 Owner 后收窄地图边界，新增本任务和索引/邮箱/协作记录。**未修改 MOD 功能源码、版本、协议、存档或三端副本，未编译、BuildOnly、启动游戏或推送。**历史未提交源码均保留。
+## 7. 2026-10-19 · 局部代码/测试已交付
+
+**核心代码提交：** `d2574f83bd27e9e34a57a89abafbab76deac4c1a`，`fix: retain map deltas across outbound enqueue failures`。
+
+- 新增 `src/Session/MapOutbound.cs`，持有一份 **同一 MapUpdate 的原编码帧**。进入 TCP/Steam 队列前的明确同步 `IOException` 或 `InvalidOperationException` 以 2 秒间隔重试；已经成功入队的更新不能因 ACK 尚未收到而再次首发；60 秒持续拒绝时 `LockNativeFault`，不无限重捕获原生地图。对编码、未知阶段异常单独锁定，不伪造入队成功。
+- `src/Session/Authority.cs`：在客端发布前辨别旧租约被完整房主视图/ACK 替换的情况；`PublishLocalMapsCore` 实际调用 `SendCapturedMapUpdate`，等待未入队帧时不继续大地图采样；匹配 ACK 释放同对象的暂存。对旧混合源码只精确暂存本轮自己代码，**其他 Agent 的地图时间、权限、缓存、版本差异仍在原工作区**。
+- `src/Session/MultiplayerSession.cs`：未缩放 Tick 中接入两秒退避入口；关闭会话只释放新待入队帧，不触及对方 `PersonalOutbound` 或房主存档。
+
+| 实际本机命令 / 证据 | 结果 | 不属于本次已验收范围 |
+| --- | --- | --- |
+| `dotnet run -c Release --project tools/MapOutboundAdmissionChecks/MapOutboundAdmissionChecks.csproj` | **65,892 项通过**，链接真实生产 `MapOutbound.cs`，覆盖严格发送顺序、重复拒绝、原帧字节引用、同步重入、原生故障锁、身份/任期过期和 12,000 轮固定随机场景 | 外围网络/地图捕获/ACK 由受控桩实现，非真 Unity 原生和 TCP/Steam |
+| 从提交 `d2574f8` 用 `git archive HEAD src/Session/MapOutbound.cs tools/MapOutboundAdmissionChecks` 导出隔离源码并运行同一项目 | **65,892 项通过**，证明此新 helper 和测试可直接从已提交文件编译 | 不是完整项目的干净 Git 0U/0M 或三端 BuildOnly |
+| `PersonalOutboundChecks` | **77,839 项通过** | BUG-32 已独立提交的个人 delta，非地图/个人真实同步交错 |
+| `MapCacheNegotiationChecks` | **60,084 项通过** | 地图缓存协商生产 partial，并非同一个地图 ACK |
+| `ReliableCommitFanoutChecks` | **30,027 项通过** | 权威 fanout helper 的假传输，不是房主实际存档 |
+| `FinalCheckpointGateChecks` | **53,972 项通过** | 退出门禁的局部工具，并非实际双端安全退出 |
+| `OptimizationChecks` | **未通过编译**，旧 `MapCacheExpiryStubs` / `WaitingView` 类型不匹配 | 此失败与 BUG-33 的改动无关；未改动其他 Agent 的测试桩，不能计入本轮通过 |
+
+**限制：** 当前生产 Source 仍有 R13 未签收的长期脏文件以及未跟踪的地图捕获、慢操作等依赖；仅新 helper 的干净快照编译成功，**不代表所有已提交 MOD 源码能单独构建**。业务修复版本号/CHANGELOG、三端官方包和用户真实联机需要主控统一处理。此次按用户请求提交并推送 GitHub，但“推送成功”不等于完成 BUG-33 关闭条件；本卡继续保留在待办。
+
+**历史建卡说明：** 先前建卡时仅审查源码和创建 BUG-33，没有修改功能。**本次**实施上述局部出站恢复、测试和文档交接；协议、存档、Game/Core/Transport、游戏本体及三端安装副本均未改，未运行游戏或直接构建安装。

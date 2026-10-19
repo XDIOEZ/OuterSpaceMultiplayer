@@ -40,7 +40,7 @@
 | 地图延迟重放的拒绝错误提示 | [待办/BUG-30-地图重放拒绝提示失败误锁房间.md](待办/BUG-30-地图重放拒绝提示失败误锁房间.md) | 局部代码提交 `3253403`：延迟重放 `MessageRejectionException` 走现有可选通知/隔离策略，阻断故障 peer 已排队后续指令但不影响 B/C FIFO；新 production partial 60,186 项与隔离 Git HEAD 同数通过。**仍需原 Owner 签收、真实原生/存档故障、TCP/Steam 多人、三端完整 BuildOnly 才可归档** |
 | 命令完成监听器异常与权威结果归责 | [待办/BUG-31-命令完成事件异常污染已提交结果.md](待办/BUG-31-命令完成事件异常污染已提交结果.md) | 局部源码提交 `710f975`：专属/原生 Fleet/Travel 回调先行且异常锁定本机 native，公开 `CommandCompleted` 的可选 UI 监听器逐个隔离；相同 CommandId 同步重入保护。真实生产通知 partial 本机及 Git HEAD 隔离快照均 **45,025 项通过**，另 5 组关联回归通过。**仍需 Game Owner 区分纯 Toast 与原生回调、完整 Session/Native/Save 注入、R13 三端 BuildOnly 与用户 TCP/Steam 实机验收** |
 | 个人进度首次发送与回执关联 | [待办/BUG-32-个人进度发送失败与回执关联.md](待办/BUG-32-个人进度发送失败与回执关联.md) | 代码提交 `7101fe2`：Native 比较基准已前移后，客户端保留已编码个人 delta；明确未入队时两秒原样重试，60 秒永久拥塞 fail-closed；仅匹配本地玩家/当前 BaseRevision/Revision 的 ACK 才解除在途。新生产 partial 和隔离 Git HEAD 各 **77,839 项通过**，原 ACK fanout 30,027 与退出检查点 53,972 项通过；**仍缺完整 NativePersonalSync/真实 ACK 丢失/重连、R13 和三端联机实测** |
-| 地图差量首发失败留下在途标记 | [待办/BUG-33-地图差量首次发送失败遗留在途状态.md](待办/BUG-33-地图差量首次发送失败遗留在途状态.md) | 2026-10-19 S0 静态审查：客端 `PublishLocalMapsCore` 在 `Send(host,map)` 前设置 `inFlightUpdates[mapId]`；确定未入 FIFO 的同步失败缺少回滚/有界同事务重发，可能阻碍下一轮地图提交和最终检查点。**BUG-32 个人差量已有另一 Agent 认领，本卡独占地图发送部分**；未改代码或故障注入，待 Owner 签收、C33-01～10 真实验收。 |
+| 地图差量首发失败留下在途标记 | [待办/BUG-33-地图差量首次发送失败遗留在途状态.md](待办/BUG-33-地图差量首次发送失败遗留在途状态.md) | 局部修复 `d2574f8`：客端唯一地图差量原编码帧 2 秒退避首发入队，成功后仍等待真实房主 ACK；60 秒队列拒绝本机 fail-closed，同步重入与旧任期不误删新事务。生产 `MapOutbound.cs` 局部联编及干净 HEAD 快照 **65,892 项通过**，BUG-32 个人、缓存协商、ACK fanout、最终检查点回归通过；旧 OptimizationChecks 因无关桩不匹配仍编译失败。**完整 Authority/Native 负向、R13 同源三端 BuildOnly、用户 TCP/Steam 实机与原 Owner 签收仍需完成。** |
 
 ## 处理流程
 
