@@ -29,6 +29,10 @@ namespace FreeWorldMultiplayer
         private readonly HashSet<long> requiresFullTerrain = new HashSet<long>();
         private readonly Dictionary<string, MapCacheQuery> waitingMapCaches = new Dictionary<string, MapCacheQuery>();
         private readonly Dictionary<string, double> waitingMapCacheSeconds = new Dictionary<string, double>();
+        // Map-cache Tick snapshots are room-scoped and reentrancy-safe. Reuse
+        // them while pending views wait, and release references when leaving.
+        private readonly VisitTickSnapshot<OfferedMapView> offeredMapTickSnapshot = new VisitTickSnapshot<OfferedMapView>();
+        private readonly VisitTickSnapshot<MapCacheQuery> waitingMapTickSnapshot = new VisitTickSnapshot<MapCacheQuery>();
         private readonly MapCacheOutboundRetry cacheOutboundRetry = new MapCacheOutboundRetry();
         private long retainedMapViewBytes;
         private bool HasMapCacheBarrier => waitingMapCaches.Count != 0;
@@ -372,6 +376,11 @@ namespace FreeWorldMultiplayer
             { long old; required.Players.TryGetValue(fields.PlayerId, out old); required.Players[fields.PlayerId] = Math.Max(old, fields.PersonalRevision); }
         }
         private void ClearMapCacheSession()
-        { offeredMapViews.Clear(); sentMapViews.Clear(); waitingMapCaches.Clear(); waitingMapCacheSeconds.Clear(); retainedMapViewBytes = 0; retriedCacheViews.Clear(); fullTerrainRetries.Clear(); requiresFullTerrain.Clear(); cacheOutboundRetry.Clear(); }
+        {
+            offeredMapViews.Clear(); sentMapViews.Clear(); waitingMapCaches.Clear(); waitingMapCacheSeconds.Clear();
+            retainedMapViewBytes = 0; retriedCacheViews.Clear(); fullTerrainRetries.Clear(); requiresFullTerrain.Clear();
+            cacheOutboundRetry.Clear();
+            offeredMapTickSnapshot.Reset(); waitingMapTickSnapshot.Reset();
+        }
     }
 }

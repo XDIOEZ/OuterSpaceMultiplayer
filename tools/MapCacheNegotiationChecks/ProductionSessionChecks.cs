@@ -188,5 +188,46 @@ internal static class ProductionSessionChecks
         try { malformed.HostSend("bad"); } catch (FormatException) { surfaced = true; }
         check(surfaced && malformed.HostPendingViews == 0 && malformed.HostReservedBytes == 0,
             "unexpected encode/transport error is surfaced and reservation is not leaked");
+
+        // An idle room must not allocate two LINQ list snapshots every Tick.
+        var idleRoom = new MultiplayerSession();
+        for (int i = 0; i < 64; i++) idleRoom.AdvanceCache(0);
+        long idleBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 3000; i++) idleRoom.AdvanceCache(0);
+        long idleBytes = GC.GetAllocatedBytesForCurrentThread() - idleBefore;
+        check(idleBytes == 0, "idle map-cache Tick allocates no snapshot garbage: " + idleBytes);
+
+        // The same should hold while views are pending for many frames.
+        var activeRoom = new MultiplayerSession();
+        activeRoom.GuestExpect(MultiplayerSession.Query(31, Id('8')));
+        activeRoom.GuestExpect(MultiplayerSession.Query(32, Id('9')));
+        var activeHost = new MultiplayerSession();
+        activeHost.ConfigureHost();
+        activeHost.HostSend("good");
+        for (int i = 0; i < 64; i++)
+        { activeRoom.AdvanceCache(0); activeHost.AdvanceCache(0); }
+        long activeBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 3000; i++)
+        { activeRoom.AdvanceCache(0); activeHost.AdvanceCache(0); }
+        long activeBytes = GC.GetAllocatedBytesForCurrentThread() - activeBefore;
+        check(activeBytes == 0 && activeRoom.GuestWaitingViews == 2 && activeHost.HostPendingViews == 1,
+            "pending map-cache Tick keeps leases without allocation: " + activeBytes);
+
+        // The first timeout can synchronously close a room. Its previous
+        // snapshot still includes the second view: that stale key must be
+        // skipped rather than looked up in a cleared stopwatch dictionary.
+        var closing = new MultiplayerSession();
+        closing.GuestExpect(MultiplayerSession.Query(40, Id('a')));
+        closing.GuestExpect(MultiplayerSession.Query(41, Id('b')));
+        int timedOutViews = 0;
+        closing.OnFailMapLoading = error =>
+        {
+            check(error is TimeoutException, "timeout retains original exception kind");
+            timedOutViews++;
+            closing.DisposeCache();
+        };
+        closing.AdvanceCache(60);
+        check(timedOutViews == 1 && closing.GuestWaitingViews == 0 && closing.DeferredPackets == 0,
+            "room teardown during timeout skips subsequent stale snapshot entries");
     }
 }

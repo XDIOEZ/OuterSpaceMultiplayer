@@ -176,7 +176,12 @@ namespace FreeWorldMultiplayer
                 Snapshot = new MapSnapshot { MapId = map.MapId, Revision = 1 }
             }, fullTerrain, ignoreCache);
         }
-        private void FailMapLoading(Exception error) { throw error; }
+        internal Action<Exception> OnFailMapLoading;
+        private void FailMapLoading(Exception error)
+        {
+            if (OnFailMapLoading != null) { OnFailMapLoading(error); return; }
+            throw error;
+        }
         private static void Require(BridgeResult result, string action) { }
 
         internal static MapView MakeView(long mapId, string viewId, long epoch = 1)
