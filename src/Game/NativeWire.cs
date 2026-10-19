@@ -61,6 +61,12 @@ namespace FreeWorldMultiplayer
         }
         private sealed class NativeFieldsResolver : DefaultContractResolver
         {
+            protected override JsonObjectContract CreateObjectContract(Type type)
+            {
+                JsonObjectContract contract = base.CreateObjectContract(type);
+                NativeArchiveCreation.Configure(type, contract);
+                return contract;
+            }
             protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
             {
                 Binder.Require(type);

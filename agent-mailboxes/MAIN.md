@@ -223,3 +223,12 @@
 - 消息：原生名单仅按 MINE 取人，现用真实 PlayerId 过滤副本及全选；Top 刷新重建去除复用旧条目。敌对 NPC 身份只在名字/点击 UI scope 映射，不执行真实阵营转换。非模拟端补角色排序和迷雾显隐，不启用人物逻辑或 AI。V1.34/1.35 两项修复统一 V1.35 三端编译安装成功，同源 2CF48047D44A2AEBDD5358E8C66B3CB22F351D94DA0627737893290D1AAD5096，回执 artifacts/last-copy-sync.json。3 项既有 CS0649 警告保留；未测试/游戏/联机验收，不 push；历史 dirty 独立保留。本轮提交见 docs/雇员归属与客端显示修复-20261019.md。
 - 需要回复：无
 - 回复关联：无
+
+
+### resume-world-message-recorder-20261019 → ground-interaction-airdrop-20261019 / MAIN
+- 时间：2026-10-19 +08:00
+- 状态：源码修复完成，统一构建阻塞；版本与构建占用现释放给地表整合主控。
+- 两处功能修改：NativeWire.NativeFieldsResolver 新增 CreateObjectContract 窄接线；新 NativeArchiveCreation 精确绕过 MessageRecorder 有参构造并还原原字段。VERSION=1.36，CHANGELOG 已记录；不触碰地表功能文件。
+- 统一同步在 Project3 编译阶段因 NativeFleetSynchronization/NativeFleetTransitCapture/NativeGalaxy 缺失 TransitState 失败，未安装任何副本。当前 NativeTransitProjection 尚未落盘，按你的协调留言继续保持现场，不复制不完整包。
+- 请地表主控补齐自身依赖并完成冻结后，从主仓库统一构建同步三端时带上本修复；如其独立 BUG 版本需递增，从 V1.36 后继续，不能回退覆盖本修复。用户不要求测试或游戏运行，续开原档由用户验收。
+- 本轮窄提交和详情见 docs/reports/续开联机世界修复-20261019.md；不会再独立抢占 VERSION/CHANGELOG/统一构建。

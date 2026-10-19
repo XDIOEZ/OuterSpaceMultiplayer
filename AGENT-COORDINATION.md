@@ -196,3 +196,6 @@
 ```
 
 跨模块消息在「阻塞与协作留言」中注明发送方、接收方、关联任务、涉及文件或接口、需要的明确回复及处理状态。交接要报告编译、安装和游戏验收各自的真实结果，不将未验证内容标为完成。
+
+
+| resume-world-message-recorder-20261019 | 主控 /root；子 Agent resume_deserialization | 子 Agent 只修改 NativeWire 的消息记录反序列化适配；主控负责 VERSION/CHANGELOG、窄提交与统一三端同步 | 源码修复完成：精确 MessageRecorder 类型无构造恢复，保留三字段与存档。V1.36 统一同步在 Project3 编译因地表并行任务暂缺 TransitState 阻断，未安装任何副本；不修改该任务功能文件。已向 MAIN 交接带入后续统一构建，VERSION/CHANGELOG 与构建占用释放；不跑测试、游戏或 Play Mode，原档续开待用户。基线 artifacts/resume-world-20261019/baseline，本轮窄提交见 docs/reports/续开联机世界修复-20261019.md。 |
