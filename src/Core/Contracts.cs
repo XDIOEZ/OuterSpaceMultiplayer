@@ -292,6 +292,8 @@ namespace FreeWorldMultiplayer
         public string LocalPlayerId;
         public bool IsHost;
         public Func<GameCommand, CommandResult> SubmitCommand;
+        public Action<PlayerFleetBattleConfiguration> SubmitBattleConfiguration;
+        public Action<PlayerFleetBattleReference> CancelBattlePreparation;
         public Func<long, long> AllocateUid;
         public Func<long, bool> CanSimulateMap;
         public Func<bool> IsPaused;
@@ -318,6 +320,9 @@ namespace FreeWorldMultiplayer
     // NativeJson is opaque data, never a client-selected CLR type name.
     public interface IGameBridge : IDisposable
     {
+        BridgeResult BeginPlayerFleetBattlePreparation(PlayerFleetBattleRecord battle);
+        BridgeResult ValidatePlayerFleetBattleConfiguration(PlayerFleetBattleRecord battle, PlayerFleetBattleConfiguration configuration);
+        BridgeResult CancelPlayerFleetBattlePreparation(PlayerFleetBattleRecord battle);
         void Attach(BridgeContext context);
         bool IsCreatingWorld { get; }
         BridgeResult BeginCreateWorld(WorldOptions options, string hostPlayerId, UidRange uids);

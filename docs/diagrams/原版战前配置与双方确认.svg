@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="490" viewBox="0 0 1100 490">
+  <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#93a5be" stroke-width="2"/></marker></defs>
+  <rect width="1100" height="490" rx="18" fill="#111c2d"/>
+  <g font-family="Microsoft YaHei, sans-serif" fill="#edf3fb">
+    <text x="38" y="47" font-size="25" font-weight="bold">玩家舰战 · 原版战前配置</text>
+    <text x="38" y="77" font-size="15" fill="#b2c1d5">迎战后配置双方舰队，双方确认后才创建战场</text>
+    <rect x="35" y="185" width="140" height="76" rx="12" fill="#263a54"/>
+    <text x="105" y="216" text-anchor="middle" font-size="18">攻击 / 拦截</text><text x="105" y="242" text-anchor="middle" font-size="15" fill="#b2c1d5">防守方选择迎战</text>
+    <rect x="235" y="114" width="260" height="91" rx="12" fill="#244766"/>
+    <text x="365" y="145" text-anchor="middle" font-size="18">进攻方 · 原版战前部署</text><text x="365" y="174" text-anchor="middle" font-size="15">选择本方首发、后备、座驾</text>
+    <rect x="235" y="245" width="260" height="91" rx="12" fill="#244766"/>
+    <text x="365" y="276" text-anchor="middle" font-size="18">防守方 · 原版战前部署</text><text x="365" y="305" text-anchor="middle" font-size="15">选择本方首发、后备、座驾</text>
+    <rect x="565" y="176" width="235" height="94" rx="12" fill="#365344"/>
+    <text x="682" y="210" text-anchor="middle" font-size="18">房主收齐双方确认</text><text x="682" y="240" text-anchor="middle" font-size="15">真实舰队归属与部署校验</text>
+    <rect x="865" y="176" width="200" height="94" rx="12" fill="#3f4d75"/>
+    <text x="965" y="210" text-anchor="middle" font-size="18">创建同一场战斗</text><text x="965" y="240" text-anchor="middle" font-size="15">两端就绪后开始战斗</text>
+    <g fill="none" stroke="#93a5be" stroke-width="2" marker-end="url(#arrow)"><path d="M175 214H202V159H235"/><path d="M202 223V290H235"/><path d="M495 159H530V206H565"/><path d="M495 290H530V243H565"/><path d="M800 223H865"/></g>
+    <rect x="235" y="383" width="830" height="66" rx="12" fill="#3d3037"/>
+    <text x="650" y="410" text-anchor="middle" font-size="17">任一方取消、配置超时、断线或双方不再敌对 → 取消未开战交战</text>
+    <text x="650" y="435" text-anchor="middle" font-size="14" fill="#c9bbc2">释放双方舰队；不创建伤亡、战利品或虚假战果</text>
+    <path d="M365 336V383" fill="none" stroke="#bc929f" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+</svg>

@@ -72,6 +72,7 @@ namespace FreeWorldMultiplayer
             bridge.Attach(new BridgeContext
             {
                 LocalPlayerId = LocalPlayerId, IsHost = IsHost, SubmitCommand = Submit,
+                SubmitBattleConfiguration = SubmitBattleConfiguration, CancelBattlePreparation = CancelBattlePreparation,
                 AllocateUid = AllocateUid, CanSimulateMap = CanSimulateMap, GetMapAccess = GetMapAccess,
                 IsPaused = () => IsStarting || Paused || closing || nativeFault != null, SimulationSpeed = () => Speed,
                 RequestClock = SetClock, RequestSave = Save,

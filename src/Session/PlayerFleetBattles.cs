@@ -84,6 +84,7 @@ namespace FreeWorldMultiplayer
             World.FleetBattles[record.BattleId] = record;
             if (record.Stage == PlayerFleetBattleStage.Finished)
             {
+                Require(bridge.CancelPlayerFleetBattlePreparation(record), "关闭已取消或结束的原版战前配置");
                 if (previous == null || previous.Stage != PlayerFleetBattleStage.AwaitingResponse)
                     Require(bridge.StopPlayerFleetBattle(record), "结束本机玩家舰战场景");
                 localBattlePreparations.Remove(record.BattleId); pendingBattleFrames.Remove(record.BattleId);
@@ -114,7 +115,7 @@ namespace FreeWorldMultiplayer
                     throw new MessageRejectionException("舰战失败回执的阶段已失效。");
                 InterruptBattle(record, "参战端无法继续战斗。"); return;
             }
-            if (record.Stage != PlayerFleetBattleStage.Preparing || !record.SceneAuthorized || record.Interrupted)
+            if (record.Stage != PlayerFleetBattleStage.Preparing || !record.SceneAuthorized || !BattleConfigurationsComplete(record) || record.Interrupted)
                 throw new MessageRejectionException("舰战准备回执已过期。");
             if (GetRelation(record.AttackerPlayerId, record.DefenderPlayerId) != Relation.Hostile)
             { EndNonHostileBattle(record); throw new MessageRejectionException("双方已不再敌对，舰战准备已取消。"); }
@@ -138,7 +139,7 @@ namespace FreeWorldMultiplayer
             if (reference == null || !World.FleetBattles.TryGetValue(reference.BattleId ?? "", out record) || record.Stage != PlayerFleetBattleStage.Preparing
                 || record.AuthorityEpoch != reference.AuthorityEpoch || !IsBattleParticipant(record, actor) || World.Players[actor].CurrentMapId >= 0)
                 throw new MessageRejectionException("舰战离图确认已经失效。");
-            if (record.SceneAuthorized) return;
+            if (record.PreparationAuthorized || record.SceneAuthorized) return;
             battleQuiescent[record.BattleId].Add(actor);
             if (battleQuiescent[record.BattleId].Count != 2) return;
             if (GetRelation(record.AttackerPlayerId, record.DefenderPlayerId) != Relation.Hostile)
@@ -156,7 +157,10 @@ namespace FreeWorldMultiplayer
                     bridge.ResetGalaxyRecipient(player);
                     SendAndConfirmGalaxy(peer, player);
                 }
-                record.SceneAuthorized = true; SendBattleState(record);
+                record.PreparationAuthorized = true;
+                record.PreparationExpiresAtRoomSeconds = World.RoomRealSeconds + FleetConfigurationSeconds;
+                battleDeadlines.Remove(record.BattleId);
+                SaveOrThrow(); SendBattleState(record);
             }
             catch (Exception error) { BlockBattle(record, error); }
         }
@@ -223,7 +227,8 @@ namespace FreeWorldMultiplayer
             { EndNonHostileBattle(record); return; }
             if (!ConsumeCommunicationRate(actor, "battleFrame")) throw new MessageRejectionException("舰战检查点发送过于频繁。");
             if (frame.BaseRevision != record.Revision || frame.Revision != frame.BaseRevision + 1 || frame.NativeJson == null || frame.NativeJson.Length > BattleFrameMaxCharacters
-                || record.Stage != PlayerFleetBattleStage.Active && !(initial && record.Stage == PlayerFleetBattleStage.Preparing))
+                || record.Stage != PlayerFleetBattleStage.Active && !(initial && record.Stage == PlayerFleetBattleStage.Preparing
+                    && record.SceneAuthorized && BattleConfigurationsComplete(record)))
                 throw new MessageRejectionException("舰战检查点基准或阶段已经失效。");
             Require(bridge.ApplyPlayerFleetBattleFrame(record, frame), "验证并接收唯一模拟者舰战检查点");
             record.Checkpoint = JsonData.Clone(frame); record.Revision = frame.Revision;
@@ -271,7 +276,8 @@ namespace FreeWorldMultiplayer
             {
                 record.Stage = PlayerFleetBattleStage.Finished;
                 record.Checkpoint = null;
-                try { TrimFinishedBattles(); SaveOrThrow(); Require(bridge.StopPlayerFleetBattle(record), "取消尚未开始的舰战准备"); SendBattleState(record); }
+                record.PreparationAuthorized = false; record.SceneAuthorized = false; record.PreparationExpiresAtRoomSeconds = 0;
+                try { SaveOrThrow(); Require(bridge.CancelPlayerFleetBattlePreparation(record), "取消原版战前配置"); Require(bridge.StopPlayerFleetBattle(record), "取消尚未开始的舰战准备"); TrimFinishedBattles(); SendBattleState(record); }
                 catch (Exception error) { BlockBattle(record, error); }
                 return;
             }
@@ -305,6 +311,8 @@ namespace FreeWorldMultiplayer
             foreach (var ended in World.FleetBattles.Values.Where(x => x.Stage == PlayerFleetBattleStage.Finished).ToList())
             {
                 ended.Checkpoint = null;
+                ended.PreparationAuthorized = false; ended.SceneAuthorized = false; ended.PreparationExpiresAtRoomSeconds = 0;
+                ended.AttackerConfiguration = null; ended.DefenderConfiguration = null;
                 battleResyncPending.Remove(ended.BattleId);
                 localBattlePreparations.Remove(ended.BattleId); pendingBattleFrames.Remove(ended.BattleId);
                 battleReady.Remove(ended.BattleId); battleQuiescent.Remove(ended.BattleId); battleDeadlines.Remove(ended.BattleId);
@@ -378,6 +386,8 @@ namespace FreeWorldMultiplayer
                 case "battle.request": HostBattleRequest(actor, ReadCommunication<PlayerFleetBattleRequest>(message)); break;
                 case "battle.respond": HostFleetInterceptResponse(actor, ReadCommunication<PlayerFleetInterceptResponse>(message)); break;
                 case "battle.left": HostBattleQuiescent(actor, ReadCommunication<PlayerFleetBattleReference>(message)); break;
+                case "battle.configuration": HostBattleConfiguration(actor, ReadCommunication<PlayerFleetBattleConfiguration>(message)); break;
+                case "battle.cancel": HostCancelBattlePreparation(actor, ReadCommunication<PlayerFleetBattleReference>(message)); break;
                 case "battle.leave":
                     var leave = ReadCommunication<PlayerFleetBattleReference>(message); PlayerFleetBattleRecord leaving;
                     if (leave == null || !World.FleetBattles.TryGetValue(leave.BattleId ?? "", out leaving) || leaving.AuthorityEpoch != leave.AuthorityEpoch || !IsBattleParticipant(leaving, actor))
@@ -447,10 +457,12 @@ namespace FreeWorldMultiplayer
                 }
                 if (IsHost && battleDeadlines.ContainsKey(record.BattleId))
                 {
-                    battleDeadlines[record.BattleId] -= seconds;
+                    if (!Paused) battleDeadlines[record.BattleId] -= seconds;
                     if (battleDeadlines[record.BattleId] <= 0)
                     { battleDeadlines.Remove(record.BattleId); if (record.Stage == PlayerFleetBattleStage.Preparing) InterruptBattle(record, "舰战准备超时。"); else if (record.Interrupted) CommitBattle(record); }
                 }
+                if (IsHost && record.Stage == PlayerFleetBattleStage.Preparing && record.PreparationAuthorized && !record.SceneAuthorized)
+                    TickFleetConfiguration(record);
                 if (!IsBattleParticipant(record, LocalPlayerId)
                     || record.Stage != PlayerFleetBattleStage.Preparing && record.Stage != PlayerFleetBattleStage.Active) continue;
                 LocalBattlePreparation local;
@@ -476,7 +488,14 @@ namespace FreeWorldMultiplayer
                             var reference = new PlayerFleetBattleReference { BattleId = record.BattleId, AuthorityEpoch = record.AuthorityEpoch };
                             if (IsHost) HostBattleQuiescent(LocalPlayerId, reference); else Send("host", "battle.left", reference);
                         }
-                        if (!record.SceneAuthorized) continue;
+                        if (!record.PreparationAuthorized || record.Interrupted
+                            || record.Stage != PlayerFleetBattleStage.Preparing && record.Stage != PlayerFleetBattleStage.Active) continue;
+                        // Native preparation is idempotent: keep it open until the
+                        // host confirms our configuration, including rejected-send retries.
+                        Require(bridge.BeginPlayerFleetBattlePreparation(record), "打开或等待本方原版舰队战前配置");
+                        if (!record.SceneAuthorized || record.Interrupted
+                            || record.Stage != PlayerFleetBattleStage.Preparing && record.Stage != PlayerFleetBattleStage.Active) continue;
+                        if (!BattleConfigurationsComplete(record)) throw new InvalidOperationException("双方尚未确认原版舰队配置，禁止创建战场。");
                         Require(bridge.BeginPlayerFleetBattle(record), "打开本人真实舰队战场"); local.Began = true;
                     }
                     if (!local.Ready && bridge.IsPlayerFleetBattleReady(record))
@@ -548,7 +567,10 @@ namespace FreeWorldMultiplayer
             if (World == null || World.FleetBattles == null) return;
             foreach (var record in World.FleetBattles.Values.Where(x => IsBattleParticipant(x, LocalPlayerId)
                 && x.Stage != PlayerFleetBattleStage.AwaitingResponse).ToList())
+            {
+                Require(bridge.CancelPlayerFleetBattlePreparation(record), "离开房间时关闭原版战前配置");
                 Require(bridge.StopPlayerFleetBattle(record), "离开房间时释放本机玩家舰战场景");
+            }
         }
         private void CommitInterruptedPlayerBattles()
         {
@@ -568,13 +590,23 @@ namespace FreeWorldMultiplayer
                     record.Checkpoint = null; record.SceneAuthorized = false; record.InterceptExpiresAtRoomSeconds = 0;
                     record.Stage = PlayerFleetBattleStage.Finished;
                 }
-                else if (record.AssetsCommitted || record.Checkpoint == null && record.Stage == PlayerFleetBattleStage.Preparing) record.Stage = PlayerFleetBattleStage.Finished;
+                // Even an initial scene checkpoint is only a deployment baseline
+                // until both participants are ready. Recovery must not settle it
+                // as combat damage or trigger native crew-survival processing.
+                else if (record.AssetsCommitted || record.Stage == PlayerFleetBattleStage.Preparing
+                    || record.Stage == PlayerFleetBattleStage.Blocked && record.Checkpoint == null && !record.SceneAuthorized)
+                {
+                    record.Checkpoint = null;
+                    record.Stage = PlayerFleetBattleStage.Finished;
+                }
                 else
                 {
                     if (record.Checkpoint == null) throw new InvalidOperationException("旧舰战没有检查点，不能无损恢复并解锁。");
                     Require(bridge.CommitPlayerFleetBattleResult(record, record.Checkpoint), "恢复旧任期舰战真实损伤"); record.AssetsCommitted = true; record.Stage = PlayerFleetBattleStage.Finished;
                 }
                 record.AuthorityEpoch++;
+                record.PreparationAuthorized = false; record.SceneAuthorized = false; record.PreparationExpiresAtRoomSeconds = 0;
+                record.AttackerConfiguration = null; record.DefenderConfiguration = null;
             }
             TrimFinishedBattles();
         }

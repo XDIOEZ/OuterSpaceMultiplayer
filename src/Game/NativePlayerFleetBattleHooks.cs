@@ -78,6 +78,7 @@ namespace FreeWorldMultiplayer
         private static GameBridge Bridge { get { return GameBridge.Active; } }
         internal static void Install(Harmony harmony)
         {
+            NativePlayerFleetBattlePreparationHooks.Install(harmony);
             Patch(harmony, typeof(BattleManager), "Update", "ManagerPrefix");
             Patch(harmony, typeof(BattleManager), "FixedUpdate", "SimulationPrefix");
             Patch(harmony, typeof(BattleManager), "StartBattle", "StartPrefix");
