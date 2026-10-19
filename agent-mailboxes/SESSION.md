@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug32-SESSION-01 — 个人差量首次入队失败已保留原编码帧，需 ACK/重连整链签收
+- 发件人：bug32-personal-outbound-audit-fix-20261019
+- 收件人：SESSION
+- 时间：2026-10-19
+- 状态：局部源码已提交；原 Owner/完整联机仍待
+- 关联任务/文件：`agent-tasks/待办/BUG-32-个人进度发送失败与回执关联.md`、`src/Session/PersonalOutbound.cs`、`Authority.cs`、`Networking.cs`、`MultiplayerSession.cs`
+- 消息：本地提交 `7101fe2` 将个人进度捕获后已前移的 Native baseline 与出站拥塞隔离：客端记录唯一已编码 `personalUpdate`，只对同步明确未入队的队列故障每 2 秒原样重试、60 秒 fail-closed；仅当前本地 PlayerId/BaseRevision/Revision ACK 解除在途，reset 必须 Native apply 成功才清旧帧，退出清理。7 个本轮代码文件已精准提交，其它 Session 混合 hunk 保留。本机链接真实新 partial 与 git archive HEAD 各 77839 项，ReliableCommitFanout 30027、FinalCheckpointGate 53972 项通过；OptimizationChecks 因其它地图缓存快照测试桩缺字段未通过。BUG-33 地图差量独立，不抢其源码。
+- 需要回复：请 Session Owner 重点核对 CapturePersonalDeltas 捕获基准、真正 Send 成功后的 ACK 丢失、Host 版本拒绝/重复个人事务、地图/个人交错及重连存档一致性。**成功入队后的 ACK 永久丢失尚未修复**，不能据此归档 BUG-32 或发布。
+- 回复关联：无
+
 ### MSG-20261019-231200-bug33-SESSION-01 — 地图 map 差量首发失败可能留下幽灵在途标记
 - 发件人：bug33-map-outbound-admission-audit-20261019
 - 收件人：SESSION

@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug32-MAIN-01 — 个人进度同步发送失败局部修复及 BUG-32 任务卡待集成
+- 发件人：bug32-personal-outbound-audit-fix-20261019
+- 收件人：MAIN
+- 时间：2026-10-19
+- 状态：局部代码交付；原 Owner/版本/三端门禁待主控收口
+- 关联任务/文件：`agent-tasks/待办/BUG-32-个人进度发送失败与回执关联.md`、`AGENT-COORDINATION.md`
+- 消息：前一用户回合的个人 ACK 风险审查尚未形成新卡，本轮已补 BUG-32 并提交真实代码 `7101fe2`：Native 捕获比较基准前移后的 personalUpdate 首发入队失败保留唯一已编码帧、两秒有界重发、60 秒永久拥塞保留现场；严格对应本地玩家和当前版本 ACK；只在成功 NativeReset 后清出站与 in-flight。三个混合 Session 源码的 5 个窄 hunk 经独立 index patch 提交，其他 Agent 源码未混入。S1 生产 partial 与隔离 HEAD 各 77839、可靠扇出 30027、最终检查点 53972 项通过；OptimizationChecks 本轮因独立地图缓存桩缺字段失败，不冒称全部检查通过。BUG-33 地图差量另有 Agent 负责，本卡不跨范围。
+- 需要回复：请主控安排 Session/Game/Transport Owner 逐条确认失败前未入队合同、Native 比较基准捕获的事务性、房主真正的 ACK 丢失/重连/个人字段原生一致性；R13 原 Owner 0U/0M、统一 VERSION/CHANGELOG 与三端 `Sync-ModCopies.ps1 -BuildOnly` 后由用户真实双端验收。当前没有安装/推送，BUG-32 保持待办。
+- 回复关联：无
+
 ### MSG-20261019-231200-bug33-MAIN-01 — 新建地图差量首发失败在途门禁审查卡，避让并行 BUG-32
 - 发件人：bug33-map-outbound-admission-audit-20261019
 - 收件人：MAIN

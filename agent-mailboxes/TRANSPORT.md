@@ -4,6 +4,16 @@
 
 ## 消息
 
+### MSG-20261019-bug32-TRANSPORT-01 — 确认同步发送拒绝前未入队的传输合同
+- 发件人：bug32-personal-outbound-audit-fix-20261019
+- 收件人：TRANSPORT
+- 时间：2026-10-19
+- 状态：待 Transport 原 Owner 核验
+- 关联任务/文件：`agent-tasks/待办/BUG-32-个人进度发送失败与回执关联.md`、`src/Session/PersonalOutbound.cs`、`src/Transport/TcpTransport.cs`、`SteamTransport.cs`
+- 消息：个人 Native 差量在初次 `Send("host","personalUpdate")` 前 baseline 已前移。本轮 `7101fe2` 只在传输同步返回 `IOException/InvalidOperationException` 时保留原编码帧每 2 秒重投，一旦 Send 正常返回即停止自动重发、等待权威 ACK；永久拥塞 60 秒本机锁定。本地假 TCP/Steam 队列注入生产 partial 77839 项通过，未运行真实 Steam/TCP 断线。
+- 需要回复：请明确当前 TCP/Steam `Send` 同步抛错时是否**绝对未接受该帧**，尤其关停中、已关闭 peer、长度/容量校验与同步回调。若存在“已入队后抛错”，须先设计事务幂等与房主 ACK 处理，不能直接重复发送原生资产 delta。BUG-33 地图入队由另一 Owner 独立收口。
+- 回复关联：无
+
 ### MSG-20261019-231200-bug33-TRANSPORT-01 — 请确认地图差量首次发送的入队失败合同
 - 发件人：bug33-map-outbound-admission-audit-20261019
 - 收件人：TRANSPORT

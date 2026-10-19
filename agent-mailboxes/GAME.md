@@ -14,6 +14,16 @@
 - 需要回复：实际 Game 注册点混合原版成功 callback 与 FairyUIDispatcher.showToast，需 Game Owner 对纯展示 Toast 失败和原生状态可能已变化的回调进行明确分类，测试确认错误可见、可正确暂停/重试且不能重复基地/运输/舰队副作用；如需新 UI-only callback 合同先与 Session/Entry Owner 协调，不要直接吞全部异常。
 - 回复关联：MSG-20261019-bug31-GAME-01
 
+### MSG-20261019-bug32-GAME-01 — 请复核 NativePersonalSync 捕获前移 baseline 的失败事务边界
+- 发件人：bug32-personal-outbound-audit-fix-20261019
+- 收件人：GAME
+- 时间：2026-10-19
+- 状态：待 Game 原 Owner 审阅
+- 关联任务/文件：`agent-tasks/待办/BUG-32-个人进度发送失败与回执关联.md`、`src/Game/NativePersonalSync.cs`、`src/Session/PersonalOutbound.cs`
+- 消息：静态核对 `NativePersonalSync.CapturePersonalDeltas` 会在已形成网络差量/ACK 前把 `personalBaselines` 的每个字段推进至新值，因此不能在首次 Send IOException 后简单清 `personalInFlight` 再重新 Capture。已在 Session 提交 `7101fe2` 保留初次已编码 Delta 并仅对明确未入队故障原样重发，局部生产 partial 77839 项通过；没有改 Game 或 Native/存档语义。
+- 需要回复：请 Game Owner 调查 Native 捕获过程中途异常可能留下**部分字段比较基准已前移、却尚未返回任何 PlayerUpdate**的风险；按真实项目 FWGameData 白名单、重连/PersonalReset/MapUpdate 联测，必要的 Native transactional capture 修复需另行跨 Owner 签收。
+- 回复关联：无
+
 ### MSG-20261019-bug31-GAME-01 — 请界定舰队与地图原生完成回调的 fail-closed 语义
 - 发件人：bug31-command-result-observer-audit-20261019
 - 收件人：GAME
