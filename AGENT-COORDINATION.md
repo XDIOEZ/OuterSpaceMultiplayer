@@ -345,3 +345,11 @@
 - 已接真实原版正式/分基地转中立按钮与确认、真实已落地运输单锁定单仓、参与方自身返舰/物资归属、逐物品储存保护与预占/撤离重判；公共和自身库存普通运输继续独立。新增活动雇员查询使用持久化全玩家记录，当前图未ready返回未知。
 - Session契约已与review_rules对齐。无自行提交/测试/编译/运行/安装；源码占用释放给主控，等其统一三端BuildOnly诊断。
 <!-- ground-rules-native-notes-20261019:end -->
+
+<!-- ground-rules-delivery-20261019:start -->
+### ground-rules-implementation-20261019 / 最终交付与全部占用释放
+- 功能提交 afda4c0；拒绝取物不提前开战收口 65c58f9。V1.50 / 1.50.0.0、协议10，三端最终统一 BuildOnly 已成功；同源 83B5228756B9C0D4068F79E2016B2D6CF845A706CD0DCDB3AF91B41E63F7DD90。
+- 交付回执 docs/reports/ground-rules-build-20261019.json；实现报告 docs/reports/地块权限与合作搜刮实现-20261019.md。Installations=[]、RuntimeTested=false：未安装/启动游戏/运行测试，用户自行游戏验收。
+- 历史混合 dirty/untracked 仍保留。可分离窄改已提交，无法安全分离的重叠基础和既有未跟踪文件增量全部保存在 docs/patches/ground-rules-implementation-20261019.patch；此增量以开工工作区为基准，不宣称 Git 干净闭包。
+- 仅因真实编译错误、并行输入变化保护、ZIP 临时占用和取物资格收口重试；最终三端包来源一致，无打包脚本改动。文档收口提交后释放本轮全部源码、VERSION/CHANGELOG、index和构建占用，不 push。
+<!-- ground-rules-delivery-20261019:end -->

@@ -1,0 +1,39 @@
+{
+  "Completed": true,
+  "BuildOnly": true,
+  "Installed": false,
+  "RuntimeTested": false,
+  "ModVersion": "V1.50",
+  "Protocol": 10,
+  "SourceRevision": "83B5228756B9C0D4068F79E2016B2D6CF845A706CD0DCDB3AF91B41E63F7DD90",
+  "SourceCommits": [
+    "afda4c0",
+    "65c58f9"
+  ],
+  "Packages": [
+    {
+      "Target": "Project3",
+      "Compiled": true,
+      "PackagePath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\p3-development-reference\\FreeWorldMultiplayer",
+      "ZipPath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\FreeWorldMultiplayer-p3-development-reference.zip",
+      "ZipBytes": 617927,
+      "SourceRevision": "83B5228756B9C0D4068F79E2016B2D6CF845A706CD0DCDB3AF91B41E63F7DD90"
+    },
+    {
+      "Target": "Steam",
+      "Compiled": true,
+      "PackagePath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\steam-target\\FreeWorldMultiplayer",
+      "ZipPath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\FreeWorldMultiplayer-steam-target.zip",
+      "ZipBytes": 852054,
+      "SourceRevision": "83B5228756B9C0D4068F79E2016B2D6CF845A706CD0DCDB3AF91B41E63F7DD90"
+    },
+    {
+      "Target": "TapTap",
+      "Compiled": true,
+      "PackagePath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\taptap-target\\FreeWorldMultiplayer",
+      "ZipPath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\FreeWorldMultiplayer-taptap-target.zip",
+      "ZipBytes": 852140,
+      "SourceRevision": "83B5228756B9C0D4068F79E2016B2D6CF845A706CD0DCDB3AF91B41E63F7DD90"
+    }
+  ]
+}

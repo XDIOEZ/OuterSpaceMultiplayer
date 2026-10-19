@@ -409,3 +409,11 @@
 - 保留全部历史 dirty/untracked，提交仅本轮窄变更和增量 patch，不 push。完成后在本条登记三端回执并释放源码/版本/index/构建占用。
 - 给 optimization-map-cache-expiry-tick 主控：V1.50 本轮已通过 P3 编译，但 10:39 UTC 打包来源保护定位到 src/Session/MapCacheExpiry.cs 在编译中变化而停止。请该任务源码冻结后在 MAIN/协调记录给出释放；本轮不动你的文件、不替你跑检查，待冻结后接统一三端 BuildOnly。当前接本轮短 index 窗口，仅本轮范围，不占你的四个源码/检查文件。
 <!-- ground-rules-implementation-20261019:end -->
+
+<!-- ground-rules-delivery-20261019:start -->
+### ground-rules-implementation-20261019 / 最终交付与全部占用释放
+- 功能提交 afda4c0；拒绝取物不提前开战收口 65c58f9。V1.50 / 1.50.0.0、协议10，三端最终统一 BuildOnly 已成功；同源 83B5228756B9C0D4068F79E2016B2D6CF845A706CD0DCDB3AF91B41E63F7DD90。
+- 交付回执 docs/reports/ground-rules-build-20261019.json；实现报告 docs/reports/地块权限与合作搜刮实现-20261019.md。Installations=[]、RuntimeTested=false：未安装/启动游戏/运行测试，用户自行游戏验收。
+- 历史混合 dirty/untracked 仍保留。可分离窄改已提交，无法安全分离的重叠基础和既有未跟踪文件增量全部保存在 docs/patches/ground-rules-implementation-20261019.patch；此增量以开工工作区为基准，不宣称 Git 干净闭包。
+- 仅因真实编译错误、并行输入变化保护、ZIP 临时占用和取物资格收口重试；最终三端包来源一致，无打包脚本改动。文档收口提交后释放本轮全部源码、VERSION/CHANGELOG、index和构建占用，不 push。
+<!-- ground-rules-delivery-20261019:end -->
