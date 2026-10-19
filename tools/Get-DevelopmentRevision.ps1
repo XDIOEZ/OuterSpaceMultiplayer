@@ -5,7 +5,12 @@ $Root = [IO.Path]::GetFullPath($Root)
 $inputs = [Collections.Generic.List[object]]::new()
 foreach ($folder in @('src', 'tools', 'package', 'third_party')) {
     foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $Root $folder) -Recurse -File)) {
-        if ($file.FullName -like '*\package\v_common\Assemblies\*') { continue }
+        $relativePath = $file.FullName.Substring($Root.Length + 1).Replace('\', '/')
+        # Generated test/build output is not a source input. Hashing tools/**/bin
+        # and tools/**/obj makes the revision change whenever a parallel test
+        # project compiles, which can abort an otherwise unchanged MOD build.
+        if ($relativePath -match '(?i)(^|/)(bin|obj|artifacts)/') { continue }
+        if ($relativePath -match '(?i)^package/v_common/Assemblies/') { continue }
         $inputs.Add($file)
     }
 }
