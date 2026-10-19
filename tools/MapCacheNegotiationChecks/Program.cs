@@ -114,6 +114,44 @@ internal static class Program
             "old success cannot erase a new session's queued lease");
         reentered.Clear();
 
+        // The still-current callback may synchronously replace the same view.
+        // Neither a stale result nor a formerly valid result can delete or send
+        // the newer lease during the old snapshot's iteration.
+        foreach (bool stillValid in new[] { false, true })
+        {
+            var replacedDuringCheck = new MapCacheOutboundRetry();
+            byte[] replacementPacket = { 23 };
+            Check(!replacedDuringCheck.TrySend(MapCacheOutboundKind.Offer, "replaced", 8, 1, 1,
+                offer, _ => throw new IOException("old queue full")), "validation replacement setup");
+            int staleSends = 0;
+            replacedDuringCheck.Advance(2, (kind, viewId, _, __, ___) =>
+            {
+                replacedDuringCheck.Remove(kind, viewId);
+                Check(!replacedDuringCheck.TrySend(kind, viewId, 8, 2, 2, replacementPacket,
+                    _ => throw new IOException("new queue full")), "callback can insert new lease");
+                return stillValid;
+            }, _ => staleSends++);
+            Check(replacedDuringCheck.Count == 1 && staleSends == 0,
+                "stale callback cannot remove or transmit a replacement lease");
+            replacedDuringCheck.Advance(2, (_, __, ___, ____, _____) => true,
+                bytes => Check(ReferenceEquals(bytes, replacementPacket), "only replacement bytes may send"));
+            Check(replacedDuringCheck.Count == 0, "new lease remains independently retryable");
+        }
+
+        // In a congested map load this runs every frame. A pending non-due
+        // retry must not allocate a list/array on every Tick after warmup.
+        var noAllocation = new MapCacheOutboundRetry();
+        Check(!noAllocation.TrySend(MapCacheOutboundKind.Offer, "allocation", 1, 1, 1,
+            offer, _ => throw new IOException("full")), "allocation setup");
+        Func<MapCacheOutboundKind, string, long, long, long, bool> current =
+            (_, __, ___, ____, _____) => true;
+        Action<byte[]> neverDue = _ => throw new Exception("unexpected retry");
+        for (int i = 0; i < 64; i++) noAllocation.Advance(0, current, neverDue);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 2000; i++) noAllocation.Advance(0, current, neverDue);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Check(allocated == 0, "warm pending Tick creates no managed snapshot garbage (" + allocated + " bytes)");
+
         // Stable randomized backoff: each first send fails, exactly one retry
         // succeeds after a positive interval, with no early extra sends.
         var random = new Random(27027);

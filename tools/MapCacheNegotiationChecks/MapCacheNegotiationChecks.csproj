@@ -12,6 +12,7 @@
     <Compile Include="ProductionSessionStubs.cs" />
     <Compile Include="ProductionSessionChecks.cs" />
     <Compile Include="../../src/Session/MapCacheOutboundRetry.cs" Link="MapCacheOutboundRetry.cs" />
+    <Compile Include="../../src/Session/VisitTickSnapshot.cs" Link="VisitTickSnapshot.cs" />
     <Compile Include="../../src/Session/MapSnapshotCache.cs" Link="MapSnapshotCache.cs" />
     <Compile Include="../../src/Session/MapCacheExpiry.cs" Link="MapCacheExpiry.cs" />
     <Compile Include="../../src/Session/OptionalPeerNotice.cs" Link="OptionalPeerNotice.cs" />

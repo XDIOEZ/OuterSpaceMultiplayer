@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace FreeWorldMultiplayer
 {
@@ -25,6 +24,7 @@ namespace FreeWorldMultiplayer
         }
 
         private readonly Dictionary<string, Pending> pending = new Dictionary<string, Pending>();
+        private readonly VisitTickSnapshot<Pending> retrySnapshot = new VisitTickSnapshot<Pending>();
         internal int Count { get { return pending.Count; } }
 
         private static string Key(MapCacheOutboundKind kind, string viewId)
@@ -62,28 +62,39 @@ namespace FreeWorldMultiplayer
                 throw new ArgumentOutOfRangeException(nameof(seconds));
             if (stillCurrent == null || enqueue == null) throw new ArgumentNullException("callback");
             if (pending.Count == 0) return;
-            foreach (Pending entry in pending.Values.ToList())
+            // Capture the same dictionary-order snapshot as Values.ToList, but
+            // reuse its storage across congested frames. A synchronous send or
+            // policy callback may remove/recreate entries while it is in use.
+            List<Pending> snapshot = retrySnapshot.Capture(pending);
+            try
             {
-                Pending current;
-                if (!pending.TryGetValue(entry.Key, out current) || !ReferenceEquals(current, entry)) continue;
-                if (!stillCurrent(entry.Kind, entry.ViewId, entry.MapId, entry.Epoch, entry.Revision))
-                { pending.Remove(entry.Key); continue; }
-                entry.Remaining = Math.Max(0, entry.Remaining - seconds);
-                if (entry.Remaining > 0) continue;
-                try
+                foreach (Pending entry in snapshot)
                 {
-                    enqueue(entry.Bytes);
-                    if (pending.TryGetValue(entry.Key, out current) && ReferenceEquals(current, entry))
-                        pending.Remove(entry.Key);
+                    Pending current;
+                    if (!pending.TryGetValue(entry.Key, out current) || !ReferenceEquals(current, entry)) continue;
+                    bool valid = stillCurrent(entry.Kind, entry.ViewId, entry.MapId, entry.Epoch, entry.Revision);
+                    // Recheck after the callback: a replacement must not be
+                    // sent or erased by this old lease, even if it has the key.
+                    if (!pending.TryGetValue(entry.Key, out current) || !ReferenceEquals(current, entry)) continue;
+                    if (!valid) { pending.Remove(entry.Key); continue; }
+                    entry.Remaining = Math.Max(0, entry.Remaining - seconds);
+                    if (entry.Remaining > 0) continue;
+                    try
+                    {
+                        enqueue(entry.Bytes);
+                        if (pending.TryGetValue(entry.Key, out current) && ReferenceEquals(current, entry))
+                            pending.Remove(entry.Key);
+                    }
+                    catch (IOException) { entry.Remaining = RetrySeconds; }
+                    catch (InvalidOperationException) { entry.Remaining = RetrySeconds; }
                 }
-                catch (IOException) { entry.Remaining = RetrySeconds; }
-                catch (InvalidOperationException) { entry.Remaining = RetrySeconds; }
             }
+            finally { retrySnapshot.Release(snapshot); }
         }
 
         internal void Remove(MapCacheOutboundKind kind, string viewId)
         { pending.Remove(Key(kind, viewId)); }
-        internal void Clear() { pending.Clear(); }
+        internal void Clear() { pending.Clear(); retrySnapshot.Reset(); }
 
         // A failed host query may only undo its own reservation. In particular,
         // an inline transport callback must not erase a newer lease for this id.
