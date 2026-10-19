@@ -15,6 +15,7 @@ namespace FreeWorldMultiplayer
     }
     internal static class Protocol
     {
+        internal const int CurrentVersion = 7;
         public static byte[] Encode(string kind, string sessionId, object payload, string requestId = null)
         {
             return Encoding.UTF8.GetBytes(JsonData.Write(new WireMessage { Kind = kind, SessionId = sessionId, RequestId = requestId, Payload = payload == null ? null : JToken.FromObject(payload, Newtonsoft.Json.JsonSerializer.Create(JsonData.Settings)) }));

@@ -94,6 +94,7 @@ namespace FreeWorldMultiplayer
                 catch (Exception error) { ShowError("结束联机会话时释放资源失败。", error); }
             }
             if (awaitingMenuReturn) CompleteMenuReturn();
+            TickFleetInterceptUi();
             nextUiSearch -= Time.unscaledDeltaTime;
             if (nextUiSearch > 0) return;
             nextUiSearch = 1;
@@ -272,6 +273,7 @@ namespace FreeWorldMultiplayer
         }
         private void FinalizeSession()
         {
+            ResetFleetInterceptUi();
             var closing = Session;
             if (closing == null)
             {

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420" role="img" aria-labelledby="title desc">
+  <title id="title">舰队拦截：先通知，再选择迎战或逃跑</title>
+  <desc id="desc">敌对舰队真实接触后发起拦截。防守方收到通知，迎战进入原战场，逃跑取消本次拦截继续航行。超时、断线、关系变化取消未开战的拦截。</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#9aacc2" stroke-width="1.7"/></marker></defs>
+  <rect width="1000" height="420" rx="18" fill="#101923"/>
+  <g font-family="Microsoft YaHei, sans-serif" fill="#e8eff8">
+    <text x="40" y="46" font-size="25" font-weight="700">敌对舰队拦截</text>
+    <text x="40" y="76" font-size="15" fill="#a6b9ce">双方在线 · 已敌对 · 真实交互距离内 · 房主确认</text>
+    <g stroke="#9aacc2" stroke-width="2" fill="none" marker-end="url(#arrow)"><path d="M235 200H310"/><path d="M575 200H620V144H680"/><path d="M620 200V270H680"/><path d="M445 250V326"/></g>
+    <rect x="40" y="150" width="195" height="100" rx="12" fill="#243247" stroke="#8198b6"/>
+    <text x="137" y="190" text-anchor="middle" font-size="21">A 舰队发起攻击</text><text x="137" y="220" text-anchor="middle" font-size="15" fill="#b9c9dc">B 同样可以主动攻击 A</text>
+    <rect x="310" y="145" width="265" height="110" rx="12" fill="#173d52" stroke="#54c7ed"/>
+    <text x="442" y="180" text-anchor="middle" font-size="21">B 收到拦截通知</text><text x="442" y="211" text-anchor="middle" font-size="16">选择迎战或逃跑</text><text x="442" y="238" text-anchor="middle" font-size="14" fill="#b9d6e4">关闭窗口不会代替玩家作答</text>
+    <rect x="680" y="100" width="280" height="88" rx="12" fill="#4c2b32" stroke="#f19ba0"/>
+    <text x="820" y="136" text-anchor="middle" font-size="21">迎战 → 进入原战场</text><text x="820" y="164" text-anchor="middle" font-size="15" fill="#e3c4c7">双方各自控制真实舰队</text>
+    <rect x="680" y="225" width="280" height="88" rx="12" fill="#1c453b" stroke="#79d2b2"/>
+    <text x="820" y="260" text-anchor="middle" font-size="21">逃跑 → 脱离本次拦截</text><text x="820" y="289" text-anchor="middle" font-size="15" fill="#bfe5d9">释放双方舰队，继续既有航程</text>
+    <rect x="280" y="330" width="380" height="54" rx="10" fill="#28313e" stroke="#8393a8"/>
+    <text x="470" y="352" text-anchor="middle" font-size="15">超时 / 断线 / 关系改变 / 续开</text><text x="470" y="374" text-anchor="middle" font-size="15" fill="#c0ccdc">取消未开战的拦截，无战损结算</text>
+  </g>
+</svg>

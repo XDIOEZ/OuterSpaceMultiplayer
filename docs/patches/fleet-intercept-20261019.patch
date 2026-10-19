@@ -1,0 +1,625 @@
+--- a/src/Core/PlayerFleetBattles.cs
++++ b/src/Core/PlayerFleetBattles.cs
+@@ -2,7 +2,7 @@
+ 
+ namespace FreeWorldMultiplayer
+ {
+-    public enum PlayerFleetBattleStage { Preparing, Active, Committing, Finished, Blocked }
++    public enum PlayerFleetBattleStage { Preparing, Active, Committing, Finished, Blocked, AwaitingResponse }
+     public sealed class PlayerFleetBattleRecord
+     {
+         public string BattleId, AttackerPlayerId, DefenderPlayerId, SimulatorPlayerId, Error;
+@@ -10,6 +10,7 @@
+         public PlayerFleetBattleStage Stage;
+         public PlayerFleetBattleFrame Checkpoint;
+         public bool Interrupted, AssetsCommitted, SceneAuthorized;
++        public double InterceptExpiresAtRoomSeconds;
+     }
+     public sealed class PlayerFleetBattleFrame
+     {
+@@ -28,6 +29,7 @@
+         public long OwnFleetId, TargetFleetId;
+     }
+     internal sealed class PlayerFleetBattleReady { public string BattleId; public long AuthorityEpoch; public bool Success; public string Error; public PlayerFleetBattleFrame Checkpoint; }
++    internal sealed class PlayerFleetInterceptResponse { public string BattleId; public long AuthorityEpoch; public bool Engage; }
+     internal sealed class PlayerFleetBattleReference { public string BattleId; public long AuthorityEpoch; }
+     internal sealed class PlayerFleetBattleAck { public string BattleId; public long AuthorityEpoch, Revision; }
+ }
+--- a/src/Core/Protocol.cs
++++ b/src/Core/Protocol.cs
+@@ -17,7 +17,7 @@
+     }
+     internal static class Protocol
+     {
+-        internal const int CurrentVersion = 6;
++        internal const int CurrentVersion = 7;
+         internal static string CurrentVersionText { get { return CurrentVersion.ToString(CultureInfo.InvariantCulture); } }
+         internal static string IncompatibleVersion(string remoteVersion)
+         {
+--- a/src/Session/PlayerFleetBattles.cs
++++ b/src/Session/PlayerFleetBattles.cs
+@@ -41,20 +41,29 @@
+         private void HostBattleRequest(string actor, PlayerFleetBattleRequest request)
+         {
+             if (closing || Paused || nativeFault != null) throw new MessageRejectionException("房间已暂停或正在关闭，不能开始舰战。");
+-            PlayerRecord target;
++            PlayerRecord target, source;
+             if (request == null || !CommunicationId(request.RequestId) || request.TargetPlayerId == actor || request.TargetPlayerId == null
+-                || !World.Players.TryGetValue(request.TargetPlayerId, out target) || !target.Online || !World.Players[actor].Online
++                || !World.Players.TryGetValue(request.TargetPlayerId, out target) || !target.Online
++                || !World.Players.TryGetValue(actor, out source) || !source.Online
+                 || OwnerOfEntity(request.OwnFleetId) != actor || OwnerOfEntity(request.TargetFleetId) != target.PlayerId
+                 || GetRelation(actor, target.PlayerId) != Relation.Hostile) throw new MessageRejectionException("攻击双方须在线、已敌对且舰队归属有效。");
+-            if (World.FleetBattles.ContainsKey(request.RequestId)) return;
++            PlayerFleetBattleRecord prior;
++            if (World.FleetBattles.TryGetValue(request.RequestId, out prior))
++            {
++                if (prior.AttackerPlayerId != actor || prior.DefenderPlayerId != target.PlayerId
++                    || prior.AttackerFleetId != request.OwnFleetId || prior.DefenderFleetId != request.TargetFleetId)
++                    throw new MessageRejectionException("拦截请求编号已被其他交战使用。");
++                SendBattleState(prior); return;
++            }
+             if (World.FleetBattles.Values.Any(x => x.Stage != PlayerFleetBattleStage.Finished && (IsBattleParticipant(x, actor) || IsBattleParticipant(x, target.PlayerId)))
+                 || IsPlayerFleetBattleLocked(request.OwnFleetId) || IsPlayerFleetBattleLocked(request.TargetFleetId))
+                 throw new MessageRejectionException("参战玩家或舰队已有未结束战场。");
+             Require(bridge.ValidatePlayerFleetContact(actor, request.OwnFleetId, target.PlayerId, request.TargetFleetId), "验证玩家舰队真实接触");
+             var record = new PlayerFleetBattleRecord { BattleId = request.RequestId, NativeBattleUid = AllocateUid(-1), AuthorityEpoch = 1,
+                 AttackerPlayerId = actor, DefenderPlayerId = target.PlayerId, SimulatorPlayerId = actor,
+-                AttackerFleetId = request.OwnFleetId, DefenderFleetId = request.TargetFleetId, Stage = PlayerFleetBattleStage.Preparing };
+-            World.FleetBattles.Add(record.BattleId, record); battleReady[record.BattleId] = new HashSet<string>(); battleQuiescent[record.BattleId] = new HashSet<string>(); battleDeadlines[record.BattleId] = 45;
++                AttackerFleetId = request.OwnFleetId, DefenderFleetId = request.TargetFleetId,
++                Stage = PlayerFleetBattleStage.AwaitingResponse, InterceptExpiresAtRoomSeconds = World.RoomRealSeconds + 45 };
++            World.FleetBattles.Add(record.BattleId, record);
+             try { SaveOrThrow(); }
+             catch { World.FleetBattles.Remove(record.BattleId); battleReady.Remove(record.BattleId); battleQuiescent.Remove(record.BattleId); battleDeadlines.Remove(record.BattleId); throw; }
+             SendBattleState(record);
+@@ -74,7 +83,11 @@
+                 || record.AuthorityEpoch == previous.AuthorityEpoch && record.Revision < previous.Revision)) return;
+             World.FleetBattles[record.BattleId] = record;
+             if (record.Stage == PlayerFleetBattleStage.Finished)
+-            { Require(bridge.StopPlayerFleetBattle(record), "结束本机玩家舰战场景"); localBattlePreparations.Remove(record.BattleId); pendingBattleFrames.Remove(record.BattleId); }
++            {
++                if (previous == null || previous.Stage != PlayerFleetBattleStage.AwaitingResponse)
++                    Require(bridge.StopPlayerFleetBattle(record), "结束本机玩家舰战场景");
++                localBattlePreparations.Remove(record.BattleId); pendingBattleFrames.Remove(record.BattleId);
++            }
+             else if (record.Stage == PlayerFleetBattleStage.Blocked) { Paused = true; Error("舰战结算未完成，保留战场与舰队锁：" + record.Error); }
+             else if (record.Stage == PlayerFleetBattleStage.Active && record.Checkpoint != null)
+             {
+@@ -222,6 +235,8 @@
+         private void CommitBattle(PlayerFleetBattleRecord record)
+         {
+             if (record.Stage == PlayerFleetBattleStage.Finished || record.Stage == PlayerFleetBattleStage.Blocked) return;
++            if (record.Stage == PlayerFleetBattleStage.AwaitingResponse)
++            { FinishFleetIntercept(record, "本次舰队拦截已取消，双方可继续航行。"); return; }
+             try
+             {
+                 if (record.Checkpoint == null && !record.AssetsCommitted) throw new InvalidOperationException("活跃舰战缺少可恢复检查点，禁止无损解锁。");
+@@ -249,6 +264,8 @@
+         private void InterruptBattle(PlayerFleetBattleRecord record, string reason)
+         {
+             if (record.Stage == PlayerFleetBattleStage.Finished || record.Stage == PlayerFleetBattleStage.Blocked) return;
++            if (record.Stage == PlayerFleetBattleStage.AwaitingResponse)
++            { FinishFleetIntercept(record, reason); return; }
+             record.Interrupted = true; record.Error = reason;
+             if (record.Stage == PlayerFleetBattleStage.Preparing)
+             {
+@@ -277,7 +294,8 @@
+         }
+         private void EndNonHostileBattle(PlayerFleetBattleRecord battle)
+         {
+-            if (battle.Stage == PlayerFleetBattleStage.Preparing) { InterruptBattle(battle, "双方已不再敌对，取消舰战准备。"); return; }
++            if (battle.Stage == PlayerFleetBattleStage.AwaitingResponse || battle.Stage == PlayerFleetBattleStage.Preparing)
++            { InterruptBattle(battle, "双方已不再敌对，取消本次拦截。"); return; }
+             if (battle.Stage != PlayerFleetBattleStage.Active) return;
+             battle.Interrupted = true; battle.Error = "双方已不再敌对，按最近确认检查点结束战斗。";
+             SendBattleState(battle); CommitBattle(battle);
+@@ -298,7 +316,8 @@
+         private void ReceiveBattleFrame(PlayerFleetBattleFrame frame)
+         {
+             PlayerFleetBattleRecord record;
+-            if (frame == null || !World.FleetBattles.TryGetValue(frame.BattleId ?? "", out record) || frame.AuthorityEpoch != record.AuthorityEpoch || frame.Revision <= record.Revision) return;
++            if (frame == null || !World.FleetBattles.TryGetValue(frame.BattleId ?? "", out record) || frame.AuthorityEpoch != record.AuthorityEpoch || frame.Revision <= record.Revision
++                || record.Stage != PlayerFleetBattleStage.Active && !(record.Stage == PlayerFleetBattleStage.Preparing && record.SceneAuthorized)) return;
+             if (battleResyncPending.Contains(record.BattleId)) return;
+             if (frame.BaseRevision != record.Revision)
+             { battleResyncPending.Add(record.BattleId); Send("host", "battle.resync", new PlayerFleetBattleReference { BattleId = record.BattleId, AuthorityEpoch = record.AuthorityEpoch }); return; }
+@@ -357,6 +376,7 @@
+             switch (message.Kind)
+             {
+                 case "battle.request": HostBattleRequest(actor, ReadCommunication<PlayerFleetBattleRequest>(message)); break;
++                case "battle.respond": HostFleetInterceptResponse(actor, ReadCommunication<PlayerFleetInterceptResponse>(message)); break;
+                 case "battle.left": HostBattleQuiescent(actor, ReadCommunication<PlayerFleetBattleReference>(message)); break;
+                 case "battle.leave":
+                     var leave = ReadCommunication<PlayerFleetBattleReference>(message); PlayerFleetBattleRecord leaving;
+@@ -418,13 +438,21 @@
+             {
+                 foreach (PlayerFleetBattleRecord record in snapshot)
+                 {
++                // A pending interception is only a persisted lock and a notification.
++                // It must never leave a surface, construct a scene, or settle assets.
++                if (record.Stage == PlayerFleetBattleStage.AwaitingResponse)
++                {
++                    if (IsHost) TickFleetIntercept(record);
++                    continue;
++                }
+                 if (IsHost && battleDeadlines.ContainsKey(record.BattleId))
+                 {
+                     battleDeadlines[record.BattleId] -= seconds;
+                     if (battleDeadlines[record.BattleId] <= 0)
+                     { battleDeadlines.Remove(record.BattleId); if (record.Stage == PlayerFleetBattleStage.Preparing) InterruptBattle(record, "舰战准备超时。"); else if (record.Interrupted) CommitBattle(record); }
+                 }
+-                if (!IsBattleParticipant(record, LocalPlayerId) || record.Stage == PlayerFleetBattleStage.Finished || record.Stage == PlayerFleetBattleStage.Blocked) continue;
++                if (!IsBattleParticipant(record, LocalPlayerId)
++                    || record.Stage != PlayerFleetBattleStage.Preparing && record.Stage != PlayerFleetBattleStage.Active) continue;
+                 LocalBattlePreparation local;
+                 if (!localBattlePreparations.TryGetValue(record.BattleId, out local)) localBattlePreparations[record.BattleId] = local = new LocalBattlePreparation();
+                 if (local.Failed) continue;
+@@ -518,7 +546,8 @@
+         private void StopLocalPlayerFleetBattles()
+         {
+             if (World == null || World.FleetBattles == null) return;
+-            foreach (var record in World.FleetBattles.Values.Where(x => IsBattleParticipant(x, LocalPlayerId)).ToList())
++            foreach (var record in World.FleetBattles.Values.Where(x => IsBattleParticipant(x, LocalPlayerId)
++                && x.Stage != PlayerFleetBattleStage.AwaitingResponse).ToList())
+                 Require(bridge.StopPlayerFleetBattle(record), "离开房间时释放本机玩家舰战场景");
+         }
+         private void CommitInterruptedPlayerBattles()
+@@ -533,7 +562,13 @@
+             foreach (var record in World.FleetBattles.Values.Where(x => x.Stage != PlayerFleetBattleStage.Finished).ToList())
+             {
+                 record.Interrupted = true;
+-                if (record.AssetsCommitted || record.Checkpoint == null && record.Stage == PlayerFleetBattleStage.Preparing) record.Stage = PlayerFleetBattleStage.Finished;
++                if (record.Stage == PlayerFleetBattleStage.AwaitingResponse)
++                {
++                    record.Error = "房间已重新载入，本次拦截已取消，双方可继续航行。";
++                    record.Checkpoint = null; record.SceneAuthorized = false; record.InterceptExpiresAtRoomSeconds = 0;
++                    record.Stage = PlayerFleetBattleStage.Finished;
++                }
++                else if (record.AssetsCommitted || record.Checkpoint == null && record.Stage == PlayerFleetBattleStage.Preparing) record.Stage = PlayerFleetBattleStage.Finished;
+                 else
+                 {
+                     if (record.Checkpoint == null) throw new InvalidOperationException("旧舰战没有检查点，不能无损恢复并解锁。");
+--- a/src/Entry/ModPluginLauncher.cs
++++ b/src/Entry/ModPluginLauncher.cs
+@@ -117,6 +117,7 @@
+             }
+             if (awaitingMenuReturn) CompleteMenuReturn();
+             TickCommunicationUi();
++            TickFleetInterceptUi();
+             nextUiSearch -= Time.unscaledDeltaTime;
+             if (nextUiSearch > 0) return;
+             nextUiSearch = 1;
+@@ -323,6 +324,7 @@
+         }
+         private void FinalizeSession()
+         {
++            ResetFleetInterceptUi();
+             var closing = Session;
+             if (closing == null)
+             {
+--- a/src/Entry/MultiplayerFleetInteractionDialog.cs
++++ b/src/Entry/MultiplayerFleetInteractionDialog.cs
+@@ -74,7 +74,7 @@
+             description.font = OfficialModUi.Font; description.fontSharedMaterial = description.font.material;
+             description.fontSize = 18; description.richText = false; description.raycastTarget = false; description.enableWordWrapping = true;
+             description.color = new Color32(225, 234, 236, 255); MultiplayerUi.Top(description.rectTransform, 20, 130, 278, 280);
+-            attack = AddAction("攻击", 448, () => { Session.RequestPlayerFleetAttack(targetPlayerId, targetFleetId); closeDialog(); });
++            attack = AddAction("攻击", 448, () => { Session.RequestPlayerFleetAttack(targetPlayerId, targetFleetId); Refresh(); });
+             chat = AddAction("交流", 502, () => Session.RequestPlayerCommunication(targetPlayerId, targetFleetId));
+             visit = AddAction("参观", 556, () => { Session.RequestPlayerVisit(targetPlayerId, targetFleetId); MultiplayerChatDialog.Open(targetPlayerId); closeDialog(); });
+             var close = OfficialModUi.CreateClose(transform, () => closeDialog(), OfficialModUi.Font, OfficialModUi.Font.material);
+@@ -98,12 +98,25 @@
+             PlayerRecord target; bool exists = session.World.Players.TryGetValue(targetPlayerId, out target);
+             bool valid = exists && target.Online && !session.IsClosing && session.OwnerOfEntity(targetFleetId) == targetPlayerId;
+             bool hostile = valid && session.GetRelation(session.LocalPlayerId, targetPlayerId) == Relation.Hostile;
+-            bool locked = session.IsPlayerFleetBattleLocked(targetFleetId) || session.IsPlayerFleetBattleLocked(session.World.Players[session.LocalPlayerId].FleetId);
++            PlayerRecord local;
++            bool locked = session.IsPlayerFleetBattleLocked(targetFleetId)
++                || session.World.Players.TryGetValue(session.LocalPlayerId, out local) && session.IsPlayerFleetBattleLocked(local.FleetId);
++            PlayerFleetBattleRecord intercept = null;
++            foreach (PlayerFleetBattleRecord battle in session.World.FleetBattles.Values)
++            {
++                if ((battle.AttackerFleetId != targetFleetId && battle.DefenderFleetId != targetFleetId)
++                    || battle.AttackerPlayerId != session.LocalPlayerId && battle.DefenderPlayerId != session.LocalPlayerId) continue;
++                if (battle.Stage == PlayerFleetBattleStage.Preparing || battle.Stage == PlayerFleetBattleStage.Active
++                    || battle.Stage == PlayerFleetBattleStage.Committing) { closeDialog(); return; }
++                if (battle.Stage == PlayerFleetBattleStage.AwaitingResponse) intercept = battle;
++            }
+             attack.interactable = hostile && !locked; chat.interactable = valid; visit.interactable = valid && !locked;
+             string heading = exists ? target.Nickname + " 的舰队" : "玩家舰队";
+             if (title.text != heading) title.text = heading;
+-            string text = !valid ? "对方已离线或舰队已离开。" : locked ? "舰队正在战斗。可交流，不能重复攻击或赠送。"
+-                : hostile ? "双方已敌对，可以发起舰队攻击。\n\n交流：发送房间内私聊。\n\n参观：对方同意后，从你的母舰向对方母舰赠送物资。"
++            string text = !valid ? "对方已离线或舰队已离开。" : intercept != null
++                ? intercept.AttackerPlayerId == session.LocalPlayerId ? "已发起拦截，正在等待对方选择迎战或逃跑。" : "舰队遭遇拦截，请在拦截通知中选择迎战或逃跑。"
++                : locked ? "舰队正在准备或进行战斗。可交流，不能重复攻击或赠送。"
++                : hostile ? "双方已敌对，可以发起舰队拦截。\n对方将收到通知，并选择迎战或逃跑。\n\n交流：发送房间内私聊。\n\n参观：对方同意后，从你的母舰向对方母舰赠送物资。"
+                 : "中立或友好关系不能攻击。\n\n交流：发送房间内私聊。\n\n参观：对方同意后，从你的母舰向对方母舰赠送物资。";
+             if (description.text != text) description.text = text;
+         }
+--- a/src/Game/NativeRemoteFleetProxy.cs
++++ b/src/Game/NativeRemoteFleetProxy.cs
+@@ -212,9 +212,12 @@
+             // Native SetRotation turns each ship under VisualRoot. Rotating this
+             // scene root too would apply the same heading twice and turn the formation.
+             proxy.transform.localRotation = Quaternion.identity;
++            PlayerFleetBattleRecord battle = Context.GetFleetBattleLock == null ? null : Context.GetFleetBattleLock(proxy.FleetUid);
+             proxy.Visual.ApplyPresentation(new GalaxyFleetVisual.PresentationState {
+                 Angle = heading,
+-                InBattle = Context.IsPlayerFleetBattleLocked != null && Context.IsPlayerFleetBattleLocked(proxy.FleetUid) });
++                InBattle = battle != null && (battle.Stage == PlayerFleetBattleStage.Preparing
++                    || battle.Stage == PlayerFleetBattleStage.Active || battle.Stage == PlayerFleetBattleStage.Committing
++                    || battle.Stage == PlayerFleetBattleStage.Blocked) });
+         }
+         private void RemoveRemoteFleetProxy(long uid)
+         {
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@
+ 
+ 发布号以根目录 [VERSION](VERSION) 为唯一来源，发布内容见 [CHANGELOG.md](CHANGELOG.md)。每完成一个独立小 BUG，第二段整数递增一次：`1.9` 之后是 `1.10`；同一修复的重新构建和三端同步不重复升版。需求名称“V1”、游戏匹配目录 `v_common`、网络协议号和存档结构版本保持各自含义。
+ 
+-V1.19 使用网络协议 6，存档结构版本仍为 1；房主和客人建议一起更新 MOD。本轮将收包分帧计时改用实际发行运行库保留的 `Stopwatch.Restart()`，修复因缺失 `Reset()` 导致创建房间时会话停止推进的问题，保留原有收包时间预算。保留 V1.18 的舰队朝向和名牌调整，以及此前的地表同步、入图屏障、SEED 地形及本地缓存。构建和安装状态以包内 BUILD-INFO 及同步回执为准；游戏内效果由用户验收。
++V1.39 使用网络协议 7，存档结构版本仍为 1；房主和客人都必须更新 MOD。敌对玩家舰队攻击后，防守方先收到拦截通知，选择迎战才进入战场；选择逃跑直接脱离本次拦截、继续既有航程。关闭通知不会代选，可以重新打开；未回应超时、关系改变和断线等取消尚未开战的拦截。保留此前的舰队表现、地表同步、入图屏障、SEED 地形及本地缓存与发行运行库兼容修复。构建和安装状态以包内 BUILD-INFO 及同步回执为准；游戏内效果由用户验收。详情见[舰队拦截交付记录](docs/reports/舰队拦截迎战与逃跑-20261019.md)。
+ 
+ 地块缓存保存于 `%LOCALAPPDATA%\CatStudio\FreeWorldMultiplayer\map-cache-v1`，按渠道和实际运行目录隔离，世界与地块另有独立清单；退出游戏后保留，不绑定具体游戏小版本。默认最多 512 MiB、8192 个内容块和 64 个地图清单，按使用情况清理旧内容。再次入图先对照房主当前内容，只接收缺失或变化的块；校验通过后等待本次原生地图及其他玩家角色投影就绪，再按顺序应用后续变化。缺失、损坏或不兼容时重新获取，缓存不代替完整存档。流程见 [地块同步与本地缓存](docs/diagrams/地块同步与本地缓存.svg)。
+ 
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,12 @@
+ 发布号的唯一来源是主仓库根目录的 `VERSION`。每完成一个独立小 BUG，递增第二段整数；例如 `1.9` 后为 `1.10`。重新构建或同步同一项修复不自动递增版本。
+ 
+ 发布号与需求文档的 V1、游戏匹配目录 `v_common`、网络协议号及存档结构版本分别维护，不互相替代。
++
++## V1.39 · 2026-10-19
++
++- 敌对玩家舰队的攻击先发送拦截通知，由防守方选择迎战或逃跑；迎战才进入原战场，逃跑直接结束本次拦截并继续既有航程，不做概率或伤损结算。
++- 关闭或 ESC 不代选，可从拦截通知重新打开；等待最多 45 秒房间时间，超时、断线、关系改变、关闭和续开无损取消尚未开战的拦截。房主校验身份、任期、归属、期限和真实接触，保存失败回滚，重复回应不重置准备流程。
++- 等待期间暂停双方舰队推进且不显示已交火；迎战后关闭旧交互页，退出或卸载清理通知。网络协议升级为 7，房主和客人都必须更新；存档结构仍为 1，旧联机存档可继续恢复。三端构建安装与用户游戏验收分别记录。
+ 
+ ## V1.38 · 2026-10-19
+ 
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.38
++1.39
+--- /dev/null
++++ b/src/Session/PlayerFleetIntercepts.cs
+@@ -0,0 +1,122 @@
++using System;
++using System.Collections.Generic;
++
++namespace FreeWorldMultiplayer
++{
++    public sealed partial class MultiplayerSession
++    {
++        public PlayerFleetBattleRecord GetPendingFleetIntercept()
++        {
++            if (!IsConnected || World == null || World.FleetBattles == null || closing || shutdown) return null;
++            foreach (PlayerFleetBattleRecord record in World.FleetBattles.Values)
++                if (record.Stage == PlayerFleetBattleStage.AwaitingResponse && record.DefenderPlayerId == LocalPlayerId)
++                    return JsonData.Clone(record);
++            return null;
++        }
++
++        public void RespondPlayerFleetIntercept(string battleId, bool engage)
++        {
++            RequireCommunicationRoom();
++            PlayerFleetBattleRecord record;
++            if (!CommunicationId(battleId) || !World.FleetBattles.TryGetValue(battleId, out record)
++                || record.DefenderPlayerId != LocalPlayerId)
++                throw new InvalidOperationException("该舰队拦截不属于当前防守玩家。");
++            if (record.Stage != PlayerFleetBattleStage.AwaitingResponse) return;
++            var response = new PlayerFleetInterceptResponse { BattleId = battleId, AuthorityEpoch = record.AuthorityEpoch, Engage = engage };
++            if (IsHost) HostFleetInterceptResponse(LocalPlayerId, response);
++            else Send("host", "battle.respond", response);
++        }
++
++        private string FleetInterceptInvalidReason(PlayerFleetBattleRecord record)
++        {
++            PlayerRecord attacker, defender;
++            if (!World.Players.TryGetValue(record.AttackerPlayerId, out attacker) || !attacker.Online
++                || !World.Players.TryGetValue(record.DefenderPlayerId, out defender) || !defender.Online)
++                return "参战玩家已离线，本次拦截已取消。";
++            if (GetRelation(record.AttackerPlayerId, record.DefenderPlayerId) != Relation.Hostile)
++                return "双方已不再敌对，本次拦截已取消。";
++            if (OwnerOfEntity(record.AttackerFleetId) != record.AttackerPlayerId
++                || OwnerOfEntity(record.DefenderFleetId) != record.DefenderPlayerId)
++                return "参战舰队归属已变化，本次拦截已取消。";
++            if (record.InterceptExpiresAtRoomSeconds <= World.RoomRealSeconds)
++                return "防守方未在期限内回应，本次拦截已取消，双方可继续航行。";
++            return null;
++        }
++
++        private void TickFleetIntercept(PlayerFleetBattleRecord record)
++        {
++            string reason = FleetInterceptInvalidReason(record);
++            if (reason != null) FinishFleetIntercept(record, reason);
++        }
++
++        private void HostFleetInterceptResponse(string actor, PlayerFleetInterceptResponse response)
++        {
++            PlayerFleetBattleRecord record;
++            if (response == null || !CommunicationId(response.BattleId)
++                || !World.FleetBattles.TryGetValue(response.BattleId, out record) || record.DefenderPlayerId != actor)
++                throw new MessageRejectionException("舰队拦截回应不属于当前防守玩家。");
++            // A reliable retransmission can arrive after consent or cancellation.
++            // Return the authoritative state without restarting preparation or its timer.
++            if (record.Stage != PlayerFleetBattleStage.AwaitingResponse)
++            {
++                if (response.AuthorityEpoch <= 0 || response.AuthorityEpoch > record.AuthorityEpoch)
++                    throw new MessageRejectionException("舰队拦截回应的任期已失效。");
++                SendBattleState(record); return;
++            }
++            if (response.AuthorityEpoch != record.AuthorityEpoch)
++                throw new MessageRejectionException("舰队拦截回应的任期已失效。");
++            string reason = FleetInterceptInvalidReason(record);
++            if (reason != null) { FinishFleetIntercept(record, reason); return; }
++            if (closing || shutdown || nativeFault != null)
++            { FinishFleetIntercept(record, "房间正在关闭或无法继续，本次拦截已取消。"); return; }
++            // Fleeing cancels this interception without changing the native route,
++            // fleet, cargo or crew. Removing the lock resumes the existing journey.
++            if (!response.Engage)
++            { FinishFleetIntercept(record, "防守方已脱离本次拦截，双方可继续航行。"); return; }
++            if (Paused) throw new MessageRejectionException("房间已暂停，请恢复后再选择迎战。");
++            BridgeResult contact = bridge.ValidatePlayerFleetContact(record.AttackerPlayerId, record.AttackerFleetId,
++                record.DefenderPlayerId, record.DefenderFleetId);
++            if (contact == null || !contact.Success)
++            { FinishFleetIntercept(record, "双方舰队已不满足真实接触条件，本次拦截已取消。"); return; }
++
++            long oldEpoch = record.AuthorityEpoch;
++            double expires = record.InterceptExpiresAtRoomSeconds;
++            record.Stage = PlayerFleetBattleStage.Preparing;
++            record.AuthorityEpoch = checked(oldEpoch + 1);
++            record.InterceptExpiresAtRoomSeconds = 0;
++            try { SaveOrThrow(); }
++            catch
++            {
++                record.Stage = PlayerFleetBattleStage.AwaitingResponse; record.AuthorityEpoch = oldEpoch;
++                record.InterceptExpiresAtRoomSeconds = expires;
++                throw;
++            }
++            battleReady[record.BattleId] = new HashSet<string>();
++            battleQuiescent[record.BattleId] = new HashSet<string>();
++            battleDeadlines[record.BattleId] = 45;
++            SendBattleState(record);
++        }
++
++        private void FinishFleetIntercept(PlayerFleetBattleRecord record, string reason)
++        {
++            if (record.Stage != PlayerFleetBattleStage.AwaitingResponse) return;
++            long oldEpoch = record.AuthorityEpoch;
++            string oldError = record.Error;
++            bool oldInterrupted = record.Interrupted;
++            double expires = record.InterceptExpiresAtRoomSeconds;
++            record.Stage = PlayerFleetBattleStage.Finished;
++            record.AuthorityEpoch = checked(oldEpoch + 1);
++            record.Interrupted = true; record.Error = reason;
++            record.InterceptExpiresAtRoomSeconds = 0;
++            try { SaveOrThrow(); }
++            catch
++            {
++                record.Stage = PlayerFleetBattleStage.AwaitingResponse; record.AuthorityEpoch = oldEpoch;
++                record.Interrupted = oldInterrupted; record.Error = oldError; record.InterceptExpiresAtRoomSeconds = expires;
++                throw;
++            }
++            TrimFinishedBattles();
++            SendBattleState(record);
++        }
++    }
++}
+--- /dev/null
++++ b/src/Entry/MultiplayerFleetInterceptDialog.cs
+@@ -0,0 +1,210 @@
++using System;
++using System.Collections.Generic;
++using TMPro;
++using UnityEngine;
++
++namespace FreeWorldMultiplayer
++{
++    internal sealed class MultiplayerFleetInterceptDialog : BaseMonoDialog
++    {
++        private static MultiplayerFleetInterceptDialog open, constructing;
++        [SerializeField] private string battleId;
++        [SerializeField] private string resultText;
++        private string sessionId;
++        private bool built, submitted;
++        private double nextRefresh;
++        private TMP_Text description;
++        private UnityEngine.UI.Button engage, flee;
++        private MultiplayerSession Session => MultiplayerRuntime.Instance == null ? null : MultiplayerRuntime.Instance.Session;
++
++        internal static void OpenResponse(PlayerFleetBattleRecord record) { Open(record.BattleId, null); }
++        internal static void OpenResult(string message) { Open(null, message); }
++        private static void Open(string id, string message)
++        {
++            if (open != null && open.battleId == id && open.resultText == message)
++            { open.transform.SetAsLastSibling(); return; }
++            CloseOpen();
++            GameObject source = MultiplayerUi.Node("FWM.FleetIntercept", null); source.SetActive(false);
++            var dialog = source.AddComponent<MultiplayerFleetInterceptDialog>(); dialog.battleId = id; dialog.resultText = message;
++            try
++            {
++                open = UIHelp.getPage<MultiplayerFleetInterceptDialog>(source, false, true, 0.55f);
++                if (open == null) throw new InvalidOperationException("原生 UI 未创建舰队拦截窗口。");
++            }
++            catch
++            {
++                if (constructing != null)
++                {
++                    var failed = constructing; bool registered = false;
++                    foreach (BaseMonoDialog candidate in UIDispatcher.NotifyArrays)
++                        if (candidate == failed) { registered = true; break; }
++                    if (registered) failed.closeDialog(); else UIDispatcher.destoryPanel(failed.gameObject);
++                }
++                throw;
++            }
++            finally { constructing = null; UnityEngine.Object.Destroy(source); }
++        }
++        internal static void CloseOpen() { if (open != null) open.closeDialog(); }
++        public override void initWidget()
++        {
++            if (built) return; constructing = this;
++            base.initWidget(); overlayKeyEvent(KEY_OPTION.REVICE_ALL);
++            if (Session == null || !Session.IsConnected || Session.IsClosing) throw new InvalidOperationException("联机房间已关闭。");
++            sessionId = Session.SessionId; ((RectTransform)transform).sizeDelta = new Vector2(620, 420);
++            gameObject.AddComponent<UnityEngine.UI.Image>().color = new Color32(29, 34, 36, 255);
++            TMP_FontAsset font = OfficialModUi.Font;
++            TMP_Text heading = OfficialModUi.AddWindowFrame(transform, font, font.material, battleId == null ? "舰队拦截结果" : "舰队遭遇拦截");
++            MultiplayerUi.Top(heading.rectTransform, 28, 20, 500, 42);
++            var close = OfficialModUi.CreateClose(transform, () => closeDialog(), font, font.material);
++            MultiplayerUi.Top((RectTransform)close.transform, 554, 18, 42, 42);
++            description = AddText("Description", "", 20, 28, 92, 564, 158);
++            if (battleId != null)
++            {
++                engage = AddAction("迎战", 28, () => Respond(true));
++                flee = AddAction("逃跑", 324, () => Respond(false));
++                AddText("Reminder", "关闭窗口不会作出选择，可点击右上方的拦截通知重新打开。请及时回应。", 16, 28, 344, 564, 52);
++            }
++            else
++            {
++                description.text = resultText;
++                AddAction("知道了", 176, () => closeDialog());
++            }
++            gameObject.AddComponent<MultiplayerModalFit>(); built = true; Refresh();
++        }
++        private TMP_Text AddText(string name, string text, float size, float x, float y, float width, float height)
++        {
++            var label = MultiplayerUi.Node("FWM.Intercept" + name, transform).AddComponent<TextMeshProUGUI>();
++            label.font = OfficialModUi.Font; label.fontSharedMaterial = label.font.material; label.fontSize = size;
++            label.enableAutoSizing = false; label.richText = false; label.raycastTarget = false; label.enableWordWrapping = true;
++            label.color = new Color32(225, 234, 236, 255); label.text = text;
++            MultiplayerUi.Top(label.rectTransform, x, y, width, height); return label;
++        }
++        private UnityEngine.UI.Button AddAction(string caption, float x, Action action)
++        {
++            var button = MultiplayerUi.CloneButton(OfficialModUi.ButtonTemplate, transform, "FWM.InterceptAction", caption, () =>
++            {
++                try { action(); }
++                catch (Exception error)
++                {
++                    submitted = false;
++                    if (engage != null) engage.interactable = true;
++                    if (flee != null) flee.interactable = true;
++                    if (description != null) description.text = MultiplayerUi.BriefError(error.Message);
++                    MultiplayerRuntime.Instance?.ReportUiFailure(error);
++                }
++            });
++            MultiplayerUi.Top((RectTransform)button.transform, x, 274, 268, 48); return button;
++        }
++        private void Respond(bool accepted)
++        {
++            if (submitted) return;
++            var session = Session;
++            PlayerFleetBattleRecord current = session == null ? null : session.GetPendingFleetIntercept();
++            if (current == null || current.BattleId != battleId) { closeDialog(); return; }
++            session.RespondPlayerFleetIntercept(battleId, accepted);
++            submitted = true; Refresh();
++        }
++        private void Refresh()
++        {
++            if (!built) return;
++            var session = Session;
++            if (session == null || !session.IsConnected || session.IsClosing || session.SessionId != sessionId) { closeDialog(); return; }
++            if (battleId == null) return;
++            PlayerFleetBattleRecord current = session.GetPendingFleetIntercept();
++            if (current == null || current.BattleId != battleId) { closeDialog(); return; }
++            PlayerRecord attacker;
++            string name = session.World.Players.TryGetValue(current.AttackerPlayerId, out attacker) && !String.IsNullOrWhiteSpace(attacker.Nickname)
++                ? attacker.Nickname : "敌对玩家";
++            string text = submitted ? "正在提交选择，请等待回应。"
++                : name + " 的舰队正在拦截你的舰队。\n\n迎战：双方进入舰队战斗。\n逃跑：脱离本次拦截，返回太空继续航行。";
++            if (description.text != text) description.text = text;
++            engage.interactable = flee.interactable = !submitted;
++        }
++        public override void uiUpdate()
++        {
++            if (Time.unscaledTimeAsDouble < nextRefresh) return; nextRefresh = Time.unscaledTimeAsDouble + 0.25;
++            try { Refresh(); } catch (Exception error) { MultiplayerRuntime.Instance?.ReportUiFailure(error); closeDialog(); }
++        }
++        public override bool keyEventESCToClose() { closeDialog(); return true; }
++        public override bool triggerKeyboard(KeyCode source, KeyCode execute) { if (execute == KeyCode.Escape) closeDialog(); return true; }
++        public override void OnDestroy() { if (open == this) open = null; if (constructing == this) constructing = null; base.OnDestroy(); }
++    }
++
++    public sealed partial class MultiplayerRuntime
++    {
++        private readonly HashSet<string> reportedFleetInterceptResults = new HashSet<string>();
++        private MultiplayerSession fleetInterceptSession;
++        private UnityEngine.UI.Button fleetInterceptNotice;
++        private string announcedFleetIntercept, fleetInterceptResult;
++        private double nextFleetInterceptUi;
++
++        private void ResetFleetInterceptUi()
++        {
++            MultiplayerFleetInterceptDialog.CloseOpen(); reportedFleetInterceptResults.Clear();
++            announcedFleetIntercept = fleetInterceptResult = null; fleetInterceptSession = null;
++            if (fleetInterceptNotice != null)
++            { fleetInterceptNotice.gameObject.SetActive(false); Destroy(fleetInterceptNotice.gameObject); fleetInterceptNotice = null; }
++        }
++        private void TickFleetInterceptUi()
++        {
++            try
++            {
++                if (Session == null || !Session.IsConnected || Session.IsClosing)
++                { if (fleetInterceptSession != null) ResetFleetInterceptUi(); return; }
++                if (!ReferenceEquals(fleetInterceptSession, Session))
++                {
++                    ResetFleetInterceptUi(); fleetInterceptSession = Session; nextFleetInterceptUi = 0;
++                    foreach (PlayerFleetBattleRecord record in Session.World.FleetBattles.Values)
++                        if (record.Stage == PlayerFleetBattleStage.Finished) reportedFleetInterceptResults.Add(record.BattleId);
++                }
++                if (Time.unscaledTimeAsDouble < nextFleetInterceptUi) return;
++                nextFleetInterceptUi = Time.unscaledTimeAsDouble + 0.25;
++                foreach (PlayerFleetBattleRecord record in Session.World.FleetBattles.Values)
++                {
++                    if (record.AttackerPlayerId != Session.LocalPlayerId && record.DefenderPlayerId != Session.LocalPlayerId) continue;
++                    // Detect a newly received terminal record even if the opponent replied
++                    // before this UI poll ever saw its AwaitingResponse state.
++                    if (record.Stage == PlayerFleetBattleStage.Finished && reportedFleetInterceptResults.Add(record.BattleId)
++                        && !String.IsNullOrWhiteSpace(record.Error)) fleetInterceptResult = record.Error;
++                }
++                PlayerFleetBattleRecord pending = Session.GetPendingFleetIntercept();
++                if (pending == null) announcedFleetIntercept = null;
++                if (UIDispatcher.Canvas == null) return;
++                if (pending != null && announcedFleetIntercept != pending.BattleId)
++                {
++                    MultiplayerFleetInterceptDialog.OpenResponse(pending); announcedFleetIntercept = pending.BattleId;
++                }
++                string caption = pending != null ? "舰队遭遇拦截 · 点击处理"
++                    : fleetInterceptResult != null ? "舰队拦截：" + fleetInterceptResult + " · 点击查看" : null;
++                if (caption == null) { if (fleetInterceptNotice != null) fleetInterceptNotice.gameObject.SetActive(false); return; }
++                if (fleetInterceptNotice == null)
++                {
++                    fleetInterceptNotice = MultiplayerUi.CloneButton(OfficialModUi.ButtonTemplate, UIDispatcher.Canvas.transform,
++                        "FWM.FleetInterceptNotice", "", OpenFleetInterceptNotice);
++                    var rect = (RectTransform)fleetInterceptNotice.transform; rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
++                    rect.anchoredPosition = new Vector2(-18, -118); rect.sizeDelta = new Vector2(420, 44);
++                }
++                TMP_Text label = OfficialModUi.Caption(fleetInterceptNotice);
++                if (label.text != caption) label.text = caption;
++                if (!fleetInterceptNotice.gameObject.activeSelf) fleetInterceptNotice.gameObject.SetActive(true);
++                fleetInterceptNotice.transform.SetAsLastSibling();
++            }
++            catch (Exception error) { nextFleetInterceptUi = Time.unscaledTimeAsDouble + 2; ReportUiFailure(error); }
++        }
++        private void OpenFleetInterceptNotice()
++        {
++            try
++            {
++                if (Session == null || !Session.IsConnected || Session.IsClosing) return;
++                PlayerFleetBattleRecord pending = Session.GetPendingFleetIntercept();
++                if (pending != null) MultiplayerFleetInterceptDialog.OpenResponse(pending);
++                else if (fleetInterceptResult != null)
++                {
++                    MultiplayerFleetInterceptDialog.OpenResult(fleetInterceptResult); fleetInterceptResult = null;
++                    if (fleetInterceptNotice != null) fleetInterceptNotice.gameObject.SetActive(false);
++                }
++            }
++            catch (Exception error) { ReportUiFailure(error); }
++        }
++    }
++}

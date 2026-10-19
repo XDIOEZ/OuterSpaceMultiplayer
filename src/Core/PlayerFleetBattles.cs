@@ -2,7 +2,7 @@ using System;
 
 namespace FreeWorldMultiplayer
 {
-    public enum PlayerFleetBattleStage { Preparing, Active, Committing, Finished, Blocked }
+    public enum PlayerFleetBattleStage { Preparing, Active, Committing, Finished, Blocked, AwaitingResponse }
     public sealed class PlayerFleetBattleRecord
     {
         public string BattleId, AttackerPlayerId, DefenderPlayerId, SimulatorPlayerId, Error;
@@ -10,6 +10,7 @@ namespace FreeWorldMultiplayer
         public PlayerFleetBattleStage Stage;
         public PlayerFleetBattleFrame Checkpoint;
         public bool Interrupted, AssetsCommitted, SceneAuthorized;
+        public double InterceptExpiresAtRoomSeconds;
     }
     public sealed class PlayerFleetBattleFrame
     {
@@ -28,6 +29,7 @@ namespace FreeWorldMultiplayer
         public long OwnFleetId, TargetFleetId;
     }
     internal sealed class PlayerFleetBattleReady { public string BattleId; public long AuthorityEpoch; public bool Success; public string Error; public PlayerFleetBattleFrame Checkpoint; }
+    internal sealed class PlayerFleetInterceptResponse { public string BattleId; public long AuthorityEpoch; public bool Engage; }
     internal sealed class PlayerFleetBattleReference { public string BattleId; public long AuthorityEpoch; }
     internal sealed class PlayerFleetBattleAck { public string BattleId; public long AuthorityEpoch, Revision; }
 }

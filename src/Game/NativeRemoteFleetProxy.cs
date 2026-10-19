@@ -212,9 +212,12 @@ namespace FreeWorldMultiplayer
             // Native SetRotation turns each ship under VisualRoot. Rotating this
             // scene root too would apply the same heading twice and turn the formation.
             proxy.transform.localRotation = Quaternion.identity;
+            PlayerFleetBattleRecord battle = Context.GetFleetBattleLock == null ? null : Context.GetFleetBattleLock(proxy.FleetUid);
             proxy.Visual.ApplyPresentation(new GalaxyFleetVisual.PresentationState {
                 Angle = heading,
-                InBattle = Context.IsPlayerFleetBattleLocked != null && Context.IsPlayerFleetBattleLocked(proxy.FleetUid) });
+                InBattle = battle != null && (battle.Stage == PlayerFleetBattleStage.Preparing
+                    || battle.Stage == PlayerFleetBattleStage.Active || battle.Stage == PlayerFleetBattleStage.Committing
+                    || battle.Stage == PlayerFleetBattleStage.Blocked) });
         }
         private void RemoveRemoteFleetProxy(long uid)
         {

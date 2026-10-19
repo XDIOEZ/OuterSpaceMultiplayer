@@ -74,7 +74,7 @@ namespace FreeWorldMultiplayer
             description.font = OfficialModUi.Font; description.fontSharedMaterial = description.font.material;
             description.fontSize = 18; description.richText = false; description.raycastTarget = false; description.enableWordWrapping = true;
             description.color = new Color32(225, 234, 236, 255); MultiplayerUi.Top(description.rectTransform, 20, 130, 278, 280);
-            attack = AddAction("攻击", 448, () => { Session.RequestPlayerFleetAttack(targetPlayerId, targetFleetId); closeDialog(); });
+            attack = AddAction("攻击", 448, () => { Session.RequestPlayerFleetAttack(targetPlayerId, targetFleetId); Refresh(); });
             chat = AddAction("交流", 502, () => Session.RequestPlayerCommunication(targetPlayerId, targetFleetId));
             visit = AddAction("参观", 556, () => { Session.RequestPlayerVisit(targetPlayerId, targetFleetId); MultiplayerChatDialog.Open(targetPlayerId); closeDialog(); });
             var close = OfficialModUi.CreateClose(transform, () => closeDialog(), OfficialModUi.Font, OfficialModUi.Font.material);
@@ -98,12 +98,25 @@ namespace FreeWorldMultiplayer
             PlayerRecord target; bool exists = session.World.Players.TryGetValue(targetPlayerId, out target);
             bool valid = exists && target.Online && !session.IsClosing && session.OwnerOfEntity(targetFleetId) == targetPlayerId;
             bool hostile = valid && session.GetRelation(session.LocalPlayerId, targetPlayerId) == Relation.Hostile;
-            bool locked = session.IsPlayerFleetBattleLocked(targetFleetId) || session.IsPlayerFleetBattleLocked(session.World.Players[session.LocalPlayerId].FleetId);
+            PlayerRecord local;
+            bool locked = session.IsPlayerFleetBattleLocked(targetFleetId)
+                || session.World.Players.TryGetValue(session.LocalPlayerId, out local) && session.IsPlayerFleetBattleLocked(local.FleetId);
+            PlayerFleetBattleRecord intercept = null;
+            foreach (PlayerFleetBattleRecord battle in session.World.FleetBattles.Values)
+            {
+                if ((battle.AttackerFleetId != targetFleetId && battle.DefenderFleetId != targetFleetId)
+                    || battle.AttackerPlayerId != session.LocalPlayerId && battle.DefenderPlayerId != session.LocalPlayerId) continue;
+                if (battle.Stage == PlayerFleetBattleStage.Preparing || battle.Stage == PlayerFleetBattleStage.Active
+                    || battle.Stage == PlayerFleetBattleStage.Committing) { closeDialog(); return; }
+                if (battle.Stage == PlayerFleetBattleStage.AwaitingResponse) intercept = battle;
+            }
             attack.interactable = hostile && !locked; chat.interactable = valid; visit.interactable = valid && !locked;
             string heading = exists ? target.Nickname + " 的舰队" : "玩家舰队";
             if (title.text != heading) title.text = heading;
-            string text = !valid ? "对方已离线或舰队已离开。" : locked ? "舰队正在战斗。可交流，不能重复攻击或赠送。"
-                : hostile ? "双方已敌对，可以发起舰队攻击。\n\n交流：发送房间内私聊。\n\n参观：对方同意后，从你的母舰向对方母舰赠送物资。"
+            string text = !valid ? "对方已离线或舰队已离开。" : intercept != null
+                ? intercept.AttackerPlayerId == session.LocalPlayerId ? "已发起拦截，正在等待对方选择迎战或逃跑。" : "舰队遭遇拦截，请在拦截通知中选择迎战或逃跑。"
+                : locked ? "舰队正在准备或进行战斗。可交流，不能重复攻击或赠送。"
+                : hostile ? "双方已敌对，可以发起舰队拦截。\n对方将收到通知，并选择迎战或逃跑。\n\n交流：发送房间内私聊。\n\n参观：对方同意后，从你的母舰向对方母舰赠送物资。"
                 : "中立或友好关系不能攻击。\n\n交流：发送房间内私聊。\n\n参观：对方同意后，从你的母舰向对方母舰赠送物资。";
             if (description.text != text) description.text = text;
         }
