@@ -1,0 +1,13 @@
+{
+  "StartedAtUtc": "2026-10-19T08:49:31.3590091+00:00",
+  "SourceRoot": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer",
+  "Target": "All",
+  "BuildOnly": true,
+  "Completed": true,
+  "Installations": [],
+  "RuntimeTested": false,
+  "SourceRevision": "9CD7BD974923CAE2E8BA35FFA255E7A3EEA7E0889D8D770B43D30D59061EC84E",
+  "ModVersion": "V1.49",
+  "AssemblyVersion": "1.49.0.0",
+  "FinishedAtUtc": "2026-10-19T08:50:21.4259228+00:00"
+}

@@ -282,9 +282,16 @@
 - 已读 ground-entry-world-clock 占 V1.47，仅其任务BuildOnly边界；本任务将顺延 V1.48地图基线、V1.49命令区域/协议9，不覆盖对方 VERSION/CHANGELOG 或Session时钟文件。
 - 本任务功能文件 NativeMapReplicator、新NativeMapPlanBaseline/ProjectionGuard、NativeCommands/GroundInteraction/BuildingCommands、新NativeGroundCommandOwnership/GroundZones、GameHooks.Install单行、Protocol常量及Networking owner单分支；目前子Agent正在最终收口。请统一构建Owner先等待本任务源码冻结，避免来源变化中止。
 - 本任务遵Agent.md持续授权编译安装，不运行测试/游戏；当前游戏运行中，先准备BuildOnly。如与ground-entry最终构建可合并，优先同一次冻结包，双方可共用回执。
-- V1.47 两份 Session 功能源码已冻结，独立审查确认原生 Ground/运输有现成保护，不改 Game。世界/舰队/广播前移，纯袭击计时继续，地图/运输落地/保存等事务保留屏障。
-- 已知范围：房主加载期间新资产命令仍FIFO等待；跨日时本地图Ground繁荣日结原生钩子会跳过且无补算游标。本轮不新增跨图收益补发机制，报告保留限制。接统一三端BuildOnly构建窗口，不运行测试/游戏、不安装。
 
 ### map-command-ownership-20261019 / 最终交付协调
 - 已读ground-entry-world-clock主控回复，其用户明确本轮暂不安装。为保持同仓统一发布，本任务最终只执行统一BuildOnly三端，向MAIN给同源回执供V1.47任务共用；不更新安装副本、不停止游戏、不运行测试。此条取代本轮早前自动安装计划。
 - 地图功能三文件已冻结；命令区域Owner正收口（含真实ZoneDef.isStoreType修正、模拟端新计划UID、Protocol9与Networking访客作者登记），完成后接V1.48/1.49源码窄提交与统一构建。
+
+### map-command-ownership-20261019 / V1.49源码冻结并接统一打包
+- 地图基线V1.48提交71216be；命令/区域作者权限V1.49核心提交完成（见git log），Protocol9。Game/Session功能全部冻结，完整脏工作树相对增量已留docs/patches两份；旧dirty/untracked保留。
+- 主控接Sync-ModCopies.ps1 -BuildOnly三端统一包，涵盖并行V1.47时钟修复，给MAIN回执复用。遵本轮暂不安装，不测试/游戏/PlayMode，不停止运行进程。构建期间其他Agent保持源码和VERSION/CHANGELOG冻结。
+
+### map-command-ownership-20261019 / 三端交付与全部释放
+- V1.48地图基线提交71216be；V1.49命令区域作者权限提交decfb09，Protocol9。新计划正式UID由模拟者分配，计划/区域稳定作者只许本人编辑，友好仍可协助；地图预览及投影与权威实体变化隔离，严格校验和详细冲突诊断保留。
+- Sync-ModCopies.ps1 -BuildOnly三端全部完成；V1.49/1.49.0.0统一SourceRevision=9CD7BD974923CAE2E8BA35FFA255E7A3EEA7E0889D8D770B43D30D59061EC84E，回执docs/reports/map-command-ownership-build-20261019.json及artifacts/map-command-ownership-20261019/copy-sync-buildonly.json，含并行V1.47时钟修复。
+- 本轮按最终协调暂不安装、不测试/启动游戏或PlayMode、不停止进程，运行副本未更新；双端游戏效果和原始具体冲突实体仍待用户验收。旧dirty/untracked保留；文档窄提交结束即释放源码、VERSION/CHANGELOG、index与构建全部占用，不push。
