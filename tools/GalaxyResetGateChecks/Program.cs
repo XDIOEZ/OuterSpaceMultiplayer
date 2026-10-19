@@ -129,6 +129,90 @@ internal static class Program
         Check(!gate.HasDeferredReset("A"), "no stale task after peer eviction");
     }
 
+    private static void TickReentrancy()
+    {
+        // A native bridge callback can synchronously evict a disconnected
+        // player and add a new peer. The host Tick must not enumerate the
+        // live dictionary while invoking user/native callbacks.
+        var gate = new GalaxyResetRequestGate();
+        Action<string> initial = _ => { };
+        foreach (string player in new[] { "A", "B" })
+        {
+            Check(gate.RequestReset(player, initial), "setup first full for " + player);
+            gate.FullEnqueued(player);
+            Check(!gate.RequestReset(player, initial) && gate.HasDeferredReset(player),
+                "setup deferred full for " + player);
+        }
+        int nativeResets = 0, newPeerResets = 0;
+        string evicted = null;
+        gate.Advance(2.1, player =>
+        {
+            nativeResets++;
+            evicted = player;
+            gate.ForgetPlayer("A");
+            gate.ForgetPlayer("B");
+            Check(gate.RequestReset("C", _ => newPeerResets++),
+                "newly admitted client has its own first baseline");
+        });
+        Check(nativeResets == 1 && newPeerResets == 1
+            && !gate.WaitingForFull("A") && !gate.WaitingForFull("B")
+            && !gate.HasDeferredReset("A") && !gate.HasDeferredReset("B")
+            && gate.WaitingForFull("C"),
+            "disconnect during Tick does not visit evicted stale entries or corrupt new peer");
+        Check(evicted == "A" || evicted == "B", "only originally due player reset");
+
+        // The same callback may enter another room-clock Tick. The original
+        // grant must be in-progress before invoking native code, or both
+        // stacks would issue the same reset.
+        var nested = new GalaxyResetRequestGate();
+        Check(nested.RequestReset("reentrant", initial), "nested setup first full");
+        nested.FullEnqueued("reentrant");
+        Check(!nested.RequestReset("reentrant", initial), "nested setup deferred reset");
+        int called = 0;
+        nested.Advance(2, id =>
+        {
+            called++;
+            nested.Advance(0, _ => called++);
+            Check(!nested.RequestReset(id, _ => called++),
+                "request during native in-flight reset stays coalesced");
+        });
+        Check(called == 1 && nested.WaitingForFull("reentrant")
+            && !nested.HasDeferredReset("reentrant"),
+            "nested Advance does not issue a duplicate native reset");
+
+        // If a synchronous disconnect replaces the SAME player key, an old
+        // callback must not mark that abandoned request successfully issued.
+        var replacement = new GalaxyResetRequestGate();
+        int reconnectResets = 0;
+        bool oldAccepted = replacement.RequestReset("same", player =>
+        {
+            replacement.ForgetPlayer(player);
+            Check(replacement.RequestReset(player, _ => reconnectResets++),
+                "reconnected player gets a fresh reset state");
+        });
+        Check(!oldAccepted && reconnectResets == 1 && replacement.WaitingForFull("same"),
+            "removed request cannot confirm over its replacement");
+
+        // Idle and deferred (not yet due) host Ticks remain allocation-free.
+        // Allocating a due-only snapshot is acceptable only at the actual
+        // reset boundary, never on every broadcast frame.
+        var idle = new GalaxyResetRequestGate();
+        Action<string> noop = _ => { };
+        for (int i = 0; i < 32; i++) idle.Advance(0, noop);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 4096; i++) idle.Advance(0, noop);
+        Check(GC.GetAllocatedBytesForCurrentThread() == before,
+            "empty room clock Ticks do not allocate reset snapshots");
+        Check(idle.RequestReset("waiting", noop), "deferred allocation setup");
+        idle.FullEnqueued("waiting");
+        Check(!idle.RequestReset("waiting", noop), "deferred reset held by cooldown");
+        for (int i = 0; i < 32; i++) idle.Advance(0, noop);
+        before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 4096; i++) idle.Advance(0, noop);
+        Check(GC.GetAllocatedBytesForCurrentThread() == before && idle.HasDeferredReset("waiting"),
+            "deferred reset does not allocate before its cooldown expires");
+    }
+
     private static void RealSessionFullEnqueue()
     {
         var room = new MultiplayerSession();
@@ -282,6 +366,7 @@ internal static class Program
                 "actual production session is wired to the gate instance");
             BasicRecovery();
             FaultAndIsolation();
+            TickReentrancy();
             RealSessionFullEnqueue();
             QuantitativeBursts();
             RandomInterleavings();

@@ -10,7 +10,7 @@ namespace FreeWorldMultiplayer
     {
         private sealed class Request
         {
-            internal bool Queued, AwaitingFullEnqueue;
+            internal bool Queued, AwaitingFullEnqueue, Issuing;
             internal int Attempts;
             internal double LastResetAt, NextAllowedAt;
         }
@@ -39,10 +39,18 @@ namespace FreeWorldMultiplayer
 
         private bool TryIssue(string playerId, Request request, Action<string> resetRecipient)
         {
-            if (!request.Queued || request.AwaitingFullEnqueue || elapsed < request.NextAllowedAt) return false;
+            if (!request.Queued || request.AwaitingFullEnqueue || request.Issuing
+                || elapsed < request.NextAllowedAt) return false;
             // Do not consume a request if the native reset itself fails.
             // A later Tick can retry it without any extra client message.
-            resetRecipient(playerId);
+            request.Issuing = true;
+            try { resetRecipient(playerId); }
+            finally { request.Issuing = false; }
+            // A native callback may synchronously disconnect and replace this
+            // player. Never record a completed reset on a discarded lease.
+            Request current;
+            if (!requests.TryGetValue(playerId, out current) || !ReferenceEquals(current, request))
+                return false;
             if (request.Attempts > 0 && elapsed - request.LastResetAt >= 30)
                 request.Attempts = 0;
             if (request.Attempts < 4) request.Attempts++;
@@ -60,11 +68,24 @@ namespace FreeWorldMultiplayer
                 throw new ArgumentOutOfRangeException(nameof(seconds));
             if (resetRecipient == null) throw new ArgumentNullException(nameof(resetRecipient));
             elapsed += seconds;
-            // Most host ticks have no queued resets. Avoid allocating a list or
-            // manipulating other players' state for an idle room.
+            // Snapshot only DUE work, before invoking any native callback:
+            // disconnect/reconnect can mutate the live player dictionary.
+            // An idle Tick does not allocate a snapshot.
+            List<KeyValuePair<string, Request>> due = null;
             foreach (var entry in requests)
-                if (entry.Value.Queued && !entry.Value.AwaitingFullEnqueue)
-                    TryIssue(entry.Key, entry.Value, resetRecipient);
+                if (entry.Value.Queued && !entry.Value.AwaitingFullEnqueue
+                    && !entry.Value.Issuing && elapsed >= entry.Value.NextAllowedAt)
+                {
+                    if (due == null) due = new List<KeyValuePair<string, Request>>();
+                    due.Add(entry);
+                }
+            if (due == null) return;
+            foreach (var entry in due)
+            {
+                Request current;
+                if (requests.TryGetValue(entry.Key, out current) && ReferenceEquals(current, entry.Value))
+                    TryIssue(entry.Key, current, resetRecipient);
+            }
         }
 
         internal void FullEnqueued(string playerId)
