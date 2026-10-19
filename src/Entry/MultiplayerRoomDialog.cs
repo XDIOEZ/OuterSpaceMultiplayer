@@ -111,7 +111,7 @@ namespace FreeWorldMultiplayer
             status = Label(transform, "Feedback", "", 18, 28, 696, 984, 92);
             status.enableWordWrapping = true;
             status.alignment = TextAlignmentOptions.TopLeft;
-            RefreshWorlds(); SetTab(0); built = true; RefreshState();
+            SetTab(0); built = true; RefreshState();
         }
 
         private void BuildRoom(Transform parent)

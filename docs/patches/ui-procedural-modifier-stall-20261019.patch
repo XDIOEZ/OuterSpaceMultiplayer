@@ -1,0 +1,60 @@
+diff --git a/src/Entry/OfficialModUi.cs b/src/Entry/OfficialModUi.cs
+index 750810e..b76ffc5 100644
+--- a/src/Entry/OfficialModUi.cs
++++ b/src/Entry/OfficialModUi.cs
+@@ -105,7 +105,10 @@ namespace FreeWorldMultiplayer
+                         || behaviour is UnityEngine.UI.LayoutGroup || behaviour is UnityEngine.UI.LayoutElement
+                         || behaviour is UnityEngine.UI.ContentSizeFitter || behaviour is UnityEngine.UI.RectMask2D
+                         || behaviour is UnityEngine.UI.Mask || behaviour is UnityEngine.UI.BaseMeshEffect
+-                        || behaviour is UnityEngine.UI.ScrollRect) continue;
++                        || behaviour is UnityEngine.UI.ScrollRect
++                        // A ProceduralImage rebuild reads its paired radius modifier;
++                        // removing it makes OnPopulateMesh add one and dirty the graphic again.
++                        || behaviour is UnityEngine.UI.ProceduralImage.ProceduralImageModifier) continue;
+                     // Strip template-local localization/demo/business callbacks before Awake.
+                     UnityEngine.Object.DestroyImmediate(behaviour);
+                 }
+diff --git a/src/Entry/MultiplayerUi.cs b/src/Entry/MultiplayerUi.cs
+index 911ab1e..63281d0 100644
+--- a/src/Entry/MultiplayerUi.cs
++++ b/src/Entry/MultiplayerUi.cs
+@@ -52,7 +52,9 @@ namespace FreeWorldMultiplayer
+                 clone = UnityEngine.Object.Instantiate(template.gameObject, staging.transform, false); clone.SetActive(false); clone.name = name;
+                 foreach (MonoBehaviour behaviour in clone.GetComponentsInChildren<MonoBehaviour>(true))
+                 {
+-                    if (behaviour is UnityEngine.UI.Graphic || behaviour is UnityEngine.UI.Button || behaviour is UnityEngine.UI.LayoutGroup || behaviour is UnityEngine.UI.LayoutElement || behaviour is UnityEngine.UI.ContentSizeFitter || behaviour is UnityEngine.UI.BaseMeshEffect || behaviour is UnityEngine.UI.RectMask2D || behaviour is UnityEngine.UI.Mask) continue;
++                    if (behaviour is UnityEngine.UI.Graphic || behaviour is UnityEngine.UI.Button || behaviour is UnityEngine.UI.LayoutGroup || behaviour is UnityEngine.UI.LayoutElement || behaviour is UnityEngine.UI.ContentSizeFitter || behaviour is UnityEngine.UI.BaseMeshEffect || behaviour is UnityEngine.UI.RectMask2D || behaviour is UnityEngine.UI.Mask
++                        // Preserve the graphic's radius dependency before its first mesh rebuild.
++                        || behaviour is UnityEngine.UI.ProceduralImage.ProceduralImageModifier) continue;
+                     UnityEngine.Object.DestroyImmediate(behaviour);
+                 }
+                 foreach (Transform child in clone.GetComponentsInChildren<Transform>(true))
+diff --git a/src/Entry/MultiplayerFleetInteractionDialog.cs b/src/Entry/MultiplayerFleetInteractionDialog.cs
+index 9a6f8db..8feb266 100644
+--- a/src/Entry/MultiplayerFleetInteractionDialog.cs
++++ b/src/Entry/MultiplayerFleetInteractionDialog.cs
+@@ -54,7 +54,8 @@ namespace FreeWorldMultiplayer
+                 foreach (MonoBehaviour behaviour in shell.GetComponentsInChildren<MonoBehaviour>(true))
+                     if (!(behaviour is Graphic) && !(behaviour is Selectable) && !(behaviour is LayoutGroup)
+                         && !(behaviour is LayoutElement) && !(behaviour is ContentSizeFitter) && !(behaviour is Mask)
+-                        && !(behaviour is RectMask2D) && !(behaviour is BaseMeshEffect) && !(behaviour is ScrollRect))
++                        && !(behaviour is RectMask2D) && !(behaviour is BaseMeshEffect) && !(behaviour is ScrollRect)
++                        && !(behaviour is UnityEngine.UI.ProceduralImage.ProceduralImageModifier))
+                         UnityEngine.Object.DestroyImmediate(behaviour);
+                 foreach (Graphic graphic in shell.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
+                 foreach (Selectable control in shell.GetComponentsInChildren<Selectable>(true)) control.gameObject.SetActive(false);
+diff --git a/src/Entry/MultiplayerRoomDialog.cs b/src/Entry/MultiplayerRoomDialog.cs
+index 813c489..9b7cea5 100644
+--- a/src/Entry/MultiplayerRoomDialog.cs
++++ b/src/Entry/MultiplayerRoomDialog.cs
+@@ -115,7 +115,9 @@ namespace FreeWorldMultiplayer
+             status.enableWordWrapping = true; status.overflowMode = TextOverflowModes.Ellipsis;
+             status.maxVisibleLines = 2; status.alignment = TextAlignmentOptions.TopLeft;
+             InstallVisualTheme();
+-            built = true; RefreshWorlds(); RefreshPresets();
++            // ContinueWorldMode refreshes its save list when explicitly opened.
++            // Do not load and verify every full save for this initially hidden page.
++            built = true; RefreshPresets();
+             SetPage(Connected ? Page.Room : String.IsNullOrEmpty(Runtime.PendingInvite) ? Page.Create : Page.Join);
+         }
+         private Page ValidReturnPage()

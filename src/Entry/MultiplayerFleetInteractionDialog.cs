@@ -54,7 +54,8 @@ namespace FreeWorldMultiplayer
                 foreach (MonoBehaviour behaviour in shell.GetComponentsInChildren<MonoBehaviour>(true))
                     if (!(behaviour is Graphic) && !(behaviour is Selectable) && !(behaviour is LayoutGroup)
                         && !(behaviour is LayoutElement) && !(behaviour is ContentSizeFitter) && !(behaviour is Mask)
-                        && !(behaviour is RectMask2D) && !(behaviour is BaseMeshEffect) && !(behaviour is ScrollRect))
+                        && !(behaviour is RectMask2D) && !(behaviour is BaseMeshEffect) && !(behaviour is ScrollRect)
+                        && !(behaviour is UnityEngine.UI.ProceduralImage.ProceduralImageModifier))
                         UnityEngine.Object.DestroyImmediate(behaviour);
                 foreach (Graphic graphic in shell.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
                 foreach (Selectable control in shell.GetComponentsInChildren<Selectable>(true)) control.gameObject.SetActive(false);
