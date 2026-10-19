@@ -358,3 +358,9 @@
 - 范围：仅 `src/Session/GalaxyResetRequestGate.cs` 与 `tools/GalaxyResetGateChecks/Program.cs`，避免重同步 Tick 回调重入修改请求表导致迭代异常、以及旧请求错误确认；不改 Session/Networking、协议、存档、版本或其它 Agent 正在工作的脏文件。
 - 开工检查：两份目标文件工作树均干净、Git 暂存区为空；保留所有历史 dirty/untracked。依用户最新要求仅做针对性的本机 .NET 生产代码回归和窄 Git 提交，**不构建/打包/安装三端**、不运行游戏、不 push；完成后更新本条并释放源码占用。
 - 结果：旧版生产门禁在新故障注入中真实抛出 `Collection was modified`；修复后改为仅在有到期工作时构造快照，回调内以 `Issuing` 阻止嵌套 Tick 重复触发，并对已被断线/重连替换的同名请求重新检查对象身份。生产源码链接 `GalaxyResetGateChecks` **67,941 项通过**，包括房主断线回调、同键替换、递归 Tick、退避限流、发送/原生故障与空闲/延迟 Tick 0 B 合成分配。源码和测试已独立提交 `6e0f6a5`；无协议/存档/版本变动，无三端构建安装、无游戏运行、无 push。源码及 Git index 占用已释放，其余旧 dirty/untracked 保留。
+
+### fix-unauthenticated-timeout-ack-20261019 / 主控 /root
+- 占用：`src/Session/UnauthenticatedPeerDeadline.cs`、`tools/UnauthenticatedPeerDeadlineChecks/Program.cs`、`tools/UnauthenticatedPeerDeadlineChecks/Stubs.cs`。三文件目前 Git 干净，其他 Session/Transport/Core/游戏正在进行的混合改动及其它 Agent 文件均不碰。
+- 目标：未认证连接 30 秒到期后，`Disconnect` 成功返回仅代表已经请求关闭；原来立刻从 deadline 字典移除，可能在传输层 `Disconnected` 事件尚未处理前让旧连接绕开过期状态/释放准入名额。改为只由真实 `Disconnected` /认证成功回调释放，保留每 2 秒失败/无确认重试、同 PeerId 重连不会误删、超时拒绝 hello/auth。加入真生产 helper 及模拟异步断链事件检查。
+- 当前用户要求仅源码小范围优化：不递增 VERSION、无三端 BuildOnly / 安装、游戏启动或 Git push。测试、窄提交后回填证据并释放源码/index。
+- 收口：旧逻辑的延迟 Disconnected 负向回归先失败，修复后保留 Expired + 32 个未认证占用，只有真实事件 Forget 才清除；成功请求也间隔 2 秒重试，递归 Tick 只处理一次，日志回调异常不影响别的 peer。链接生产 `UnauthenticatedPeerDeadline` 本地检查 **30,119 项通过**、关联 `AuthenticatedJoinRollbackChecks` **36,149 项通过**、生产 TCP localhost 认证前检查 **7 项通过**。本轮仅三文件代码/回归提交 `8242300`，未修改 Networking/半成功登录业务、版本、协议或存档；未三端构建/安装/运行游戏/推送。原有脏文件保留，源码与 Git index 占用释放。半成功登录的独立生命周期/实机验收仍按 BUG-06 待办。
