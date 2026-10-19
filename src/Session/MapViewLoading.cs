@@ -42,7 +42,6 @@ namespace FreeWorldMultiplayer
         private readonly HashSet<long> requestedMapResyncs = new HashSet<long>();
         private long loadingWireBytes, receivingWireBytes;
         private bool replayingLoadingMessage, mapLoadingFailed, disconnectAfterMapLoad;
-        private bool mapLoadingClockHeld, pauseAfterMapLoading;
         private bool HasMapLoadingBarrier => nativeMapLoad != null || loadingMessages.Count != 0 || loadingResyncs.Count != 0 || HasMapCacheBarrier;
         // Reserve one protocol-bounded message: a single full view can exceed the normal budget.
         // Stop dequeuing before the next packet instead of dropping any queued transaction.
@@ -112,11 +111,8 @@ namespace FreeWorldMultiplayer
             // atomic in-place projection. There is no native enterMap/init to wait for.
             if (bridge.IsMapReady(view.Access.MapId)) return;
             nativeMapLoad = new NativeMapLoad { MapId = view.Access.MapId, Epoch = view.Access.AuthorityEpoch, Revision = view.Access.Revision };
-            if (IsHost && !mapLoadingClockHeld)
-            {
-                pauseAfterMapLoading = Paused; mapLoadingClockHeld = true; Paused = true;
-                Broadcast("clock", new ClockState { Paused = true, Speed = Speed, RoomRealSeconds = World.RoomRealSeconds, WorldTimeMM = World.WorldTimeMM });
-            }
+            // Native init holds this machine's map/personal application FIFO, not the room
+            // clock. Other players keep their existing authority and continue simulating.
         }
         private void CompleteLocalViewApplication(MapView view)
         {
@@ -392,14 +388,15 @@ namespace FreeWorldMultiplayer
         {
             nativeMapLoad = null; loadingMessages.Clear(); loadingWireBytes = 0;
             awaitingLocalReady.Clear(); loadingResyncs.Clear(); requestedMapResyncs.Clear();
-            mapLoadingClockHeld = false;
             ClearMapCacheSession();
         }
-        private void RestoreMapLoadingClock()
+        private void AdvanceLoadingAttackClocks(double seconds)
         {
-            if (!mapLoadingClockHeld || HasMapLoadingBarrier || awaitingLocalReady.Count != 0 || closing || nativeFault != null) return;
-            mapLoadingClockHeld = false; Paused = pauseAfterMapLoading;
-            Broadcast("clock", new ClockState { Paused = Paused, Speed = Speed, RoomRealSeconds = World.RoomRealSeconds, WorldTimeMM = World.WorldTimeMM });
+            // Keep real raid deadlines while native work is held. Readiness checks, native
+            // defender reads, FinishRaid, checkpoint capture and persistence stay behind the FIFO.
+            foreach (AttackRecord attack in World.Attacks.Values)
+                if (attack.Stage == AttackStage.Active && !attack.Blocked)
+                    attack.ElapsedSeconds = Math.Min(600, attack.ElapsedSeconds + seconds);
         }
         private bool DeferDisconnectUntilMapReady()
         {

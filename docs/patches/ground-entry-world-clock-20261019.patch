@@ -1,0 +1,110 @@
+--- a/src/Session/MapViewLoading.cs
++++ b/src/Session/MapViewLoading.cs
+@@ -42,7 +42,6 @@
+         private readonly MapResyncRetryGate requestedMapResyncs = new MapResyncRetryGate();
+         private long loadingWireBytes, receivingWireBytes;
+         private bool replayingLoadingMessage, mapLoadingFailed, disconnectAfterMapLoad;
+-        private bool mapLoadingClockHeld, pauseAfterMapLoading;
+         private bool HasMapLoadingBarrier => nativeMapLoad != null || loadingMessages.Count != 0 || loadingResyncs.Count != 0 || HasMapCacheBarrier;
+         // Reserve one protocol-bounded message: a single full view can exceed the normal budget.
+         // Stop dequeuing before the next packet instead of dropping any queued transaction.
+@@ -112,11 +111,8 @@
+             // atomic in-place projection. There is no native enterMap/init to wait for.
+             if (bridge.IsMapReady(view.Access.MapId)) return;
+             nativeMapLoad = new NativeMapLoad { MapId = view.Access.MapId, Epoch = view.Access.AuthorityEpoch, Revision = view.Access.Revision };
+-            if (IsHost && !mapLoadingClockHeld)
+-            {
+-                pauseAfterMapLoading = Paused; mapLoadingClockHeld = true; Paused = true;
+-                Broadcast("clock", new ClockState { Paused = true, Speed = Speed, RoomRealSeconds = World.RoomRealSeconds, WorldTimeMM = World.WorldTimeMM });
+-            }
++            // Native init holds this machine's map/personal application FIFO, not the room
++            // clock. Other players keep their existing authority and continue simulating.
+         }
+         private void CompleteLocalViewApplication(MapView view)
+         {
+@@ -397,14 +393,15 @@
+         {
+             nativeMapLoad = null; loadingMessages.Clear(); loadingWireBytes = 0;
+             awaitingLocalReady.Clear(); loadingResyncs.Clear(); requestedMapResyncs.Clear();
+-            mapLoadingClockHeld = false;
+             ClearMapCacheSession();
+         }
+-        private void RestoreMapLoadingClock()
+-        {
+-            if (!mapLoadingClockHeld || HasMapLoadingBarrier || awaitingLocalReady.Count != 0 || closing || nativeFault != null) return;
+-            mapLoadingClockHeld = false; Paused = pauseAfterMapLoading;
+-            Broadcast("clock", new ClockState { Paused = Paused, Speed = Speed, RoomRealSeconds = World.RoomRealSeconds, WorldTimeMM = World.WorldTimeMM });
++        private void AdvanceLoadingAttackClocks(double seconds)
++        {
++            // Keep real raid deadlines while native work is held. Readiness checks, native
++            // defender reads, FinishRaid, checkpoint capture and persistence stay behind the FIFO.
++            foreach (AttackRecord attack in World.Attacks.Values)
++                if (attack.Stage == AttackStage.Active && !attack.Blocked)
++                    attack.ElapsedSeconds = Math.Min(600, attack.ElapsedSeconds + seconds);
+         }
+         private bool DeferDisconnectUntilMapReady()
+         {
+--- a/src/Session/MultiplayerSession.cs
++++ b/src/Session/MultiplayerSession.cs
+@@ -381,10 +381,10 @@
+                 }
+                 tickStage = "authority.ready";
+                 TickLocalAuthorityReady();
+-                RestoreMapLoadingClock();
+                 heartbeatElapsed += seconds;
+                 if (heartbeatElapsed >= 10) { heartbeatElapsed = 0; if (IsHost) Broadcast("ping", null); else Send("host", "ping", null); }
+-                if (HasMapLoadingBarrier) return;
++                // A local map load blocks native asset transactions, not shared-world time
++                // or galaxy replication. Capture/save/arrival side effects remain below its gate.
+                 if (IsHost)
+                 {
+                     if (!Paused)
+@@ -393,13 +393,17 @@
+                         Require(bridge.AdvanceWorld(seconds, Speed, World.Players.Values.Where(x => x.Online).Select(x => x.PlayerId).ToList()), "房主世界推进");
+                         World.WorldTimeMM = bridge.WorldTimeMM;
+                         World.RoomRealSeconds += seconds;
+-                        tickStage = "transfers.advance";
+-                        AdvanceTransfers();
++                        if (!HasMapLoadingBarrier)
++                        {
++                            tickStage = "transfers.advance";
++                            AdvanceTransfers();
++                        }
+                         foreach (MapRecord map in World.Maps.Values) map.RaidCooldownSeconds = Math.Max(0, map.RaidCooldownSeconds - seconds);
+                         tickStage = "attacks.advance";
+-                        AdvanceAttackTimers(seconds);
++                        if (HasMapLoadingBarrier) AdvanceLoadingAttackClocks(seconds);
++                        else AdvanceAttackTimers(seconds);
+                         offlineElapsed += seconds;
+-                        if (offlineElapsed >= 5)
++                        if (!HasMapLoadingBarrier && offlineElapsed >= 5)
+                         {
+                             offlineElapsed = 0;
+                             tickStage = "maps.offline";
+@@ -407,7 +411,7 @@
+                         }
+                     }
+                     autosaveElapsed += seconds;
+-                    if (autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; tickStage = "save.autosave"; Save(); }
++                    if (!HasMapLoadingBarrier && autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; tickStage = "save.autosave"; Save(); }
+                     tickStage = "galaxy.broadcast";
+                     galaxyElapsed += seconds;
+                     if (galaxyElapsed >= 0.5)
+@@ -430,6 +434,7 @@
+                         }
+                     }
+                 }
++                if (HasMapLoadingBarrier) return;
+                 syncElapsed += seconds;
+                 if (syncElapsed >= Math.Max(0.1, World.Options.MapSyncSeconds))
+                 {
+@@ -454,8 +459,7 @@
+         {
+             if (!IsHost || !IsConnected) throw new InvalidOperationException("只有房主可以暂停或更改倍速。");
+             if (double.IsNaN(speed) || double.IsInfinity(speed) || speed < 0.1 || speed > 10) throw new ArgumentOutOfRangeException(nameof(speed));
+-            if (mapLoadingClockHeld) pauseAfterMapLoading = paused;
+-            Paused = mapLoadingClockHeld || paused; Speed = speed;
++            Paused = paused; Speed = speed;
+             Broadcast("clock", new ClockState { Paused = Paused, Speed = speed, RoomRealSeconds = World.RoomRealSeconds, WorldTimeMM = World.WorldTimeMM });
+         }
+         public bool Save()

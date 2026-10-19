@@ -248,6 +248,8 @@ namespace FreeWorldMultiplayer
                 }
                 heartbeatElapsed += seconds;
                 if (heartbeatElapsed >= 10) { heartbeatElapsed = 0; if (IsHost) Broadcast("ping", null); else Send("host", "ping", null); }
+                // A local map load blocks native asset transactions, not shared-world time
+                // or galaxy replication. Capture/save/arrival side effects remain below its gate.
                 if (IsHost)
                 {
                     if (!Paused)
@@ -256,13 +258,17 @@ namespace FreeWorldMultiplayer
                         Require(bridge.AdvanceWorld(seconds, Speed, World.Players.Values.Where(x => x.Online).Select(x => x.PlayerId).ToList()), "房主世界推进");
                         World.WorldTimeMM = bridge.WorldTimeMM;
                         World.RoomRealSeconds += seconds;
-                        tickStage = "transfers.advance";
-                        AdvanceTransfers();
+                        if (!HasMapLoadingBarrier)
+                        {
+                            tickStage = "transfers.advance";
+                            AdvanceTransfers();
+                        }
                         foreach (MapRecord map in World.Maps.Values) map.RaidCooldownSeconds = Math.Max(0, map.RaidCooldownSeconds - seconds);
                         tickStage = "attacks.advance";
-                        AdvanceAttackTimers(seconds);
+                        if (HasMapLoadingBarrier) AdvanceLoadingAttackClocks(seconds);
+                        else AdvanceAttackTimers(seconds);
                         offlineElapsed += seconds;
-                        if (offlineElapsed >= 5)
+                        if (!HasMapLoadingBarrier && offlineElapsed >= 5)
                         {
                             offlineElapsed = 0;
                             tickStage = "maps.offline";
@@ -270,7 +276,7 @@ namespace FreeWorldMultiplayer
                         }
                     }
                     autosaveElapsed += seconds;
-                    if (autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; tickStage = "save.autosave"; Save(); }
+                    if (!HasMapLoadingBarrier && autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; tickStage = "save.autosave"; Save(); }
                     tickStage = "galaxy.broadcast";
                     galaxyElapsed += seconds;
                     if (galaxyElapsed >= 0.5)
@@ -282,6 +288,7 @@ namespace FreeWorldMultiplayer
                         foreach (var peer in peers.ToList()) SendAndConfirmGalaxy(peer.Key, peer.Value);
                     }
                 }
+                if (HasMapLoadingBarrier) return;
                 syncElapsed += seconds;
                 if (syncElapsed >= Math.Max(0.1, World.Options.MapSyncSeconds))
                 {

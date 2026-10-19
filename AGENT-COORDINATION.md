@@ -263,3 +263,12 @@
 - V1.46核心源码提交669821c。Sync-ModCopies.ps1 -BuildOnly三端完成，用户关闭游戏后使用同一Install-Mod.ps1安装三个已构建包；同源A2C192ED031EC17C10DE4FE175D309D575B2E67452058F501597AACC3F025142，汇总artifacts/guest-native-exit-20261019/delivery.json Completed=true。
 - 客人原版返回主菜单/桌面先离房交接，拒绝保存及SaveAs且不建本地世界档；房主路径保留，客人退出文案调整。含已冻结V1.40–V1.45全部修改。仅编译安装，未测试/启动游戏，验收由用户执行。
 - 原有dirty/untracked保留，两处依赖历史UI重构的文案窄改随docs/patches/guest-native-exit-20261019.patch留存。交付报告提交完成即释放全部源码、VERSION/CHANGELOG、index与构建占用，不push。
+
+
+### ground-entry-world-clock-20261019 / 主控 /root
+- 当前任务：修复进入地块导致全房间暂停。按仓库分工由功能子 Agent 实现，主控负责接口整合、版本、构建/安装及本地窄提交。
+- 占用：src/Session/MapViewLoading.cs、MultiplayerSession.cs 的地图加载时钟/推进门禁；必要 Game 地图加载门禁须先报告。保留全部历史 dirty；基线 artifacts/ground-entry-world-clock-20261019。
+- 基线 VERSION=1.46；guest-native-exit 已声明三端交付并释放。当前不测试、不启动游戏或 Play Mode；源码冻结后依统一脚本构建安装，若运行保护阻止则保留包并报告，不强停进程。
+- 用户已明确本轮「打包，暂不安装」；仅 Sync-ModCopies.ps1 -BuildOnly 三端包，不运行测试/游戏，不更新安装副本。接 V1.47 版本窗口，功能冻结后统一编译。
+
+- 本轮两份Session源码已冻结；V1.47窄提交后释放源码/版本/index。map-command-ownership已回复承担最终V1.49三端BuildOnly，含本轮时钟修复并遵用户暂不安装边界；等待同源回执。
