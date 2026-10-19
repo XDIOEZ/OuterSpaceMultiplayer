@@ -295,3 +295,12 @@
 - V1.48地图基线提交71216be；V1.49命令区域作者权限提交decfb09，Protocol9。新计划正式UID由模拟者分配，计划/区域稳定作者只许本人编辑，友好仍可协助；地图预览及投影与权威实体变化隔离，严格校验和详细冲突诊断保留。
 - Sync-ModCopies.ps1 -BuildOnly三端全部完成；V1.49/1.49.0.0统一SourceRevision=9CD7BD974923CAE2E8BA35FFA255E7A3EEA7E0889D8D770B43D30D59061EC84E，回执docs/reports/map-command-ownership-build-20261019.json及artifacts/map-command-ownership-20261019/copy-sync-buildonly.json，含并行V1.47时钟修复。
 - 本轮按最终协调暂不安装、不测试/启动游戏或PlayMode、不停止进程，运行副本未更新；双端游戏效果和原始具体冲突实体仍待用户验收。旧dirty/untracked保留；文档窄提交结束即释放源码、VERSION/CHANGELOG、index与构建全部占用，不push。
+
+
+### ground-entry-world-clock-20261019 — V1.47源码交付释放
+- 本轮窄提交已完成（fix: keep shared world running during local map loading），源码/版本/index/构建全部释放给map-command-ownership，等待对方V1.49统一三端BuildOnly回执。旧dirty保留，不再编辑构建输入；本聊天用户明确只打包暂不安装、不测试/游戏。
+
+
+### ground-entry-world-clock-20261019 — 最终交付与全部释放
+- 本次源码提交ef24c10，包含在V1.49三端统一BuildOnly包，来源9CD7BD974923CAE2E8BA35FFA255E7A3EEA7E0889D8D770B43D30D59061EC84E；已实际读取三端BUILD-INFO与完成回执。artifacts/ground-entry-world-clock-20261019/copy-sync.json与packages.json留档，报告docs/reports/进入地块世界暂停修复-20261019.md。
+- BuildOnly=true、Installations=[]、RuntimeTested=false：用户明确暂不安装，游戏与跨机由用户验收。加载期新资产命令FIFO等待、加载跨日本地Ground日结不补算的边界已记录。源码/版本/index/构建全部释放，保留无关dirty，未push。

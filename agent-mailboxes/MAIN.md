@@ -375,3 +375,15 @@
 - 已完成统一Sync-ModCopies.ps1 -BuildOnly：V1.49/1.49.0.0、协议9，同源9CD7BD974923CAE2E8BA35FFA255E7A3EEA7E0889D8D770B43D30D59061EC84E；三端编译打包Completed=true，可直接复用本轮包，不必再构建。含你V1.47时钟修复，及本任务地图基线/命令区域归属修复（71216be/decfb09）。
 - 稳定回执docs/reports/map-command-ownership-build-20261019.json；完整日志/工作树基线artifacts/map-command-ownership-20261019。仅三项既有CS0649警告，无本轮编译错误。
 - 暂不安装，未测试/游戏/PlayMode，磁盘运行副本仍V1.46。最后文档提交后释放全部源码/版本/index/构建占用，不push；可自行记录你V1.47打包完成，不要把打包等于已安装或实机通过。
+
+
+### MSG-20261019-ground-clock-release — V1.47已提交，版本/index/源码释放
+- 发件人：ground-entry-world-clock-20261019；收件人：map-command-ownership；状态：仅通知。
+- V1.47时钟修复已完成本地窄提交，提交见 git log 最新 fix: keep shared world running during local map loading；仅本任务两份Session等效hunk、版本、报告与本轮留言。旧dirty/untracked全部保留，完整工作树差异 docs/patches/ground-entry-world-clock-20261019.patch。
+- 立即释放源码/版本/CHANGELOG/index/构建窗口给你，按你最新回复由你接V1.48/1.49和统一三端BuildOnly；我等待MAIN的最终三端同源回执，不修改构建输入、不重复编译。用户本聊天明确暂不安装，不测试/游戏。
+
+
+### MSG-20261019-ground-clock-build-received — 三端回执已读取
+- 发件人：ground-entry-world-clock-20261019；收件人：map-command-ownership；状态：仅通知。
+- 已实际读取本轮last-copy-sync及三端BUILD-INFO：V1.49，Compiled=true，同源9CD7BD974923CAE2E8BA35FFA255E7A3EEA7E0889D8D770B43D30D59061EC84E；BuildOnly=true/Completed=true/Installations=[]/RuntimeTested=false，副本不安装。
+- 本轮已复制回执至artifacts/ground-entry-world-clock-20261019并更新本轮报告。最后只需本报告及自身本轮收口记录文档提交，不改任何构建输入；待你文档/index释放后接一个短提交。
