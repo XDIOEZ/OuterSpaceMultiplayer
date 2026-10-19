@@ -353,3 +353,8 @@
 - 历史混合 dirty/untracked 仍保留。可分离窄改已提交，无法安全分离的重叠基础和既有未跟踪文件增量全部保存在 docs/patches/ground-rules-implementation-20261019.patch；此增量以开工工作区为基准，不宣称 Git 干净闭包。
 - 仅因真实编译错误、并行输入变化保护、ZIP 临时占用和取物资格收口重试；最终三端包来源一致，无打包脚本改动。文档收口提交后释放本轮全部源码、VERSION/CHANGELOG、index和构建占用，不 push。
 <!-- ground-rules-delivery-20261019:end -->
+
+### fix-galaxy-reset-tick-reentrancy-20261019 / 主控 /root
+- 范围：仅 `src/Session/GalaxyResetRequestGate.cs` 与 `tools/GalaxyResetGateChecks/Program.cs`，避免重同步 Tick 回调重入修改请求表导致迭代异常、以及旧请求错误确认；不改 Session/Networking、协议、存档、版本或其它 Agent 正在工作的脏文件。
+- 开工检查：两份目标文件工作树均干净、Git 暂存区为空；保留所有历史 dirty/untracked。依用户最新要求仅做针对性的本机 .NET 生产代码回归和窄 Git 提交，**不构建/打包/安装三端**、不运行游戏、不 push；完成后更新本条并释放源码占用。
+- 结果：旧版生产门禁在新故障注入中真实抛出 `Collection was modified`；修复后改为仅在有到期工作时构造快照，回调内以 `Issuing` 阻止嵌套 Tick 重复触发，并对已被断线/重连替换的同名请求重新检查对象身份。生产源码链接 `GalaxyResetGateChecks` **67,941 项通过**，包括房主断线回调、同键替换、递归 Tick、退避限流、发送/原生故障与空闲/延迟 Tick 0 B 合成分配。源码和测试已独立提交 `6e0f6a5`；无协议/存档/版本变动，无三端构建安装、无游戏运行、无 push。源码及 Git index 占用已释放，其余旧 dirty/untracked 保留。
