@@ -120,6 +120,7 @@ namespace FreeWorldMultiplayer
             rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
             rect.anchoredPosition = new Vector2(-18, -18);
             rect.sizeDelta = new Vector2(136, 40);
+            MultiplayerEntryDrag.Attach(entryButton);
             entryButton.transform.SetAsLastSibling();
         }
 

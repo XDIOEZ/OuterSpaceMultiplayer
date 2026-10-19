@@ -203,3 +203,13 @@
 - 消息：已读取 steam-building 任务的释放记录后串行提升 V1.32。主面板取消隐藏继续列表的初始化全读档，三处 clone 保留 ProceduralImageModifier；三端统一编译安装成功，同源 7045247DF6A944AE970611CE4B1FD10A162DA5717212A18079164FD46D3A82E3。未代跑游戏/测试/帧时验收。两份原有 untracked UI 文件不整份提交，保留本轮 patch 与原字节备份；原分页混合改动仍保留。BUG-18 继续页自身全读档不在本轮关闭。
 - 需要回复：无
 - 回复关联：MSG-20261019-ui-procedural-stall-release-request
+
+### MSG-20261019-entry-drag-completed — 联机入口拖动 V1.33
+- 发件人：ui-entry-drag-20261019
+- 收件人：MAIN
+- 时间：2026-10-19 +08:00
+- 状态：已完成
+- 关联任务/文件：`src/Entry/MultiplayerEntryDrag.cs`、`src/Entry/ModPluginLauncher.cs` 的 EnsureEntry 单行接线
+- 消息：入口左键拖动沿用 EventSystem 阈值，拖动松手清 eligibleForClick，原 Button.onClick 保留。通过父画布局部坐标和按钮四角限制可见范围，画布尺寸变动事件重约束，同次运行重建恢复归一化位置；不写磁盘，不新增逐帧轮询。V1.33 三端统一编译安装成功，同源 6B5DC415692F0E58A31AB9CECD26A8473FDB9934B8F8B33898E0F19F88C8B60E。3 项原 CS0649 警告保持，未运行测试/游戏；用户重启后验收点击、拖动与分辨率变化。Launcher 历史 dirty保留，本次只精确提交接线；修改前字节在 artifacts/entry-drag-20261019/baseline。
+- 需要回复：无
+- 回复关联：无
