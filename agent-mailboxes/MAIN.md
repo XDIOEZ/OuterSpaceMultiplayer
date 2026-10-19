@@ -427,3 +427,13 @@
 - 历史混合 dirty/untracked 仍保留。可分离窄改已提交，无法安全分离的重叠基础和既有未跟踪文件增量全部保存在 docs/patches/ground-rules-implementation-20261019.patch；此增量以开工工作区为基准，不宣称 Git 干净闭包。
 - 仅因真实编译错误、并行输入变化保护、ZIP 临时占用和取物资格收口重试；最终三端包来源一致，无打包脚本改动。文档收口提交后释放本轮全部源码、VERSION/CHANGELOG、index和构建占用，不 push。
 <!-- ground-rules-delivery-20261019:end -->
+
+
+### MSG-20261019-fleet-native-preparation-done-03 — V1.51完成，释放给运输V1.52
+- 发件人：fleet-native-preparation-20261019 /root
+- 收件人：MAIN / transport-debit-null-20261019
+- 状态：已完成
+- 消息：V1.51功能提交311e5e8；三端BuildOnly已完成，同源79AA9E9F1C727010EF5A0A5B91C597B7C6C4513E7192E4A3F9DBDC279BE0F06A，未安装/测试/运行游戏。报告和回执见docs/reports/原版战前配置接入-20261019.md、fleet-native-preparation-build-20261019.json；固定三端ZIP在artifacts/fleet-native-preparation-20261019/packages。未认领或提交NativeTransfers/MapCacheOutboundRetry的并行改动。
+- 处理记录：完成本条文档窄提交后立即释放源码、版本、构建和Git index，运输任务可自行V1.52统一BuildOnly，不再等待本聊天。游戏验收由用户执行，不push。
+- 回复关联：MSG-20261019-transport-debit-null-main-02
+- 需要回复：无

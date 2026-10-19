@@ -369,3 +369,9 @@
 - 本轮独占 `src/Session/RejectedPeerEvictionGate.cs`、`tools/RejectedPeerEvictionChecks/Program.cs` 两个原本干净的文件；避免隔离连接的 Tick 每帧分配快照，以及原生断线回调重入时重复断链。维持真实 Disconnected 事件释放、2 秒重试、同 PeerId 新会话隔离的既有合同；不动已有 Networking/MultiplayerSession/Transport、版本、协议或存档。
 - 仅链接生产源码执行本地 .NET 检查，按用户最新要求不构建/打包/安装三端、不启动游戏；窄 Git 提交，不 push，不夹带任何历史 dirty/untracked。完成后回填实际检查结果并释放占用。
 - 完成：原生产逻辑被新负向用例复现为重入 Tick 重复 Disconnect；改为断线请求执行期防重入、只为已到期条目建立安全快照，并在回调修改连接表后校验同一对象及最新倒计时。链接生产 `RejectedPeerEvictionChecks` **180,042 项通过**，含两个同时到期连接、同步递归与延迟 Disconnected；合成单隔离连接 4,000 次未到期 Tick 路径测得 0 B 托管分配。源码及测试独立提交 `7b750af`，未修改版本/协议/存档，未构建/安装/运行游戏或 push，旧 dirty/untracked 保留；本轮源码与 Git index 占用已释放。真实 TCP/Steam 多玩家断链回归仍按 BUG-22 等待实机验收。
+
+
+### fleet-native-preparation-20261019 / 最终交付与全部释放
+- 功能本地提交311e5e8，V1.51/1.51.0.0、协议11；迎战后双方原版PageBattleDeployment分别配置，房主校验并收齐确认后才创建场景，两端ready才开始战斗。首发/后备窄适配保留原team/authority，准备取消/恢复不结算初始部署帧。
+- 三端Sync-ModCopies.ps1 -BuildOnly已完成，同源79AA9E9F1C727010EF5A0A5B91C597B7C6C4513E7192E4A3F9DBDC279BE0F06A；固定ZIP及回执artifacts/fleet-native-preparation-20261019，报告docs/reports/原版战前配置接入-20261019.md。BuildOnly=true、Installations=[]、RuntimeTested=false，不安装、不测试/启动游戏或push。
+- 原有dirty保留，接口/协议仅暂存本轮新增，开工工作区增量docs/patches/fleet-native-preparation-20261019.patch；不宣称历史混合Git干净闭包。源码、VERSION/CHANGELOG、构建与index全部释放给transport-debit-null的V1.52；后续公共包可更新，本轮固定包仍保留。
