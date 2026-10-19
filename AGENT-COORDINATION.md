@@ -316,3 +316,8 @@
 - 本轮范围：新 docs/plans/地块权限与合作搜刮规则-20261019.md、docs/README.md 一条导航、本条协调与 MAIN 留言。保留现有 V1 和全部历史 dirty；不改源码/版本，不测试、构建、运行或安装。
 - 文档及导航已保存；仅记录本次确认要求，已排除撤回的“物品飞出储存区”假设。接本轮文档短 index 窗口，提交完成即释放全部文件/index；不占源码、版本和构建窗口，不 push。
 <!-- ground-rules-record-20261019:end -->
+
+### optimization-map-cache-retry-snapshot-20261019 / 主控 /root
+- 范围：仅 `src/Session/MapCacheOutboundRetry.cs`、`tools/MapCacheNegotiationChecks/Program.cs` 与该测试工程 `.csproj`；地图缓存退避 Tick 快照复用，并保护过期回调不能删除重入后新建的同键请求。沿用已有 `VisitTickSnapshot<T>`，不改传输协议、存档、Core/Game、版本、三端安装副本。
+- 开工状态：以上目标文件 Git 工作区当前干净，其他 Agent 的大量 dirty/untracked 原样保留。本任务独立窄提交；如源码输入并行变化则不抢统一构建，默认仅 BuildOnly、不安装、不运行游戏。完成后在本条登记结果并释放占用。
+- 结果：核心源码/测试已提交 `b6e8b88`（3 文件）；原始重入回归先失败，修复后生产链接 `MapCacheNegotiationChecks` 60,070 项通过，预热待重试 Tick 2000 次测得快照路径 0 B 托管分配。`pwsh.exe -File Sync-ModCopies.ps1 -BuildOnly` 三端编译打包完成，来源 `AD98E989E2B6C1328FD536B4B8CE371910F0E80517CF6BE8C4DCB90316586A79`，仍 V1.49。未安装、未启动/验收游戏、未 push；其它历史 dirty/untracked 全部保留。源码、构建及 Git index 占用已释放。
