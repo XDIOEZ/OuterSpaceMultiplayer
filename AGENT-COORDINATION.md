@@ -258,3 +258,8 @@
 - 本轮窄补丁 artifacts/guest-native-exit-20261019/guest-exit-functional.patch，基于本轮完整脏工作树基线生成，包含原 untracked RoomPages 的窄增量，不认领其全文。未构建/安装/测试/运行/提交/改版本；无实机通过声明，交主控整合。
 - 用户本轮已明确回复：等其他修复完成后，本轮统一构建安装。guest-native-exit主控将等guest-map-cache-fleet冻结释放后整合三端；用户自行游戏验收。当前功能仍在实现，暂不开始构建。
 - 最终收口：已实际读取 guest-map-cache-fleet 的 da8fbfe / 5dc049b 释放与空index；本轮接 VERSION/CHANGELOG/index，发布 V1.46。退出功能六文件全部冻结，最后错误反馈/重复点击重试已完成；接下来统一三端构建安装，其他源码保持冻结，不测试或启动游戏。
+
+### guest-native-exit-20261019 / 交付与全部占用释放
+- V1.46核心源码提交669821c。Sync-ModCopies.ps1 -BuildOnly三端完成，用户关闭游戏后使用同一Install-Mod.ps1安装三个已构建包；同源A2C192ED031EC17C10DE4FE175D309D575B2E67452058F501597AACC3F025142，汇总artifacts/guest-native-exit-20261019/delivery.json Completed=true。
+- 客人原版返回主菜单/桌面先离房交接，拒绝保存及SaveAs且不建本地世界档；房主路径保留，客人退出文案调整。含已冻结V1.40–V1.45全部修改。仅编译安装，未测试/启动游戏，验收由用户执行。
+- 原有dirty/untracked保留，两处依赖历史UI重构的文案窄改随docs/patches/guest-native-exit-20261019.patch留存。交付报告提交完成即释放全部源码、VERSION/CHANGELOG、index与构建占用，不push。

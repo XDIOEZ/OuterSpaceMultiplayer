@@ -338,3 +338,8 @@
 ### guest-native-exit-20261019 — V1.46源码冻结，接统一构建安装
 - 已实际读取V1.45 da8fbfe/5dc049b释放；本轮六文件窄修复冻结，接VERSION/CHANGELOG/index本地提交，随后统一Sync-ModCopies.ps1三端构建安装，用户已明确授权。
 - 包含截至V1.45已冻结源码与本轮客人退出/保存入口修复，不运行测试或游戏。当前仅本轮主控占构建输入窗口；报告docs/reports/客人原版菜单退出修复-20261019.md及完整窄补丁docs/patches/guest-native-exit-20261019.patch。
+
+### guest-native-exit-20261019 — V1.46三端构建安装完成并释放
+- 用户本轮授权统一构建安装已执行；源码669821c。三个目标V1.46/1.46.0.0，SourceRevision=A2C192ED031EC17C10DE4FE175D309D575B2E67452058F501597AACC3F025142。
+- 最终汇总artifacts/guest-native-exit-20261019/delivery.json Completed=true；last-copy-sync.json仅为BuildOnly成功，安装看汇总及三个独立receipt。游戏运行拦截后由用户主动关闭游戏，无强停。
+- 客人退出/保存修复与此前已冻结修改均已入包；未测试/游戏，双方重启后自行验收。报告docs/reports/客人原版菜单退出修复-20261019.md。文档提交后全部占用释放，历史dirty保留，未push。
