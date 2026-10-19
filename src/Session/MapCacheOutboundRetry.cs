@@ -24,11 +24,23 @@ namespace FreeWorldMultiplayer
         }
 
         private readonly Dictionary<string, Pending> pending = new Dictionary<string, Pending>();
+        // A first enqueue has not created a deferred Pending yet. Guard it
+        // separately so synchronous transport callbacks cannot enqueue the
+        // same ViewId a second time. Numeric leases are allocation-free and
+        // distinguish a new room's replacement after Clear.
+        private readonly Dictionary<string, long> sending = new Dictionary<string, long>();
+        private long nextSendLease;
         private readonly VisitTickSnapshot<Pending> retrySnapshot = new VisitTickSnapshot<Pending>();
         internal int Count { get { return pending.Count; } }
 
         private static string Key(MapCacheOutboundKind kind, string viewId)
         { return ((int)kind).ToString() + ":" + viewId; }
+
+        private bool IsSending(string key, long lease)
+        {
+            long actual;
+            return sending.TryGetValue(key, out actual) && actual == lease;
+        }
 
         internal bool HasPending(MapCacheOutboundKind kind, string viewId)
         { return pending.ContainsKey(Key(kind, viewId)); }
@@ -42,17 +54,34 @@ namespace FreeWorldMultiplayer
             string key = Key(kind, viewId);
             // A duplicate query does not create a second FIFO slot or bypass
             // the failure backoff. Tick will retry its original encoded packet.
-            if (pending.ContainsKey(key)) return false;
-            try { enqueue(encoded); return true; }
-            catch (IOException) { }
-            catch (InvalidOperationException) { }
+            if (pending.ContainsKey(key) || sending.ContainsKey(key)) return false;
+            long lease = unchecked(++nextSendLease);
+            sending.Add(key, lease);
+            try
+            {
+                bool accepted = false;
+                try { enqueue(encoded); accepted = true; }
+                catch (IOException) { }
+                catch (InvalidOperationException) { }
 
-            if (pending.Count >= MaxPending)
-                throw new InvalidDataException("Too many deferred map cache messages.");
-            pending.Add(key, new Pending { Key = key, Kind = kind, ViewId = viewId,
-                MapId = mapId, Epoch = epoch, Revision = revision, Bytes = encoded,
-                Remaining = RetrySeconds });
-            return false;
+                // Disconnect/room teardown may Clear this first send and
+                // immediately register a new same-key request. Never report
+                // or defer the old one over that replacement lease.
+                if (!IsSending(key, lease)) return false;
+                if (accepted) return true;
+                if (pending.Count >= MaxPending)
+                    throw new InvalidDataException("Too many deferred map cache messages.");
+                pending.Add(key, new Pending { Key = key, Kind = kind, ViewId = viewId,
+                    MapId = mapId, Epoch = epoch, Revision = revision, Bytes = encoded,
+                    Remaining = RetrySeconds });
+                return false;
+            }
+            finally
+            {
+                // The callback may have replaced this key with a newer lease.
+                // The original frame's completion cannot unlock that send.
+                if (IsSending(key, lease)) sending.Remove(key);
+            }
         }
 
         internal void Advance(double seconds, Func<MapCacheOutboundKind, string, long, long, long, bool> stillCurrent,
@@ -93,8 +122,12 @@ namespace FreeWorldMultiplayer
         }
 
         internal void Remove(MapCacheOutboundKind kind, string viewId)
-        { pending.Remove(Key(kind, viewId)); }
-        internal void Clear() { pending.Clear(); retrySnapshot.Reset(); }
+        {
+            string key = Key(kind, viewId);
+            pending.Remove(key);
+            sending.Remove(key);
+        }
+        internal void Clear() { pending.Clear(); sending.Clear(); retrySnapshot.Reset(); }
 
         // A failed host query may only undo its own reservation. In particular,
         // an inline transport callback must not erase a newer lease for this id.

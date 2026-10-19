@@ -114,6 +114,86 @@ internal static class Program
             "old success cannot erase a new session's queued lease");
         reentered.Clear();
 
+        // C27-09: the very first enqueue may synchronously reenter the same
+        // map query (e.g. a fake immediate transport callback). Even before
+        // an IOException creates a deferred entry, it is the SAME request
+        // and must not enqueue a duplicate frame or FIFO slot.
+        var firstSend = new MapCacheOutboundRetry();
+        int inlineSends = 0;
+        bool innerResult = true;
+        bool outerResult = firstSend.TrySend(MapCacheOutboundKind.Offer,
+            "inline", 9, 1, 1, offer, bytes =>
+            {
+                inlineSends++;
+                innerResult = firstSend.TrySend(MapCacheOutboundKind.Offer,
+                    "inline", 9, 1, 1, offer, nested => inlineSends++);
+            });
+        Check(outerResult && !innerResult && inlineSends == 1 && firstSend.Count == 0,
+            "reentrant first-time map-cache send enqueues one packet only");
+
+        // An older send may fail AFTER a callback has cleared the session
+        // and registered a replacement lease with the same key. The failed
+        // old send must not insert a second lease or throw away the new one.
+        var firstReplaced = new MapCacheOutboundRetry();
+        byte[] newLease = { 41 };
+        int originalAttempts = 0;
+        bool firstResult = firstReplaced.TrySend(MapCacheOutboundKind.Offer,
+            "reused", 9, 1, 1, offer, bytes =>
+            {
+                originalAttempts++;
+                firstReplaced.Clear();
+                Check(!firstReplaced.TrySend(MapCacheOutboundKind.Offer,
+                    "reused", 9, 2, 2, newLease,
+                    nested => throw new IOException("new session queue full")),
+                    "replacement request is independently deferred");
+                throw new IOException("old session queue full");
+            });
+        Check(!firstResult && originalAttempts == 1 && firstReplaced.Count == 1,
+            "old first-send failure cannot register a stale duplicate over a new session");
+        int replacementDeliveries = 0;
+        firstReplaced.Advance(2, (_, __, ___, epoch, _____) => epoch == 2,
+            bytes => { Check(ReferenceEquals(bytes, newLease), "replacement retains exact encoded packet"); replacementDeliveries++; });
+        Check(replacementDeliveries == 1 && firstReplaced.Count == 0,
+            "new lease survives and sends its own packet after original failure");
+
+        // An inline response may cancel a first send before the enqueue
+        // callback finishes. An ensuing transport error must not resurrect
+        // a completed or abandoned view as a delayed retry.
+        var removedDuringSend = new MapCacheOutboundRetry();
+        Check(!removedDuringSend.TrySend(MapCacheOutboundKind.Offer,
+            "cancelled", 10, 1, 1, offer, bytes =>
+            {
+                removedDuringSend.Remove(MapCacheOutboundKind.Offer, "cancelled");
+                throw new IOException("cancelled while sending");
+            }) && removedDuringSend.Count == 0,
+            "inline cancellation cannot resurrect stale outbound retry");
+
+        // A programming/encoding error must not leave an in-progress guard
+        // behind; the caller still receives the original error.
+        var afterFault = new MapCacheOutboundRetry();
+        Check(Throws<FormatException>(() => afterFault.TrySend(
+            MapCacheOutboundKind.CacheRetry, "fault-release", 10, 1, 1, offer,
+            bytes => throw new FormatException("invalid serialized envelope"))),
+            "non-transport enqueue fault escapes");
+        int sendAfterFault = 0;
+        Check(afterFault.TrySend(MapCacheOutboundKind.CacheRetry,
+            "fault-release", 10, 1, 1, offer, bytes => sendAfterFault++)
+            && sendAfterFault == 1 && afterFault.Count == 0,
+            "unexpected exception releases first-send guard for later request");
+
+        // Different retry kinds using the same view are independent.
+        var kinds = new MapCacheOutboundRetry();
+        int kindsSent = 0;
+        Check(kinds.TrySend(MapCacheOutboundKind.Offer, "one-view", 11, 1, 1, offer,
+            bytes =>
+            {
+                kindsSent++;
+                Check(kinds.TrySend(MapCacheOutboundKind.FullTerrainRetry,
+                    "one-view", 11, 1, 1, newLease,
+                    _ => kindsSent++), "separate retry kind is allowed during an offer");
+            }) && kindsSent == 2,
+            "independent map cache recovery kinds do not block each other");
+
         // The still-current callback may synchronously replace the same view.
         // Neither a stale result nor a formerly valid result can delete or send
         // the newer lease during the old snapshot's iteration.
