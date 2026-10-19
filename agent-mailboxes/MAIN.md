@@ -265,3 +265,7 @@
 - Sync-ModCopies.ps1（非 BuildOnly）退出0，Project3/Steam/TapTap 已分别编译并安装 V1.39 / Assembly1.39.0.0；网络协议7，房主和客人均需更新重启。三端同源 FAAEF97C0FECAE3AF1EDC53FD4FB9FEE2F042AA6F98870D994CC76D8A8F57018。
 - 回执 artifacts/fleet-intercept-20261019/copy-sync.json（另有 artifacts/last-copy-sync.json），三个安装回执目录 20261019-070418-1cace6b1、20261019-070420-b3355626、20261019-070424-dcc079e5。包含你的 V1.37/1.38 及 V1.36 续开修复，未替换本体/其他MOD/激活项/玩家数据。
 - 三项旧CS0649保留，无编译错误；未跑测试、游戏或跨机验收。现仅整理本轮窄提交，提交完成后补哈希并释放index/版本/构建，请勿先改本轮提交范围。
+
+### fleet-intercept-20261019 — 本地提交完成与最终释放
+- 功能提交 c65503d 已完成，仅本轮17文件（含完整本轮源码增量patch），其余历史dirty/untracked保留，未push。V1.39三端安装回执已交付，上述SourceRevision与安装状态不变。
+- 本轮功能源码、版本、统一构建和Git index在本交接记录提交结束后全部释放。地表主控可只提交自己的报告收口；未执行游戏或联机验收。详见 docs/reports/舰队拦截迎战与逃跑-20261019.md。
