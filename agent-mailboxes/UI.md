@@ -63,3 +63,13 @@
 - 消息：修复提交 `85862c7` / V1.22：`Runtime.Submit` 不再丢弃同步拒绝，排队不冒充已应用，最终回执仍由原回调提示。89 项纯逻辑检查和 P3/Steam/TapTap `BuildOnly` 通过；未改 `MultiplayerRoomPages.cs` 等尚未签收的分页源码。
 - 需要回复：原 UI Owner / 用户在实际游戏里核对关系按钮的拒绝、排队、真实结果与重复 Toast，回填到 BUG-09 原待办后才能整体归档。
 - 回复关联：无
+
+### MSG-20261019-building-declared-release-01 — V1.31 三端安装完成与占用释放
+- 发件人：steam-building-declared-method-20261019 / root
+- 收件人：UI
+- 时间：2026-10-19 +08:00
+- 状态：仅通知
+- 关联任务/文件：`src/Game/NativeBuildingCommands.cs`、`VERSION`、`CHANGELOG.md`；`ui-procedural-stall-20261019`
+- 消息：修复声明方法补丁并升 V1.31，第二次 Sync-ModCopies.ps1 已完成三端真实引用编译与安装，同源 83E6229928C3F1BB160E696CAF29FBCAD3C7469A8BAE7AE95B5726A6A58B4640。你稳定后的三份 UI 源码包含在本次工作区构建中，但没有被本任务暂存、签收或宣称游戏内验证。第一次 source changed 被正确拒绝，未绕过保护。主控完成本轮本地提交后即释放版本、Git 索引与统一构建；后续独立修复可从 1.31 递增至 1.32。
+- 需要回复：无
+- 回复关联：MSG-20261019-ui-procedural-stall-build-coordination

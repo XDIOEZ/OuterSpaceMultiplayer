@@ -194,10 +194,17 @@ namespace FreeWorldMultiplayer
             Patch(harmony, typeof(LocalCoreHandle), "doPaste", nameof(PastePrefix));
         }
         private static void Patch(Harmony harmony, Type type, string method, string prefix)
-        { harmony.Patch(AccessTools.Method(type, method) ?? throw new MissingMethodException(type.FullName, method), new HarmonyMethod(typeof(NativeBuildingCommandHooks), prefix)); }
+        {
+            MethodInfo target = AccessTools.Method(type, method) ?? throw new MissingMethodException(type.FullName, method);
+            // Inherited MethodInfo can retain the derived ReflectedType. Harmony requires
+            // the method obtained from its actual declaring type, including its overload.
+            target = AccessTools.DeclaredMethod(target.DeclaringType, target.Name, target.GetParameters().Select(p => p.ParameterType).ToArray())
+                ?? throw new MissingMethodException(target.DeclaringType.FullName, target.Name);
+            harmony.Patch(target, new HarmonyMethod(typeof(NativeBuildingCommandHooks), prefix));
+        }
         private static NativeBuildingCommands.Settings Single(string operation, long uid)
         { return new NativeBuildingCommands.Settings { Operation = operation, Targets = new List<long> { uid } }; }
-        private static List<long> Selected(ViewBuild_Fctions ui)
+        private static List<long> Selected(object ui)
         { return ((List<BaseBuild>)NativeWire.Get(ui, "selectBuilds")).Select(b => b.getUID()).ToList(); }
         private static bool CorePrefix(MethodBase __originalMethod, object[] __args)
         {
@@ -228,11 +235,12 @@ namespace FreeWorldMultiplayer
             }
             NativeBuildingCommands.Submit(data); return false;
         }
-        private static bool WallPrefix(ViewBuild_Fctions __instance, bool flag)
+        // The declared callbacks can also run on other ViewBuild_Fctions_Base subclasses.
+        private static bool WallPrefix(object __instance, bool flag)
         { if (NativeBuildingCommands.Bypass) return true; NativeBuildingCommands.Submit(new NativeBuildingCommands.Settings { Operation = "Wall", Targets = Selected(__instance), Flag = flag }); return false; }
-        private static bool TidyPrefix(ViewBuild_Fctions __instance, bool flag)
+        private static bool TidyPrefix(object __instance, bool flag)
         { if (NativeBuildingCommands.Bypass) return true; NativeBuildingCommands.Submit(new NativeBuildingCommands.Settings { Operation = "Tidy", Targets = Selected(__instance), Flag = flag }); return false; }
-        private static bool LinkPrefix(ViewBuild_Fctions __instance)
+        private static bool LinkPrefix(object __instance)
         { if (NativeBuildingCommands.Bypass) return true; NativeBuildingCommands.Submit(new NativeBuildingCommands.Settings { Operation = "ElectricLink", Targets = Selected(__instance) }); return false; }
         private static bool TroughPrefix(Dialog_AnimalTroughSetting __instance)
         {
