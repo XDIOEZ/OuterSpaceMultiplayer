@@ -268,7 +268,7 @@ namespace FreeWorldMultiplayer
             // Repeated menu clicks share one disconnect/save rather than clearing the world early.
             if (callback != null) nativeReturnCallback += callback;
             nativeReturnQueued = true; pendingStart = null;
-            Feedback = "正在退出联机房间并返回主界面。";
+            Feedback = guestExitQueued && guestExitToDesktop ? "正在退出联机房间并返回桌面。" : "正在退出联机房间并返回主界面。";
             Perform(CloseSession, "退出房间并返回主界面失败。");
             return true;
         }
@@ -315,6 +315,7 @@ namespace FreeWorldMultiplayer
             if (quitting || unloading) { CancelMenuReturn(); return; }
             try
             {
+                if (CompleteGuestDesktopExit()) return;
                 if (!menuReturnRequested)
                 {
                     menuReturnRequested = true;
@@ -356,6 +357,7 @@ namespace FreeWorldMultiplayer
         }
         private void CancelMenuReturn()
         {
+            ResetGuestExit();
             awaitingMenuReturn = false; nativeReturnQueued = false; showHostLeftNotice = false;
             menuReturnRequested = false; menuReturnCover = null; nativeReturnCallback = null;
         }

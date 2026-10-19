@@ -243,3 +243,18 @@
 - V1.45源码冻结。日志确认客人命令停在session.defer.map；本次过期文案具体触发分支没有日志闭环，不宣称实机已修好。报告 docs/reports/地图缓存过期与客人舰队排队修复-20261019.md。
 - 历史dirty/untracked全部保留，仅暂存本轮可分离改动。用户自行验证，本轮不编译/测试/游戏/安装，不以V1.39旧DLL代表本轮成果；不push。
 - 本地提交 da8fbfe 已完成，源码/版本/index/构建占用立即全部释放；guest-native-exit可继续其独立文件与后续版本。基线/双端旧日志/patch位于artifacts/guest-map-cache-fleet-20261019。
+
+### guest-native-exit-20261019 / 主控 /root
+- 目标：原版菜单客人返回主菜单/桌面绕过单机保存入口，客人不创建世界存档，房主保留现有最终检查点及统一保存链。
+- 子 Agent guest_exit 负责新 Game/NativeGuestExitHooks.cs、新 Entry/MultiplayerGuestExit.cs、GameHooks 安装单行与 Launcher 退出完成窄接线；需额外文件先汇报。主控负责协调、整合、版本/报告/窄提交；保护原 dirty/untracked，基线 artifacts/guest-native-exit-20261019/baseline。
+- 已读 guest-map-cache-fleet 并行仅 MapSnapshotCache.cs/NativeGalaxy.cs，不占其文件；暂不占版本/构建/index。按用户完成任务无需验证边界，不测试、启动游戏或独立构建安装，源码交后续统一交付。
+
+
+### guest-native-exit-20261019 / guest_exit 子 Agent
+- 已读 ALL/GAME、现行 V1 与 UI/uGUI 技能。占用新 NativeGuestExitHooks.cs/MultiplayerGuestExit.cs、GameHooks 安装单行、Launcher 完成退出窄接线；主控追加授权 RoomPages 的退出按钮及 RoomDialog 的关闭状态文案两处。
+- 原生 MenuDialog 先保存再执行 backCover/exitGame，客人被 UserBean SavePrefix 的 false 回执截断；保存面板与 SaveAs 需在 FairyUIDispatcher 入口阻止。实现复用 Session Disconnect 最终检查点与房主确认，不新增客人存档，不伪报保存成功；原版桌面调用采用现有 NativeWire 反射。
+- 不修改本体、版本、索引，不测试、构建、安装或运行；基线保留 artifacts/guest-native-exit-20261019/baseline。
+- 源码已落盘冻结并释放上述六份功能文件：菜单返回主菜单/桌面复用最终检查点收口，桌面只在会话释放后反射原版 exitGame；第一次退出目标固定、重复点击合并。客人保存面板及 FairyUIDispatcher 保存/另存为入口拒绝并提示，自动保存静默返回失败；既有低层 SavePrefix 保留。房间按钮/关闭文案已按角色区分。
+- 本轮窄补丁 artifacts/guest-native-exit-20261019/guest-exit-functional.patch，基于本轮完整脏工作树基线生成，包含原 untracked RoomPages 的窄增量，不认领其全文。未构建/安装/测试/运行/提交/改版本；无实机通过声明，交主控整合。
+- 用户本轮已明确回复：等其他修复完成后，本轮统一构建安装。guest-native-exit主控将等guest-map-cache-fleet冻结释放后整合三端；用户自行游戏验收。当前功能仍在实现，暂不开始构建。
+- 最终收口：已实际读取 guest-map-cache-fleet 的 da8fbfe / 5dc049b 释放与空index；本轮接 VERSION/CHANGELOG/index，发布 V1.46。退出功能六文件全部冻结，最后错误反馈/重复点击重试已完成；接下来统一三端构建安装，其他源码保持冻结，不测试或启动游戏。

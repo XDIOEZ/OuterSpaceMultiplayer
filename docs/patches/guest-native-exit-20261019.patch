@@ -1,0 +1,201 @@
+diff --git a/src/Game/GameHooks.cs b/src/Game/GameHooks.cs
+index e78f617..5b1593e 100644
+--- a/src/Game/GameHooks.cs
++++ b/src/Game/GameHooks.cs
+@@ -42,6 +42,7 @@ namespace FreeWorldMultiplayer
+             Patch(harmony, typeof(UserBean), "saveArchive", "SavePrefix");
+             Patch(harmony, typeof(UserBean), "saveArchiveWithSynchronousSnapshot", "SavePrefix");
+             Patch(harmony, typeof(NetSender), "backCover", "BackCoverPrefix", parameters: new[] { typeof(callbackInt) });
++            NativeGuestExitHooks.Install(harmony);
+             Patch(harmony, typeof(UserBean), "isMineStarMap", "OwnMapPrefix");
+             Patch(harmony, typeof(FWStarMapAutoLiveService), "simulateOnActivate", "DisableNativeOfflinePrefix");
+             Patch(harmony, typeof(FWStarMapAutoLiveService), "simulateBeforeGroundLoad", "DisableNativeOfflinePrefix");
+diff --git a/src/Entry/ModPluginLauncher.cs b/src/Entry/ModPluginLauncher.cs
+index 3f8b15c..fb61fd5 100644
+--- a/src/Entry/ModPluginLauncher.cs
++++ b/src/Entry/ModPluginLauncher.cs
+@@ -318,7 +318,7 @@ namespace FreeWorldMultiplayer
+             // Repeated menu clicks share one disconnect/save rather than clearing the world early.
+             if (callback != null) nativeReturnCallback += callback;
+             nativeReturnQueued = true; pendingStart = null;
+-            Feedback = "正在退出联机房间并返回主界面。";
++            Feedback = guestExitQueued && guestExitToDesktop ? "正在退出联机房间并返回桌面。" : "正在退出联机房间并返回主界面。";
+             Perform(CloseSession, "退出房间并返回主界面失败。");
+             return true;
+         }
+@@ -369,6 +369,7 @@ namespace FreeWorldMultiplayer
+             if (quitting || unloading) { CancelMenuReturn(); return; }
+             try
+             {
++                if (CompleteGuestDesktopExit()) return;
+                 if (!menuReturnRequested)
+                 {
+                     menuReturnRequested = true;
+@@ -410,6 +411,7 @@ namespace FreeWorldMultiplayer
+         }
+         private void CancelMenuReturn()
+         {
++            ResetGuestExit();
+             awaitingMenuReturn = false; nativeReturnQueued = false; showHostLeftNotice = false;
+             menuReturnRequested = false; menuReturnCover = null; nativeReturnCallback = null;
+         }
+diff --git a/src/Entry/MultiplayerRoomDialog.cs b/src/Entry/MultiplayerRoomDialog.cs
+index d83fc5e..7dc9e14 100644
+--- a/src/Entry/MultiplayerRoomDialog.cs
++++ b/src/Entry/MultiplayerRoomDialog.cs
+@@ -146,7 +146,8 @@ namespace FreeWorldMultiplayer
+             lobbyNavigation.SetActive(!roomContext && !settings); roomNavigation.SetActive(roomContext && !settings);
+             identityRow.SetActive(!roomContext && !settings); backButton.gameObject.SetActive(settings);
+             cancelButton.gameObject.SetActive(Busy);
+-            SetCaption(cancelButton, Runtime.IsStarting ? "取消创建" : Runtime.Session != null && Runtime.Session.IsClosing ? "正在保存退出…" : "取消连接");
++            SetCaption(cancelButton, Runtime.IsStarting ? "取消创建" : Runtime.Session != null && Runtime.Session.IsClosing
++                ? (Runtime.Session.IsHost ? "正在保存退出…" : "正在退出房间…") : "取消连接");
+             cancelButton.interactable = Runtime.Session != null && !Runtime.Session.IsClosing;
+             settingsButton.interactable = !Busy && !settings;
+             MarkTab(createTab, page == Page.Create); MarkTab(joinTab, page == Page.Join);
+diff --git a/src/Entry/MultiplayerRoomPages.cs b/src/Entry/MultiplayerRoomPages.cs
+index ddca051..9eef345 100644
+--- a/src/Entry/MultiplayerRoomPages.cs
++++ b/src/Entry/MultiplayerRoomPages.cs
+@@ -107,7 +107,11 @@ namespace FreeWorldMultiplayer
+             roomStatus.text = world.Name + "  ·  在线 " + world.Players.Values.Count(p => p.Online) + "/" + world.Options.MaxPlayers
+                 + (String.IsNullOrEmpty(roomId) ? "\nIP 房间" : "\nSteam 房间号 " + roomId);
+             clockStatus.text = (session.IsHost ? "房主" : "客人") + "  ·  " + (session.Paused ? "已暂停" : session.Speed + " 倍运行");
+-            if (leaveButton != null) leaveButton.interactable = Connected && !Busy;
++            if (leaveButton != null)
++            {
++                SetCaption(leaveButton, session.IsHost ? "保存并退出房间" : "退出房间");
++                leaveButton.interactable = Connected && !Busy;
++            }
+             PlayerRecord selected = null; if (selectedPlayer != null) world.Players.TryGetValue(selectedPlayer, out selected);
+             rebindButton.interactable = Connected && !Busy && session.IsHost && selected != null && !selected.Online;
+             recoveryCode.interactable = Connected && !Busy && session.IsHost;
+diff --git a/src/Game/NativeGuestExitHooks.cs b/src/Game/NativeGuestExitHooks.cs
+new file mode 100644
+index 0000000..eabb304
+--- /dev/null
++++ b/src/Game/NativeGuestExitHooks.cs
+@@ -0,0 +1,71 @@
++using System;
++using System.Linq;
++using System.Reflection;
++using HarmonyLib;
++
++namespace FreeWorldMultiplayer
++{
++    internal static class NativeGuestExitHooks
++    {
++        private static bool GuestWorld
++        {
++            get { return GameBridge.Active != null && !GameBridge.Active.Context.IsHost; }
++        }
++
++        internal static void Install(Harmony harmony)
++        {
++            Patch(harmony, typeof(MenuDialog), "onEvent_Backcover", "ReturnPrefix");
++            Patch(harmony, typeof(MenuDialog), "onEvent_Exitgame", "ExitPrefix");
++            Patch(harmony, typeof(FairyUIDispatcher), "showArchiveDialog", "ArchiveDialogPrefix");
++            MethodInfo[] saves = typeof(FairyUIDispatcher).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
++                .Where(method => method.Name == "saveArchive").ToArray();
++            if (saves.Length == 0) throw new MissingMethodException(typeof(FairyUIDispatcher).FullName, "saveArchive");
++            foreach (MethodInfo save in saves)
++                harmony.Patch(save, new HarmonyMethod(typeof(NativeGuestExitHooks), "SaveArchivePrefix"));
++        }
++
++        private static void Patch(Harmony harmony, Type owner, string name, string prefix)
++        {
++            MethodInfo method = AccessTools.Method(owner, name);
++            if (method == null) throw new MissingMethodException(owner.FullName, name);
++            harmony.Patch(method, new HarmonyMethod(typeof(NativeGuestExitHooks), prefix));
++        }
++
++        private static bool ReturnPrefix()
++        {
++            MultiplayerRuntime runtime = MultiplayerRuntime.Instance;
++            return runtime == null || !runtime.TryQueueGuestExit(false);
++        }
++
++        private static bool ExitPrefix()
++        {
++            MultiplayerRuntime runtime = MultiplayerRuntime.Instance;
++            return runtime == null || !runtime.TryQueueGuestExit(true);
++        }
++
++        private static bool ArchiveDialogPrefix(bool __0)
++        {
++            if (!GuestWorld || !__0) return true;
++            ShowSaveNotice();
++            return false;
++        }
++
++        private static bool SaveArchivePrefix(object[] __args)
++        {
++            if (!GuestWorld) return true;
++            // SaveAs writes Archive directly, so the lower UserBean save guard is too late.
++            // An automatic save must remain silent; callers receive failure, never fake success.
++            bool automatic = __args.Any(argument => argument is ArchiveSaveDialog.SaveMod
++                && (ArchiveSaveDialog.SaveMod)argument == ArchiveSaveDialog.SaveMod.AutoSave);
++            if (!automatic) ShowSaveNotice();
++            foreach (object argument in __args)
++                if (argument is callbackInt) ((callbackInt)argument)(Callback.FAILED);
++            return false;
++        }
++
++        private static void ShowSaveNotice()
++        {
++            FairyUIDispatcher.showToast("联机世界由房主统一保存，客人无需创建存档。", false);
++        }
++    }
++}
+diff --git a/src/Entry/MultiplayerGuestExit.cs b/src/Entry/MultiplayerGuestExit.cs
+new file mode 100644
+index 0000000..7a25c38
+--- /dev/null
++++ b/src/Entry/MultiplayerGuestExit.cs
+@@ -0,0 +1,46 @@
++namespace FreeWorldMultiplayer
++{
++    public sealed partial class MultiplayerRuntime
++    {
++        private bool guestExitQueued;
++        private bool guestExitToDesktop;
++        private bool guestDesktopExitRequested;
++
++        internal bool TryQueueGuestExit(bool toDesktop)
++        {
++            if (quitting || unloading) return false;
++            // Keep the first destination and one final-checkpoint exchange for repeated clicks.
++            if (guestExitQueued)
++            {
++                // A failed first Disconnect can be retried; an in-progress close is idempotent.
++                if (Session != null && !awaitingMenuReturn) TryQueueNativeReturn(null);
++                return true;
++            }
++            if (Session == null || Session.IsHost) return false;
++            guestExitQueued = true;
++            guestExitToDesktop = toDesktop;
++            TryQueueNativeReturn(null);
++            return true;
++        }
++
++        private bool CompleteGuestDesktopExit()
++        {
++            if (!guestExitQueued || !guestExitToDesktop) return false;
++            if (guestDesktopExitRequested) return true;
++            // FinalizeSession has completed Disconnect, including the host acknowledgement or
++            // its explicit timeout error, and disposed the guest bridge before we reach here.
++            guestDesktopExitRequested = true;
++            Feedback = "正在返回桌面。";
++            MultiplayerRoomDialog.CloseOpen();
++            NativeWire.Call(JniHandler.getInstance(), "exitGame");
++            return true;
++        }
++
++        private void ResetGuestExit()
++        {
++            guestExitQueued = false;
++            guestExitToDesktop = false;
++            guestDesktopExitRequested = false;
++        }
++    }
++}

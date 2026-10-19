@@ -40,6 +40,7 @@ namespace FreeWorldMultiplayer
             Patch(harmony, typeof(UserBean), "saveArchive", "SavePrefix");
             Patch(harmony, typeof(UserBean), "saveArchiveWithSynchronousSnapshot", "SavePrefix");
             Patch(harmony, typeof(NetSender), "backCover", "BackCoverPrefix", parameters: new[] { typeof(callbackInt) });
+            NativeGuestExitHooks.Install(harmony);
             Patch(harmony, typeof(UserBean), "isMineStarMap", "OwnMapPrefix");
             Patch(harmony, typeof(FWStarMapAutoLiveService), "simulateOnActivate", "DisableNativeOfflinePrefix");
             Patch(harmony, typeof(FWStarMapAutoLiveService), "simulateBeforeGroundLoad", "DisableNativeOfflinePrefix");
