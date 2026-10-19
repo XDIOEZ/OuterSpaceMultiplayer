@@ -370,6 +370,10 @@
 - 仅链接生产源码执行本地 .NET 检查，按用户最新要求不构建/打包/安装三端、不启动游戏；窄 Git 提交，不 push，不夹带任何历史 dirty/untracked。完成后回填实际检查结果并释放占用。
 - 完成：原生产逻辑被新负向用例复现为重入 Tick 重复 Disconnect；改为断线请求执行期防重入、只为已到期条目建立安全快照，并在回调修改连接表后校验同一对象及最新倒计时。链接生产 `RejectedPeerEvictionChecks` **180,042 项通过**，含两个同时到期连接、同步递归与延迟 Disconnected；合成单隔离连接 4,000 次未到期 Tick 路径测得 0 B 托管分配。源码及测试独立提交 `7b750af`，未修改版本/协议/存档，未构建/安装/运行游戏或 push，旧 dirty/untracked 保留；本轮源码与 Git index 占用已释放。真实 TCP/Steam 多玩家断链回归仍按 BUG-22 等待实机验收。
 
+### fix-map-cache-first-send-reentrancy-20261019 / 主控 /root
+- 本轮占用干净的 `src/Session/MapCacheOutboundRetry.cs` 与 `tools/MapCacheNegotiationChecks/Program.cs`。修复首次发送时传输回调同键重入导致重复发送，以及清空旧会话后同键新请求被旧失败路径覆盖的问题；保持已存在的 2 秒出站重试、会话/任期身份和缓存 FIFO 约束。
+- 测试只执行生产源码链接的 MapCacheNegotiationChecks 等本机局部检查；按用户最近要求，不递增版本、不构建/安装三端、不运行游戏、不 push。源码/测试窄提交，其他 Agent 的大量历史 dirty/untracked 原样保留，完成后释放占用。
+- 结果：旧实现的首次发送同步重入新增用例确实失败；生产源码链接 `MapCacheNegotiationChecks` **60,084 项通过**（包含同键重复入队、清空旧会话后新租约、发送中取消、异常恢复及不同恢复类型独立性）。直接发送期使用带单调租约号的字典防重入，释放时严格比对当前租约；`Clear/Remove` 能撤销未完成旧发送；原 2 秒退避与待发送 FIFO 不变。源码和测试提交 `af84d00`（2 文件），未改协议/版本/存档，未自行三端构建或安装、游戏验收、push。两份源码占用已释放，旧 dirty/untracked 原样保留；同一主仓库其他任务如需打包请以冻结后来源指纹重新验收。
 
 ### fleet-native-preparation-20261019 / 最终交付与全部释放
 - 功能本地提交311e5e8，V1.51/1.51.0.0、协议11；迎战后双方原版PageBattleDeployment分别配置，房主校验并收齐确认后才创建场景，两端ready才开始战斗。首发/后备窄适配保留原team/authority，准备取消/恢复不结算初始部署帧。
