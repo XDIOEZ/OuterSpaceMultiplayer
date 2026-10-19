@@ -375,3 +375,19 @@
 - 功能本地提交311e5e8，V1.51/1.51.0.0、协议11；迎战后双方原版PageBattleDeployment分别配置，房主校验并收齐确认后才创建场景，两端ready才开始战斗。首发/后备窄适配保留原team/authority，准备取消/恢复不结算初始部署帧。
 - 三端Sync-ModCopies.ps1 -BuildOnly已完成，同源79AA9E9F1C727010EF5A0A5B91C597B7C6C4513E7192E4A3F9DBDC279BE0F06A；固定ZIP及回执artifacts/fleet-native-preparation-20261019，报告docs/reports/原版战前配置接入-20261019.md。BuildOnly=true、Installations=[]、RuntimeTested=false，不安装、不测试/启动游戏或push。
 - 原有dirty保留，接口/协议仅暂存本轮新增，开工工作区增量docs/patches/fleet-native-preparation-20261019.patch；不宣称历史混合Git干净闭包。源码、VERSION/CHANGELOG、构建与index全部释放给transport-debit-null的V1.52；后续公共包可更新，本轮固定包仍保留。
+
+### transport-debit-null-20261019 / 主控 /root
+- 认领用户运输日志 DebitTransportItem 的 NullReferenceException；功能子 Agent 仅占 NativeTransfers.cs 扣除库存相关窄改，其他旧 dirty 保留；改前字节保存在 artifacts/transport-debit-null-20261019。主控负责版本、窄提交与三端BuildOnly，不安装、不运行测试/游戏。
+- 无跨模块接口变更；V1.51战前配置仍在并行收口，主控等待其版本/构建冻结后递增发布，不覆盖其记录。
+
+### transport-debit-null-20261019 / 源码冻结
+- 子Agent已完成NativeTransfers.cs唯一方法窄改：扣除前比较UserBean.curStarMap的真实库存引用，取消所有地图枚举；当前图仍走原生removeThing，其它库存直接移除。代码冻结，修复差异artifacts/transport-debit-null-20261019/fix.patch；无需改协议/存档，不运行测试/游戏。
+- 已见V1.51主控暂存区进入提交，本任务不占用index/VERSION/构建；待其交付释放后接V1.52打包与本轮窄提交。
+
+### transport-debit-null-20261019 / V1.52整合构建
+- 已收到fleet-native-preparation-done-03释放，认领VERSION/CHANGELOG、统一BuildOnly及本轮短Git index窗口；源码已冻结，不修改并行任务文件。V1.52只打包、不测试/游戏/安装/推送；本轮窄提交不包含旧dirty。
+
+### transport-debit-null-20261019 / 完成并释放
+- 本地修复提交9970815，仅6文件：运输扣除5+/2-、V1.52版本/发布说明、本轮独立patch/报告/回执；NativeTransfers既有混合dirty原样保留。
+- 三端BuildOnly全部成功，V1.52/1.52.0.0，同源8E10F7B34108342C8AD5271C3716DA03372E64466690F32D3A31145FFA0FC3E5；固定包artifacts/transport-debit-null-20261019/packages，回执docs/reports/transport-debit-null-build-20261019.json。Installations=[]、RuntimeTested=false；不安装、不运行测试/游戏、不push，故障会话由用户重开最后完整存档验收。
+- 源码/VERSION/CHANGELOG/构建冻结并释放；本条文档短提交后释放index，其它任务及旧dirty保留。
