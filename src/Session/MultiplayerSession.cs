@@ -87,18 +87,6 @@ namespace FreeWorldMultiplayer
                 RegisterCommandCallback = (id, callback) => commandCallbacks[id] = callback
             });
         }
-        private void NotifyCommandResult(CommandResult result)
-        {
-            if (result == null) return;
-            TraceCompletedFleetResult(result);
-            Action<CommandResult> callback;
-            if ((result.Applied || !result.Success) && commandCallbacks.TryGetValue(result.CommandId, out callback))
-            {
-                commandCallbacks.Remove(result.CommandId);
-                try { callback(result); } catch (Exception ex) { Error("联机结果已提交，但本机界面回调失败：" + ex.Message); }
-            }
-            CommandCompleted?.Invoke(result);
-        }
         public void HostNew(WorldOptions options, TransportOptions transportOptions)
         {
             EnsureIdle();

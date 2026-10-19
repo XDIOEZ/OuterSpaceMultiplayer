@@ -159,14 +159,21 @@ namespace FreeWorldMultiplayer
             Bridge = new GameBridge();
             Session = new MultiplayerSession(Transport, Bridge, StorageRoot, identity);
             Session.StatusChanged += StatusChanged;
+            Session.CommandProjectionRequired += ProjectCommandResult;
             Session.CommandCompleted += CommandCompleted;
             tickFailed = false;
         }
         private void StatusChanged(string message) { Feedback = message; }
-        private void CommandCompleted(CommandResult result)
+        private void ProjectCommandResult(CommandResult result)
         {
+            // These are real native fleet/map callbacks, not optional UI notices.
+            // Their failures are handled fail-closed by the Session before any
+            // success feedback is published through CommandCompleted.
             if (Bridge != null) Bridge.ObserveFleetCommandResult(result);
             if (Bridge != null) Bridge.ObserveTravelCommandResult(result);
+        }
+        private void CommandCompleted(CommandResult result)
+        {
             Feedback = !result.Success ? "操作未完成：" + result.Error : result.Saved ? "操作完成，已保存。" : result.Applied ? "操作已执行，等待下一次统一保存。" : "操作已提交，等待房主执行回执。";
         }
         internal void ReportUiFailure(string message) { Feedback = message; }
@@ -278,6 +285,7 @@ namespace FreeWorldMultiplayer
                 closing.Disconnect(); awaitingClose = true; return;
             }
             closing.StatusChanged -= StatusChanged;
+            closing.CommandProjectionRequired -= ProjectCommandResult;
             closing.CommandCompleted -= CommandCompleted;
             bool hostLeft = closing.HostLeft && !quitting && !unloading;
             try
