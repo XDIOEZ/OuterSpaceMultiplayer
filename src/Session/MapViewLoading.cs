@@ -108,6 +108,9 @@ namespace FreeWorldMultiplayer
             if (nativeMapLoad != null) throw new InvalidOperationException("Previous native map load has not completed.");
             ValidateResyncCoverage(view);
             awaitingLocalReady.Clear();
+            // Applying an authoritative checkpoint to an already instantiated map is an
+            // atomic in-place projection. There is no native enterMap/init to wait for.
+            if (bridge.IsMapReady(view.Access.MapId)) return;
             nativeMapLoad = new NativeMapLoad { MapId = view.Access.MapId, Epoch = view.Access.AuthorityEpoch, Revision = view.Access.Revision };
             if (IsHost && !mapLoadingClockHeld)
             {

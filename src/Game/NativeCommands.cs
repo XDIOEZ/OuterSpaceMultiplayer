@@ -53,15 +53,15 @@ namespace FreeWorldMultiplayer
             if (!IsPlayerIntent)
             {
                 if (!bridge.IsSimulator) return false;
-                string owner = bridge.Context.OwnerOfEntity(__instance.getUID());
-                return string.IsNullOrEmpty(owner) || bridge.Context.HasPermission(owner, bridge.CurrentMapId, __instance.getUID(), Permission.Work);
+                return !NativeGroundInteraction.IsWorkPlan(plan) || bridge.CanPerformGroundWork(__instance, plan);
             }
             if (plan.planBean != null && plan.planBean.taskType == FWPlanBean.TASK_CARRY
                 && bridge.FindPersistentBean(plan.planBean.objectUID) is FWThingBean)
                 return bridge.Route(CommandKind.TakeItem, __instance.getUID(), plan.planBean.objectUID,
                     new { Count = ((FWThingBean)bridge.FindPersistentBean(plan.planBean.objectUID)).getSum() });
             SchedulingResult.Append("操作已提交，由地块模拟者执行。");
-            return bridge.Route(CommandKind.Work, __instance.getUID(), plan.planBean == null ? -1 : plan.planBean.getUID(),
+            long planUid = plan.planBean == null ? -1 : plan.planBean.getUID();
+            return bridge.Route(CommandKind.Work, __instance.getUID(), planUid >= 0 && bridge.Context.OwnerOfEntity(planUid) != null ? planUid : -1,
                 new { PlanId = plan.planBean == null ? -1 : plan.planBean.getUID(), NativePlan = plan.planBean == null ? null : NativeWire.Pack(plan.planBean) });
         }
         private static bool PlanPrefix()
@@ -147,6 +147,10 @@ namespace FreeWorldMultiplayer
                 foreach (FWPlanBean plan in added)
                     if (MapManager.instance.planManager.getPlanGraphByUID(plan.getUID()) != null) throw new InvalidOperationException("New plan already exists.");
                 foreach (long uid in plans.Remove)
+                    bridge.ValidateGroundPlanMutation(command.PlayerId, MapManager.instance.planManager.getPlanGraphByUID(uid).rolePlan.planBean, false);
+                foreach (FWPlanBean plan in updated) bridge.ValidateGroundPlanMutation(command.PlayerId, plan, false);
+                foreach (FWPlanBean plan in added) bridge.ValidateGroundPlanMutation(command.PlayerId, plan, true);
+                foreach (long uid in plans.Remove)
                 {
                     BasePlanGraph graph = MapManager.instance.planManager.getPlanGraphByUID(uid);
                     if (graph == null) throw new InvalidOperationException("Plan to remove does not exist.");
@@ -168,16 +172,26 @@ namespace FreeWorldMultiplayer
             }
             if (command.Kind == CommandKind.Work)
             {
-                if (!bridge.Context.HasPermission(command.PlayerId, command.MapId, command.EntityId, Permission.Work)) throw new InvalidOperationException("Work permission denied.");
+                if (!bridge.Context.HasPermission(command.PlayerId, command.MapId, command.EntityId, Permission.ControlOwnHero)) throw new InvalidOperationException("Cannot assign another player's employee.");
                 BaseHero hero = MapManager.instance.heroManager.getHeroByUID(command.EntityId);
                 BasePlanGraph graph = MapManager.instance.planManager.getPlanGraphByUID(command.TargetEntityId);
                 if (graph == null)
                 {
                     JObject payload = JObject.Parse(command.PayloadJson);
                     string encoded = payload.Value<string>("NativePlan");
-                    if (!string.IsNullOrEmpty(encoded)) graph = LocalCoreHandle.Plan_addNewPlan_LN(NativeWire.Unpack<FWPlanBean>(encoded));
+                    if (!string.IsNullOrEmpty(encoded))
+                    {
+                        FWPlanBean plan = NativeWire.Unpack<FWPlanBean>(encoded);
+                        if (command.TargetEntityId >= 0 && plan.getUID() != command.TargetEntityId)
+                            throw new InvalidOperationException("Work plan identity mismatch.");
+                        graph = MapManager.instance.planManager.getPlanGraphByUID(plan.getUID());
+                        bridge.ValidateGroundPlanMutation(command.PlayerId, graph == null ? plan : graph.rolePlan.planBean, graph == null);
+                        if (graph == null) graph = LocalCoreHandle.Plan_addNewPlan_LN(plan);
+                    }
                 }
                 if (hero == null || graph == null) throw new InvalidOperationException("Worker or plan is no longer present.");
+                bridge.ValidateGroundPlanMutation(command.PlayerId, graph.rolePlan.planBean, false);
+                if (!bridge.CanPerformGroundWork(hero, graph.rolePlan)) throw new InvalidOperationException("当前关系不允许该雇员执行这项工作。");
                 hero.doAction(graph.rolePlan); return;
             }
             Invocation invocation = NativeWire.Parse<Invocation>(command.PayloadJson);

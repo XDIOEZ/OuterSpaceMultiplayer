@@ -15,13 +15,12 @@ namespace FreeWorldMultiplayer
             return Run(() =>
             {
                 if (MapManager.instance == null) return;
-                string mapOwner = Context.OwnerOfMap(CurrentMapId);
+                ReleaseIncompatibleGroundWork();
                 foreach (BaseHero hero in MapManager.instance.heroManager.getAllRoles())
                 {
                     string owner = Context.OwnerOfEntity(hero.getUID());
-                    if (owner == mapOwner) continue;
-                    if (Context.GetRelation(owner, mapOwner) != Relation.Friendly) hero.doInterruptAction();
-                    hero.roleBean.fightHatreds.clearHatred();
+                    if (owner == relationship.PlayerA || owner == relationship.PlayerB)
+                        hero.roleBean.fightHatreds.clearHatred();
                 }
             });
         }

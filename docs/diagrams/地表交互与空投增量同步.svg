@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="680" viewBox="0 0 1160 680">
+  <defs>
+    <style>text{font-family:'Microsoft YaHei',sans-serif;fill:#e8edf6}.title{font-size:27px;font-weight:700}.head{font-size:21px;font-weight:700}.body{font-size:17px}.small{font-size:15px;fill:#b9c8df}.line{stroke:#8199be;stroke-width:2;fill:none;marker-end:url(#arrow)}</style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#8199be"/></marker>
+  </defs>
+  <rect width="1160" height="680" rx="18" fill="#101b2d"/>
+  <text x="44" y="53" class="title">同一地表 · 玩家归属、两两关系与空投同步</text>
+  <text x="44" y="87" class="small">以《联机概述》为交互依据；建筑归建造者，雇员保持原 PlayerId 与 UID。</text>
+  <g transform="translate(44 117)">
+    <rect width="344" height="176" rx="14" fill="#173b37" stroke="#389b84"/>
+    <text x="22" y="39" class="head">友好</text>
+    <text x="22" y="76" class="body">互不攻击；各自控制自己的雇员</text>
+    <text x="22" y="110" class="body">自动执行彼此发布的工作</text>
+    <text x="22" y="144" class="body">共享使用工作台及其生产任务</text>
+  </g>
+  <g transform="translate(408 117)">
+    <rect width="344" height="176" rx="14" fill="#263750" stroke="#7e9fce"/>
+    <text x="22" y="39" class="head">中立</text>
+    <text x="22" y="76" class="body">不会自动攻击对方</text>
+    <text x="22" y="110" class="body">只执行自己玩家的工作</text>
+    <text x="22" y="144" class="body">只使用自己玩家的工作台</text>
+  </g>
+  <g transform="translate(772 117)">
+    <rect width="344" height="176" rx="14" fill="#4a2831" stroke="#c27c8b"/>
+    <text x="22" y="39" class="head">敌对</text>
+    <text x="22" y="76" class="body">雇员自动寻找并攻击敌人</text>
+    <text x="22" y="110" class="body">不执行敌方发布的工作</text>
+    <text x="22" y="144" class="body">不参与敌方工作台生产</text>
+  </g>
+  <text x="44" y="334" class="small">无基地野外与已建基地采用同样的关系规则；关系变更后，释放已经无权继续的工作。</text>
+  <text x="44" y="389" class="head">普通空投：保留当前地图与人物实例</text>
+  <g transform="translate(44 416)">
+    <rect width="234" height="109" rx="12" fill="#233750"/>
+    <text x="18" y="35" class="head">收齐模拟进度</text>
+    <text x="18" y="68" class="body">确认在途变动，暂稳地表</text>
+    <text x="18" y="94" class="small">避免旧状态覆盖新到达资产</text>
+  </g>
+  <path class="line" d="M280 469H315"/>
+  <g transform="translate(318 416)">
+    <rect width="234" height="109" rx="12" fill="#233750"/>
+    <text x="18" y="35" class="head">房主确认运输</text>
+    <text x="18" y="68" class="body">沿用原 TransferId 与 UID</text>
+    <text x="18" y="94" class="small">同一资产只保留一个载体</text>
+  </g>
+  <path class="line" d="M554 469H589"/>
+  <g transform="translate(592 416)">
+    <rect width="252" height="109" rx="12" fill="#173b37" stroke="#389b84"/>
+    <text x="18" y="35" class="head">当前场景原位合并</text>
+    <text x="18" y="68" class="body">更新物品、空投仓和人物</text>
+    <text x="18" y="94" class="small">保留地形与当前地块视野</text>
+  </g>
+  <path class="line" d="M846 469H881"/>
+  <g transform="translate(884 416)">
+    <rect width="232" height="109" rx="12" fill="#233750"/>
+    <text x="18" y="35" class="head">恢复原模拟者</text>
+    <text x="18" y="68" class="body">双方继续停留在当前地块</text>
+    <text x="18" y="94" class="small">普通空投不触发重新进图</text>
+  </g>
+  <rect x="44" y="558" width="1072" height="72" rx="12" fill="#352f2a"/>
+  <text x="64" y="588" class="body">首次进入、真正切换地图、缺包恢复仍走完整加载；不以跳过恢复来掩盖状态丢失。</text>
+  <text x="64" y="614" class="small">本图说明代码目标与同步路径；编译打包和双端游戏验收分别记录，运行效果由用户确认。</text>
+</svg>

@@ -23,6 +23,7 @@ namespace FreeWorldMultiplayer
         {
             KnockedOut.Clear();
             NativeGroundPersonnelHooks.Install(harmony);
+            NativeGroundInteraction.Install(harmony);
             Patch(harmony, typeof(FWGameData), "createUID", "UidPrefix");
             Patch(harmony, typeof(FWUidCounter), "nextUid", "UidPrefix");
             Patch(harmony, typeof(FWUidItem), "createUID", "UidItemPrefix");
@@ -383,7 +384,15 @@ namespace FreeWorldMultiplayer
             if (role == null) return true;
             string owner = Bridge.Context.OwnerOfEntity(role.getUID());
             if (string.IsNullOrEmpty(owner)) return true;
-            if (Bridge.Context.HasPermission(owner, Bridge.CurrentMapId, -1, Permission.Work)) return true;
+            RolePlan plan = __args.OfType<RolePlan>().FirstOrDefault();
+            if (plan == null)
+            {
+                BaseBuild build = __args.OfType<BaseBuild>().FirstOrDefault();
+                // Outer schedulers must inspect all candidates, including this
+                // player's own workbench on another player's map.
+                return build == null || Bridge.CanUseGroundWorkTarget(role, build.getUID());
+            }
+            if (Bridge.CanPerformGroundWork(role, plan)) return true;
             return (NativeCommands.IsPlayerIntent || Bridge.Executing) && __originalMethod.Name.IndexOf("carry", StringComparison.OrdinalIgnoreCase) >= 0
                 && Bridge.Context.HasPermission(owner, Bridge.CurrentMapId, -1, Permission.Loot);
         }
