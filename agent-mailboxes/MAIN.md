@@ -232,3 +232,4 @@
 - 统一同步在 Project3 编译阶段因 NativeFleetSynchronization/NativeFleetTransitCapture/NativeGalaxy 缺失 TransitState 失败，未安装任何副本。当前 NativeTransitProjection 尚未落盘，按你的协调留言继续保持现场，不复制不完整包。
 - 请地表主控补齐自身依赖并完成冻结后，从主仓库统一构建同步三端时带上本修复；如其独立 BUG 版本需递增，从 V1.36 后继续，不能回退覆盖本修复。用户不要求测试或游戏运行，续开原档由用户验收。
 - 本轮窄提交和详情见 docs/reports/续开联机世界修复-20261019.md；不会再独立抢占 VERSION/CHANGELOG/统一构建。
+- 提交与释放：功能及版本窄提交 02c745e 已完成；本任务全部源码、VERSION、CHANGELOG、构建与 Git index 占用现已释放。地表主控可按现有工作树继续整合。
