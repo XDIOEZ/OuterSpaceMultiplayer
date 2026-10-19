@@ -304,3 +304,8 @@
 ### ground-entry-world-clock-20261019 — 最终交付与全部释放
 - 本次源码提交ef24c10，包含在V1.49三端统一BuildOnly包，来源9CD7BD974923CAE2E8BA35FFA255E7A3EEA7E0889D8D770B43D30D59061EC84E；已实际读取三端BUILD-INFO与完成回执。artifacts/ground-entry-world-clock-20261019/copy-sync.json与packages.json留档，报告docs/reports/进入地块世界暂停修复-20261019.md。
 - BuildOnly=true、Installations=[]、RuntimeTested=false：用户明确暂不安装，游戏与跨机由用户验收。加载期新资产命令FIFO等待、加载跨日本地Ground日结不补算的边界已记录。源码/版本/index/构建全部释放，保留无关dirty，未push。
+
+### package-only-instructions-20261019 — 提示词更新完成并释放
+- 用户明确要求默认只打包，只有明确说安装才安装三端；指定目标则只安装指定端。历史安装授权不延续，不再每次询问是否安装。
+- 本轮仅修改全局AGENTS及主仓库AGENTS.md/Agent.md/README.md，清除默认自动同步安装约定，默认命令统一为Sync-ModCopies.ps1 -BuildOnly；按用户要求新增一条长期记忆更新便笺。不改脚本/功能源码/版本，不构建、测试或安装，保留其他dirty。
+- 本轮文档窄提交后立即释放全部文件/index；全局提示词和记忆便笺不属于本仓库Git。

@@ -21,25 +21,28 @@ P3、Steam 与 TapTap 的 `mods\FreeWorldMultiplayer` 都是可重新生成的�
 
 若发现副本或历史目录有独有修复，先核对差异、合入主仓库，再从主仓库构建；不能直接用副本覆盖主仓库。
 
-## 构建和频繁同步
+## 默认打包与按需安装
 
 同一份源码分别针对 Project3、Steam 和 TapTap 的真实程序集构建。三种目标的依赖和 DLL 可以不同；应以 `BUILD-INFO.json` 中相同的 `SourceRevision` 判断是否来自同一开发状态，不能要求 DLL 字节相同。
 
 统一入口在主仓库：
 
 ```powershell
-# 修改完成后，构建并更新三个运行副本
+# 默认：只构建三端包，不安装
+& 'C:\Users\CatStudio\Desktop\FreeWorldMods\FreeWorldMultiplayer\Sync-ModCopies.ps1' -BuildOnly
+
+# 仅在用户明确说“安装”时：构建并安装三端
 & 'C:\Users\CatStudio\Desktop\FreeWorldMods\FreeWorldMultiplayer\Sync-ModCopies.ps1'
 
-# 仅更新一个目标
+# 用户明确指定只安装一个目标时
 & 'C:\Users\CatStudio\Desktop\FreeWorldMods\FreeWorldMultiplayer\Sync-ModCopies.ps1' -Target Project3
 & 'C:\Users\CatStudio\Desktop\FreeWorldMods\FreeWorldMultiplayer\Sync-ModCopies.ps1' -Target Steam
 & 'C:\Users\CatStudio\Desktop\FreeWorldMods\FreeWorldMultiplayer\Sync-ModCopies.ps1' -Target TapTap
 ```
 
-这里的“拉取”指从主仓库最新工作区构建、安装，包括用户尚未提交的源码改动；不需要在运行副本中执行 Git pull。不要擅自增加定时任务、后台监视或自动重启。
+这里的“拉取、更新、同步”默认只从主仓库最新工作区构建打包，包括用户尚未提交的源码改动，不代表安装授权；不需要在运行副本中执行 Git pull。不要擅自增加定时任务、后台监视或自动重启。
 
-用户已授权维护三个安装副本：后续完成源码、依赖或分发配置修改后，默认通过上述入口同步三端，除非用户要求只调查、只修改文档、只打包或暂不安装。若目标运行中、构建失败或依赖不匹配，停止该次同步并说明原因；不强杀进程或复制不兼容包。
+**默认只打包；只有用户明确要求“安装”时才安装三端。** 用户指定目标时只安装指定端。“修复、完成、构建、打包、更新、同步、拉取”均不自动授权安装；历史安装授权仅对应当次交付，不延续到后续任务。本条取代所有历史默认安装约定，不必每次询问是否安装，未明确要求就执行 `-BuildOnly`。只调查、只改文档或明确不构建时不额外打包。安装获授权后，若目标运行中、构建失败或依赖不匹配，停止该次安装并说明原因；不强杀进程或复制不兼容包。
 
 ## BUG 修复版本
 

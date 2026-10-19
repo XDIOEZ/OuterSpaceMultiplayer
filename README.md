@@ -27,16 +27,18 @@ V1.39 使用网络协议 7，存档结构版本仍为 1；房主和客人都必�
 修改后在主仓库运行：
 
 ```powershell
-& .\Sync-ModCopies.ps1                     # 构建并同步 P3、Steam、TapTap
-& .\Sync-ModCopies.ps1 -Target Project3    # 只更新 P3
-& .\Sync-ModCopies.ps1 -Target Steam       # 只更新 Steam
-& .\Sync-ModCopies.ps1 -Target TapTap      # 只更新 TapTap
-& .\Sync-ModCopies.ps1 -BuildOnly          # 只构建三种包
+& .\Sync-ModCopies.ps1 -BuildOnly          # 默认：只构建三端包，不安装
+
+# 只有用户明确要求“安装”时，才执行下面的安装命令
+& .\Sync-ModCopies.ps1                     # 构建并安装 P3、Steam、TapTap
+& .\Sync-ModCopies.ps1 -Target Project3    # 只安装 P3
+& .\Sync-ModCopies.ps1 -Target Steam       # 只安装 Steam
+& .\Sync-ModCopies.ps1 -Target TapTap      # 只安装 TapTap
 ```
 
-脚本先完成所有选定目标的构建，再分别备份和安装本 MOD。三端 `BUILD-INFO.json` 的 `SourceRoot`、`SourceRevision` 记录同一份主仓库工作区，未提交的源码改动也会参与构建。DLL 使用不同目标依赖，字节不同属于正常情况。同步回执为 `artifacts/last-copy-sync.json`。
+默认使用 `-BuildOnly`，只生成三端包，不覆盖运行副本。只有用户明确要求“安装”时，才去掉 `-BuildOnly`，先完成所有选定目标的构建，再分别备份和安装本 MOD；指定目标则只安装指定端。历史安装授权不延续到后续任务。三端 `BUILD-INFO.json` 的 `SourceRoot`、`SourceRevision` 记录同一份主仓库工作区，未提交的源码改动也会参与构建。DLL 使用不同目标依赖，字节不同属于正常情况。同步回执为 `artifacts/last-copy-sync.json`。
 
-运行副本内的 `Update-From-Main.ps1` 会调用主仓库脚本，按其所在游戏目录仅更新对应目标；TapTap 副本不会更新到 Steam 默认目录。此“拉取”不执行 Git pull，不启动后台监视，不自动重启游戏。更新后按原版要求重新加载；游戏内验收由用户执行。
+只有用户明确要求安装对应目标时，才运行副本内的 `Update-From-Main.ps1`：它会调用主仓库脚本并安装到对应游戏目录，TapTap 副本不会更新到 Steam 默认目录。默认“拉取、更新、同步”仍用主仓库 `-BuildOnly` 只打包。此“拉取”不执行 Git pull，不启动后台监视，不自动重启游戏。安装后按原版要求重新加载；游戏内验收由用户执行。
 
 ## 构建
 
