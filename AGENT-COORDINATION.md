@@ -321,3 +321,21 @@
 - 范围：仅 `src/Session/MapCacheOutboundRetry.cs`、`tools/MapCacheNegotiationChecks/Program.cs` 与该测试工程 `.csproj`；地图缓存退避 Tick 快照复用，并保护过期回调不能删除重入后新建的同键请求。沿用已有 `VisitTickSnapshot<T>`，不改传输协议、存档、Core/Game、版本、三端安装副本。
 - 开工状态：以上目标文件 Git 工作区当前干净，其他 Agent 的大量 dirty/untracked 原样保留。本任务独立窄提交；如源码输入并行变化则不抢统一构建，默认仅 BuildOnly、不安装、不运行游戏。完成后在本条登记结果并释放占用。
 - 结果：核心源码/测试已提交 `b6e8b88`（3 文件）；原始重入回归先失败，修复后生产链接 `MapCacheNegotiationChecks` 60,070 项通过，预热待重试 Tick 2000 次测得快照路径 0 B 托管分配。`pwsh.exe -File Sync-ModCopies.ps1 -BuildOnly` 三端编译打包完成，来源 `AD98E989E2B6C1328FD536B4B8CE371910F0E80517CF6BE8C4DCB90316586A79`，仍 V1.49。未安装、未启动/验收游戏、未 push；其它历史 dirty/untracked 全部保留。源码、构建及 Git index 占用已释放。
+
+<!-- ground-rules-implementation-20261019:start -->
+### ground-rules-implementation-20261019 / 主控 /root
+- 用户明确要求完成 MD 的功能需求。主控负责补齐文档、配置入口、契约协调、整合、版本、本地窄提交与三端 BuildOnly；不安装、不测试/启动游戏。
+- Session 子 Agent 负责 Authority/Commands/BaseRules/RaidRules/MultiplayerSession、MapViewLoading 一处本场时长接线与必要 Core 契约；Game 运输子 Agent 负责 NativeRaid/NativeRaidLoot/NativeTransfers/NativeBaseCreation、新增原生资格桥接及 GameHooks 的伤害/离线计工/工作门禁窄改；区域工作子 Agent 负责 NativeGroundInteraction/NativeGroundCommandOwnership/NativeGroundZones/NativeCommands、ModSettings 及既有新建/设置页计时输入。跨接口先协调，勿互改占用文件。
+- 预编辑字节基线 artifacts/ground-rules-implementation-20261019/baseline 已保留。保留所有历史 dirty/untracked；仅最终冻结后串行统一打包/提交，不 push。
+- 三模块源码现已冻结。主控接 V1.50 / 协议10 整合及三端 BuildOnly；不修改并行 MapCacheExpiry 优化源码，其输入若继续变化则由统一脚本保护性停止后再等冻结，不抢对方改动。
+<!-- ground-rules-implementation-20261019:end -->
+
+<!-- ground-rules-native-notes-20261019:start -->
+### ground-rules-implementation-20261019 / ground_native
+- 占用 NativeRaid.cs、NativeRaidLoot.cs、NativeTransfers.cs、NativeBaseCreation.cs、新 NativeGroundLoot.cs；与 Session / 区域 Agent 约定真实活动雇员、搜刮资格及合作撤离契约。保留旧 dirty，不测试/构建/安装/运行/提交，交主控统一整合。
+
+### ground-rules-implementation-20261019 / ground_native 源码冻结
+- 冻结交主控：修改 src/Game/GameHooks.cs、NativeRaid.cs、NativeRaidLoot.cs、NativeTransfers.cs、NativeBaseCreation.cs；新增 NativeGroundLoot.cs。NativeGroundContainers.cs 未修改。
+- 已接真实原版正式/分基地转中立按钮与确认、真实已落地运输单锁定单仓、参与方自身返舰/物资归属、逐物品储存保护与预占/撤离重判；公共和自身库存普通运输继续独立。新增活动雇员查询使用持久化全玩家记录，当前图未ready返回未知。
+- Session契约已与review_rules对齐。无自行提交/测试/编译/运行/安装；源码占用释放给主控，等其统一三端BuildOnly诊断。
+<!-- ground-rules-native-notes-20261019:end -->

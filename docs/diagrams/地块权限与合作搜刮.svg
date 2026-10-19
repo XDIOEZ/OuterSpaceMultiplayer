@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850">
+  <defs>
+    <style>text{font-family:'Microsoft YaHei','Noto Sans CJK SC',sans-serif;fill:#e7edf5}.title{font-size:28px;font-weight:700}.head{font-size:20px;font-weight:700}.body{font-size:17px}.small{font-size:15px;fill:#afbdd0}.box{fill:#172639;stroke:#38536e;stroke-width:1.5}.ok{fill:#143b35;stroke:#3d9d82;stroke-width:1.5}.warn{fill:#423420;stroke:#b78b46;stroke-width:1.5}.line{stroke:#7892ac;stroke-width:2;fill:none;marker-end:url(#arrow)}</style>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#7892ac"/></marker>
+  </defs>
+  <rect width="1200" height="850" rx="18" fill="#0c1725"/>
+  <text x="40" y="52" class="title">地块权限与合作搜刮</text>
+  <text x="40" y="82" class="small">雇员只由所属玩家指挥 · 友好保留救助和协助战斗 · 工作台与区域管理各自独立</text>
+  <rect x="40" y="110" width="540" height="140" rx="12" class="box"/>
+  <text x="62" y="145" class="head">中立地块</text>
+  <text x="62" y="179" class="body">公共资源、自己的储存物：正常拿取和运输</text>
+  <text x="62" y="211" class="body">他人储存物：进入受保护物品判定</text>
+  <text x="62" y="236" class="small">每人 / 每地块 / 每类型：3 个储存区，合计 270 格</text>
+  <rect x="620" y="110" width="540" height="140" rx="12" class="box"/>
+  <text x="642" y="145" class="head">玩家基地</text>
+  <text x="642" y="179" class="body">基地管理由所属玩家执行</text>
+  <text x="642" y="211" class="body">其他玩家可进入与战斗，取物服从搜刮保护</text>
+  <text x="642" y="236" class="small">转中立：保留区域作者，旧超额区域保留但禁增扩</text>
+  <path d="M310 250V282H560" class="line"/>
+  <path d="M890 250V282H640" class="line"/>
+  <rect x="225" y="305" width="750" height="125" rx="12" class="box"/>
+  <text x="250" y="340" class="head">只判断当前地块的雇员</text>
+  <text x="250" y="373" class="body">基地：所属玩家无活动守军；中立：只剩本人，或两两双向友好的合作方</text>
+  <text x="250" y="405" class="body">仍有活动雇员的队友，其储存区继续受保护</text>
+  <path d="M360 430V463" class="line"/>
+  <path d="M840 430V463" class="line"/>
+  <rect x="40" y="475" width="540" height="110" rx="12" class="warn"/>
+  <text x="62" y="512" class="head">条件不满足</text>
+  <text x="62" y="548" class="body">不能拿取、搬运、运输受保护物品</text>
+  <text x="62" y="573" class="small">公共资源与本人库存的正常运输不受此限制</text>
+  <rect x="620" y="475" width="540" height="110" rx="12" class="ok"/>
+  <text x="642" y="512" class="head">条件满足</text>
+  <text x="642" y="548" class="body">开放搜刮；发运时重判复苏、增援和关系</text>
+  <text x="642" y="573" class="small">只拿物品，不把其他玩家雇员作为战利品带走</text>
+  <path d="M890 585V616" class="line"/>
+  <rect x="620" y="628" width="540" height="160" rx="12" class="ok"/>
+  <text x="642" y="663" class="head">一场共同额度，谁先运走归谁</text>
+  <text x="642" y="698" class="body">合作共用单仓容量、唯一一次战利品撤离</text>
+  <text x="642" y="730" class="body">默认战斗＋搜刮合计 10 分钟，冷却 60 分钟</text>
+  <text x="642" y="763" class="small">时间由房主配置 · 房主确认同一运输事务，防重复结算</text>
+  <rect x="40" y="628" width="540" height="160" rx="12" class="box"/>
+  <text x="62" y="663" class="head">中立地块认领基地</text>
+  <text x="62" y="698" class="body">其他玩家仍有活动雇员：阻止认领</text>
+  <text x="62" y="730" class="body">友好、中立、敌对均阻止，不因合作而豁免</text>
+  <text x="62" y="763" class="small">认领与搜刮分开；区域作者权限不因战胜而转移</text>
+  <text x="40" y="824" class="small">需求流程说明 · 实现、三端打包与用户游戏验收分别记录 · 2026-10-19</text>
+</svg>

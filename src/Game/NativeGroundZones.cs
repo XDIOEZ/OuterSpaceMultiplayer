@@ -33,6 +33,7 @@ namespace FreeWorldMultiplayer
         }
         internal static void Install(Harmony harmony)
         {
+            NativeGroundStorageQuota.Install(harmony);
             Patch(harmony, typeof(MapZoneManager), "addZoneArea", nameof(AddAreaPrefix));
             foreach (string name in new[] { "Zone_AreaExpand_LN", "Zone_AreaReduce_LN", "Zone_AreaReduces_ByLevel_LN", "Zone_AreaReduces_BySubType_LN", "Zone_Remove" })
                 Patch(harmony, typeof(LocalCoreHandle), name, nameof(MutationPrefix));
@@ -123,7 +124,9 @@ namespace FreeWorldMultiplayer
                     case "Expand":
                         if (data.Cells.Any(p => !zone.isInZone(p.x, p.y) && !MapManager.instance.zoneManager.couldCreateZoneArea(zone.allianceID, zone.id, p.x, p.y)))
                             throw new InvalidOperationException("区域扩张位置已被占用。");
-                        LocalCoreHandle.Zone_AreaExpand_LN(area, data.Cells.Where(p => !zone.isInZone(p.x, p.y)).ToList()); break;
+                        List<FWPoint> expansion = data.Cells.Where(p => !zone.isInZone(p.x, p.y)).GroupBy(p => new { p.x, p.y }).Select(g => g.First()).ToList();
+                        NativeGroundStorageQuota.RequireGrowth(bridge, command.PlayerId, map, zone.id, 0, expansion.Count);
+                        LocalCoreHandle.Zone_AreaExpand_LN(area, expansion); break;
                     case "Reduce": case "EraseLevel": case "EraseSubtype":
                         LocalCoreHandle.Zone_AreaReduce_LN(area, data.Cells);
                         if (zone.cells.Count == 0) LocalCoreHandle.Zone_Remove(zone); break;
@@ -139,6 +142,9 @@ namespace FreeWorldMultiplayer
         }
         private static void AddArea(GameBridge bridge, string actor, Mutation data, UserFWStarSpread map)
         {
+            string baseOwner = bridge.Context.OwnerOfMap(map.starMapId);
+            if (!string.IsNullOrEmpty(baseOwner) && baseOwner != actor)
+                throw new InvalidOperationException("只能在中立地块或自己的基地创建区域。");
             string[] ids = { ZoneDef.ZONE_ID_PLANT, ZoneDef.ZONE_ID_STORE, ZoneDef.ZONE_ID_RUBBISH, ZoneDef.ZONE_ID_Transport, ZoneDef.ZONE_ID_LIFE, ZoneDef.ZONE_ID_Shepherd };
             if (!ids.Contains(data.ZoneId) || data.Limit < 1 || data.X0 < 0 || data.Y0 < 0 || data.X1 < data.X0 || data.Y1 < data.Y0 || data.X1 >= map.xLength || data.Y1 >= map.yLength)
                 throw new InvalidOperationException("新增区域范围或类型无效。");
@@ -158,6 +164,7 @@ namespace FreeWorldMultiplayer
                 }
             });
             if (cells.Count == 0) return;
+            int newCellCount = cells.Count;
             // Preserve native adjacency merging within one author. Adjacent foreign
             // zones keep their original UID, configuration, cells and author.
             var merge = new List<FWAreaZoneBean>();
@@ -166,6 +173,7 @@ namespace FreeWorldMultiplayer
                     if (zone.id == data.ZoneId && zone.allianceID == RoleAlliance.Alliance_MINE && zone.isNewed()
                         && zone.getUID() < data.MergeBefore && NativeGroundCommandOwnership.CanEdit(bridge, actor, zone.getUID()) && zone.isCloset(cells))
                     { merge.Add(zone); cells.AddRange(zone.cells); }
+            NativeGroundStorageQuota.RequireGrowth(bridge, actor, map, data.ZoneId, 1 - merge.Count, newCellCount);
             FWAreaZoneBean created = data.ZoneId == ZoneDef.ZONE_ID_PLANT ? (FWAreaZoneBean)new FWPlantAreaZoneBean(data.ZoneId, RoleAlliance.Alliance_MINE)
                 : data.ZoneId == ZoneDef.ZONE_ID_Shepherd ? new FWAnimalAreaZoneBean(data.ZoneId, RoleAlliance.Alliance_MINE)
                 : new FWAreaZoneBean(data.ZoneId, RoleAlliance.Alliance_MINE);
@@ -173,6 +181,7 @@ namespace FreeWorldMultiplayer
             foreach (FWAreaZoneBean zone in merge) LocalCoreHandle.Zone_Remove(zone);
             foreach (FWPlanBean plan in clearing) LocalCoreHandle.Plan_addNewPlan_LN(plan);
             LocalCoreHandle.Zone_Add_LN(created);
+            bridge.Context.RegisterEntityOwner(created.getUID(), actor);
         }
     }
 }

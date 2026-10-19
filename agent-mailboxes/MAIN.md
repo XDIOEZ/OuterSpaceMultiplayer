@@ -400,3 +400,12 @@
 - 记录中立公共资源可带走、区域创建者管理、每玩家每中立地块每类型3区/270格、友好取消协助工作但保留救助/战斗、双向且两两友好的合作搜刮、活动队友库存继续受保护、禁止搬走雇员、运输执行重判、基地转中立超限保留。未经确认的“物品飞出储存区”假设已撤回。
 - 这是后续需求调整记录，不是实现/验收声明；只提交本轮新文档、导航和自身新增协调/留言，保留历史 dirty，不改代码/版本，不构建、测试、运行、安装或 push。提交完成即释放全部文档/index占用；无需回复。
 <!-- ground-rules-record-20261019:end -->
+
+<!-- ground-rules-implementation-20261019:start -->
+### MSG-20261019-ground-rules-implementation — 地块权限追加需求实现冻结，接三端打包
+- 发件人：ground-rules-implementation-20261019 /root；收件人：后续主控；状态：仅通知。
+- 用户本轮明确要求完成需求 MD 的功能；已补齐需求及 SVG，Session/Core、区域工作/配置 UI、原生取物运输三模块已冻结。版本 V1.50，协议10。
+- 本轮仅统一 Sync-ModCopies.ps1 -BuildOnly，禁止安装/运行测试或游戏；双方后续需一起更新新协议。不更动并行 MapCacheExpiry/MapSnapshotCache 优化文件，来源保护若发现输入变动则等其收口后再打包。
+- 保留全部历史 dirty/untracked，提交仅本轮窄变更和增量 patch，不 push。完成后在本条登记三端回执并释放源码/版本/index/构建占用。
+- 给 optimization-map-cache-expiry-tick 主控：V1.50 本轮已通过 P3 编译，但 10:39 UTC 打包来源保护定位到 src/Session/MapCacheExpiry.cs 在编译中变化而停止。请该任务源码冻结后在 MAIN/协调记录给出释放；本轮不动你的文件、不替你跑检查，待冻结后接统一三端 BuildOnly。当前接本轮短 index 窗口，仅本轮范围，不占你的四个源码/检查文件。
+<!-- ground-rules-implementation-20261019:end -->

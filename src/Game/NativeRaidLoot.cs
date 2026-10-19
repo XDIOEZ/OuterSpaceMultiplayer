@@ -21,13 +21,14 @@ namespace FreeWorldMultiplayer
         internal bool HandlePickup(BaseRole role, FWRoleBean roleBean, FWThingBean item, int count, FWRoleBean.carryType carryType, callbackInt callback)
         {
             string actor = Context.OwnerOfEntity(roleBean.getUID());
-            string owner = Context.OwnerOfMap(CurrentMapId);
+            string owner = ProtectedGroundItemOwner(CurrentMapId, item);
             if (string.IsNullOrEmpty(actor)) return true; // Native NPC inventory remains native.
-            if (!IsSimulator || !Context.IsAttackAllowed(CurrentMapId)) { callback?.Invoke(Callback.FAILED); return false; }
-            if (string.IsNullOrEmpty(owner) || actor == owner || Context.GetRelation(actor, owner) == Relation.Friendly) return true;
+            if (!IsSimulator) { callback?.Invoke(Callback.FAILED); return false; }
+            if (string.IsNullOrEmpty(owner) || actor == owner) return true;
+            if (!EnsureGroundRaid(actor, CurrentMapId, roleBean.getUID())) { callback?.Invoke(Callback.FAILED); return false; }
             AttackRecord attack = Context.GetAttack(CurrentMapId);
-            if (attack == null || attack.AttackerPlayerId != actor || !Context.HasPermission(actor, CurrentMapId, item.getUID(), Permission.Loot)
-                || !AreDefendersDefeated(attack) || count < 1)
+            if (attack == null || !IsGroundRaidParticipant(attack, actor) || !GroundRaidHeroes(attack, actor).Contains(roleBean.getUID())
+                || !Context.CanLootGroundOwner(actor, owner, CurrentMapId) || count < 1)
             { callback?.Invoke(Callback.FAILED); return false; }
             int reserved = LootReservations.Where(r => r.AttackId == attack.AttackId && r.SourceUid == item.getUID()).Sum(r => r.Count);
             if (item.getSum() - reserved < count) { callback?.Invoke(Callback.FAILED); return false; }
@@ -81,7 +82,7 @@ namespace FreeWorldMultiplayer
             foreach (LootReservation reservation in reservations)
             {
                 FWHeroBean hero = heroOf(reservation.HeroUid);
-                if (reservation.AttackId != attack.AttackId || !attack.AttackerHeroIds.Contains(reservation.HeroUid)
+                if (reservation.AttackId != attack.AttackId || !GroundRaidHeroes(attack, Context.OwnerOfEntity(reservation.HeroUid)).Contains(reservation.HeroUid)
                     || hero == null || hero.isDead() || !hero.isInMap(mapId) || reservation.SourceUid == reservation.CarryUid)
                     throw new InvalidOperationException("Loot reservation party/source identity mismatch.");
                 List<FWThingBean> bag;

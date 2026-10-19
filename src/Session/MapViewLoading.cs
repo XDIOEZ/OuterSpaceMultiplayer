@@ -396,7 +396,7 @@ namespace FreeWorldMultiplayer
             // defender reads, FinishRaid, checkpoint capture and persistence stay behind the FIFO.
             foreach (AttackRecord attack in World.Attacks.Values)
                 if (attack.Stage == AttackStage.Active && !attack.Blocked)
-                    attack.ElapsedSeconds = Math.Min(600, attack.ElapsedSeconds + seconds);
+                    attack.ElapsedSeconds = Math.Min(RaidDuration(attack), attack.ElapsedSeconds + seconds);
         }
         private bool DeferDisconnectUntilMapReady()
         {

@@ -10,8 +10,7 @@ namespace FreeWorldMultiplayer
         // while an employee always belongs to their original PlayerId.
         internal bool CanShareGroundWork(string worker, string owner)
         {
-            return string.IsNullOrEmpty(worker) || string.IsNullOrEmpty(owner) || worker == owner
-                || Context.GetRelation(worker, owner) == Relation.Friendly;
+            return string.IsNullOrEmpty(worker) || string.IsNullOrEmpty(owner) || worker == owner;
         }
 
         internal bool CanUseGroundWorkTarget(BaseRole worker, long target)
@@ -25,11 +24,29 @@ namespace FreeWorldMultiplayer
             if (worker == null || plan == null) return true;
             string actor = Context.OwnerOfEntity(worker.getUID());
             if (string.IsNullOrEmpty(actor)) return true;
+            ActionStruct_Resuce rescue = plan.actionStruct as ActionStruct_Resuce;
+            if (rescue != null && rescue.wounderRole != null)
+            {
+                string rescued = Context.OwnerOfEntity(rescue.wounderRole.getUID());
+                return string.IsNullOrEmpty(rescued) || actor == rescued
+                    || (Context.IsFriendlyToward != null && Context.IsFriendlyToward(actor, rescued));
+            }
             if (!NativeGroundCommandOwnership.CanWorkPlanZones(this, worker, plan)) return false;
+            ActionStruct_Carry carrying = plan.actionStruct as ActionStruct_Carry;
+            if (carrying != null || plan.getTaskType() == FWPlanBean.TASK_CARRY)
+            {
+                string orderOwner = plan.planBean == null ? null : Context.OwnerOfEntity(plan.planBean.getUID());
+                if (!CanShareGroundWork(actor, orderOwner)) return false;
+                if (carrying != null && carrying.pickAction != null)
+                    foreach (PickAction_PutBase put in carrying.pickAction.puts)
+                        if (put.toAssistPlan != null && !CanPerformGroundWork(worker, put.toAssistPlan)) return false;
+                return true;
+            }
             if (plan.planBean == null && plan.getTaskType() == FWPlanBean.TASK_Grow && NativeGroundCommandOwnership.PlantZone(plan) != null)
                 return true; // Generated planting work follows its real zone, including an own zone on a visited map.
             BaseBuild assignedBuilding = plan.getPlanBuild();
-            if (assignedBuilding != null && !CanUseGroundWorkTarget(worker, assignedBuilding.getUID())) return false;
+            if (assignedBuilding != null && !NativeGroundInteraction.IsPublicFieldWork(plan.getTaskType())
+                && !CanUseGroundWorkTarget(worker, assignedBuilding.getUID())) return false;
             FWPlanBean bean = plan.planBean;
             if (bean != null)
             {
@@ -38,7 +55,8 @@ namespace FreeWorldMultiplayer
                 // A new own demolition/refuel order cannot grant access to a foreign
                 // building merely by placing the actor's identity on its plan.
                 string targetOwner = bean.objectUID > 0 ? Context.OwnerOfEntity(bean.objectUID) : null;
-                if (!CanShareGroundWork(actor, targetOwner)) return false;
+                if (!NativeGroundInteraction.IsPublicFieldWork(plan.getTaskType()) && plan.getTaskType() != FWPlanBean.TASK_CARRY
+                    && !CanShareGroundWork(actor, targetOwner)) return false;
                 if (author != null || targetOwner != null) return true;
             }
             if (assignedBuilding != null) return true;
@@ -52,34 +70,29 @@ namespace FreeWorldMultiplayer
             ActionStruct_Table table = plan.actionStruct as ActionStruct_Table;
             BaseBuild furniture = table == null ? null : table.furniture as BaseBuild;
             if (furniture != null) return CanUseGroundWorkTarget(worker, furniture.getUID());
-            ActionStruct_Carry carry = plan.actionStruct as ActionStruct_Carry;
-            if (carry != null)
-            {
-                if (carry.carryThing != null && !CanUseGroundWorkTarget(worker, carry.carryThing.getUID())) return false;
-                if (carry.pickAction != null)
-                {
-                    foreach (PickAction_PickBase pick in carry.pickAction.picks)
-                        if (pick.takeThing != null && !CanUseGroundWorkTarget(worker, pick.takeThing.getUID())) return false;
-                    foreach (PickAction_PutBase put in carry.pickAction.puts)
-                        if (put.toAssistPlan != null && !CanPerformGroundWork(worker, put.toAssistPlan)) return false;
-                    return true;
-                }
-                if (carry.carryThing != null) return true;
-            }
             // Existing unregistered map work keeps its original map ownership.
             // New persistent plans are registered at the insertion boundary below.
             return !NativeGroundInteraction.IsWorkPlan(plan)
+                || NativeGroundInteraction.IsPublicFieldWork(plan.getTaskType())
                 || CanShareGroundWork(actor, Context.OwnerOfMap(CurrentMapId));
         }
 
         internal void ValidateGroundPlanMutation(string playerId, FWPlanBean plan, bool creating)
         {
             if (plan == null) throw new InvalidOperationException("任务数据不存在。");
+            string baseOwner = Context.OwnerOfMap(CurrentMapId);
+            if (creating && !string.IsNullOrEmpty(baseOwner) && baseOwner != playerId
+                && !NativeGroundInteraction.IsPublicFieldWork(plan.taskType)
+                && plan.taskType != FWPlanBean.TASK_CARRY && plan.taskType != FWPlanBean.TASK_RescueTarget)
+                throw new InvalidOperationException("不能在其他玩家的基地发布建造、种植或生产管理命令。");
             string author = Context.OwnerOfEntity(plan.getUID());
             if (creating ? author != null && author != playerId : !NativeGroundCommandOwnership.CanEdit(this, playerId, plan.getUID()))
                 throw new InvalidOperationException("只能修改或取消自己发布的命令。");
             string target = plan.objectUID > 0 ? Context.OwnerOfEntity(plan.objectUID) : null;
-            if (!CanShareGroundWork(playerId, target))
+            if (plan.taskType == FWPlanBean.TASK_RescueTarget && target != null
+                && (playerId == target || Context.IsFriendlyToward != null && Context.IsFriendlyToward(playerId, target))) return;
+            if (!NativeGroundInteraction.IsPublicFieldWork(plan.taskType) && plan.taskType != FWPlanBean.TASK_CARRY
+                && !CanShareGroundWork(playerId, target))
                 throw new InvalidOperationException("当前关系不允许对该玩家的设施安排工作。");
         }
 
@@ -123,6 +136,19 @@ namespace FreeWorldMultiplayer
         private static readonly FieldInfo TargetLock = AccessTools.Field(typeof(AI_BaseFight), "isTargetLock");
         private static GameBridge Bridge => GameBridge.Active;
 
+        // Gathering and demolition remain legal on a visited base. Their resulting
+        // items still pass the separate pickup/loot checks, never work-sharing.
+        internal static bool IsPublicFieldWork(int task)
+        {
+            switch (task)
+            {
+                case FWPlanBean.TASK_Felling: case FWPlanBean.TASK_Mining: case FWPlanBean.TASK_Harvesty:
+                case FWPlanBean.TASK_Weeding: case FWPlanBean.TASK_Destroy: case FWPlanBean.TASK_RemoveRoof:
+                case FWPlanBean.TASK_Uninstall: case FWPlanBean.TASK_Ore_Destroy: case FWPlanBean.TASK_FISHING: return true;
+                default: return false;
+            }
+        }
+
         internal static bool IsWorkPlan(RolePlan plan)
         {
             if (plan == null) return false;
@@ -135,7 +161,7 @@ namespace FreeWorldMultiplayer
                 case FWPlanBean.TASK_Build: case FWPlanBean.TASK_Grow: case FWPlanBean.TASK_STUDY:
                 case FWPlanBean.TASK_MakeButcher: case FWPlanBean.TASK_MakeProduct: case FWPlanBean.TASK_AddMaterial:
                 case FWPlanBean.TASK_ProductOperate: case FWPlanBean.TASK_REPAIR: case FWPlanBean.TASK_FISHING:
-                case FWPlanBean.TASK_Medical: case FWPlanBean.TASK_AddFood: return true;
+                case FWPlanBean.TASK_Medical: case FWPlanBean.TASK_AddFood: case FWPlanBean.TASK_RescueTarget: return true;
                 default: return false;
             }
         }

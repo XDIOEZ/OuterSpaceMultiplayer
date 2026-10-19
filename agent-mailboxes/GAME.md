@@ -74,3 +74,11 @@
 - 需要回复：主控统一版本与三端 BuildOnly、窄提交；用户选择客机自己雇员，分别在本人模拟地块和他人模拟地块执行开启、解除及批量开关，确认解除后恢复自动工作。另有独立 UI 投影缺口：NativeMapReplicator.Pose 不含运行时 fightMode，非模拟视图 Hero_MainView_Cmd 读取 getRunAI().isFightMode，可能缺失状态回显，已通知主控，不在本一行修复中扩大。
 - 回复关联：无
 - 处理记录：未启动游戏、未执行测试、未编译、未安装、未提交；遵用户后续统一安装要求。- 后续处理记录：主控授权同链 UI 回显修复，增加 NativeMapReplicator.Pose.FightActive/FightManual 两个 nullable bool，采集当前真实战斗 AI 活跃引用和手动模式，SamePose 纳入比较。非模拟端 ApplyPose 只 setFightMode 纯赋值并缓存反射直接设置 BaseRole.runAI 展示引用；不调用 setRunAI/doFightMode/onActiveEvent/closeAI，不推进 AI。自动战斗保持 fightAI+自动模式；仅远端 FightActive=false 且当前引用是 fightAI 才切回 baseAI，不覆写其它 AI 展示引用。新基线 NativeMapReplicator.cs 已备份，同一个本轮 patch 已含两个文件全部窄差异；V1.40 共用，源码冻结等主控 BuildOnly。未做测试或实机验收。
+
+### MSG-20261019-ground-rules-native-01 — 地块搜刮原生接入冻结
+- 发件人：ground-rules-implementation / ground_native
+- 状态：源码冻结交主控；游戏验收由用户执行
+- 文件：GameHooks.cs、NativeRaid.cs、NativeRaidLoot.cs、NativeTransfers.cs、NativeBaseCreation.cs、新 NativeGroundLoot.cs。
+- 结果：已落地真实运输原单恢复本场容量；保护逐储存区识别并以现有Loan预占禁止提前消耗/装备/落地转移；同场合作先成功者物资入其舰队，运输前重判守卫/关系；公共/自己库存普通运输无搜刮配额限制；原版正式基地废弃入口改为转中立并保作者；已恢复的HP清除KnockedOut标记。
+- 边界：不改本体/运行副本，未测试、构建、运行、安装或提交；主控统一BuildOnly。
+- 需要回复：编译若有签名问题由主控分发；无新增玩法待定项。

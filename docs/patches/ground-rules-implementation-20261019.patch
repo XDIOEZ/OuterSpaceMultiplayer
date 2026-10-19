@@ -1,0 +1,1791 @@
+--- a/src/Core/Contracts.cs
++++ b/src/Core/Contracts.cs
+@@ -53,6 +53,8 @@
+         // Null in older saves retains their native start policy for future first-time players.
+         public int? StartingEmployeeCount;
+         public int MaxBasesPerPlayer = 1;
++        public int RaidDurationMinutes = 10;
++        public int RaidCooldownMinutes = 60;
+         // Only HostNew resolves the local default. Missing in older saves remains disabled.
+         public bool? JoinHostGalaxyOnFirstSpawn;
+         public double AutoSaveSeconds = 300;
+@@ -254,6 +256,9 @@
+     }
+     public sealed class RaidRequest
+     {
++        // A map simulator may submit a real resident employee's request on its owner's behalf.
++        public string PlayerId;
++        public bool AlreadyOnGround;
+         public long ExistingExpeditionId = -1;
+         public long MapId;
+         public long SourceMapId = -1;
+@@ -269,6 +274,9 @@
+     }
+     public sealed class RaidEvacuation
+     {
++        // Authored by the host, never trusted from the client payload.
++        public string PlayerId;
++        public long DestinationFleetId = -1;
+         public string AttackId;
+         public string TransferId;
+         public string NativeManifestJson;
+@@ -277,6 +285,13 @@
+     }
+     public sealed class AttackRecord
+     {
++        public bool AlreadyOnGround;
++        public double DurationSeconds = 600;
++        public double CooldownSeconds = 3600;
++        public string EvacuatingPlayerId;
++        public List<string> ParticipantPlayerIds = new List<string>();
++        public Dictionary<string, List<long>> ParticipantHeroIds = new Dictionary<string, List<long>>();
++        public Dictionary<string, long> ParticipantFleetIds = new Dictionary<string, long>();
+         public string AttackId;
+         public long MapId;
+         public string AttackerPlayerId;
+@@ -352,6 +367,10 @@
+         public Func<string, string> GetPlayerDisplayName;
+         public Func<long, string> OwnerOfMap;
+         public Func<string, string, Relation> GetRelation;
++        public Func<string, bool> IsPlayerOnline;
++        public Func<string, string, bool> IsFriendlyToward;
++        public Func<string, string, long, bool> CanLootGroundOwner;
++        public Func<long, bool> IsRaidCoolingDown;
+         public Func<string, long, long, Permission, bool> HasPermission;
+         public Action<long, string> RegisterEntityOwner;
+         public Action<GameCommand> ReportDamage;
+@@ -407,6 +426,8 @@
+         BridgeResult CreateBase(BaseCreationRequest request, string ownerPlayerId, bool formalBase);
+         BridgeResult AbandonBase(long mapId, string ownerPlayerId);
+         List<long> GetMapPropertyEntityIds(long mapId);
++        // Null means unavailable/incomplete canonical map state, never an empty garrison.
++        List<string> ActiveGroundPlayerIds(long mapId);
+         BridgeResult ApplyBaseOwnership(string playerId, long initialFormalBaseMapId, IList<long> ownedSurfaceMapIds, IList<long> managedSurfaceMapIds);
+         BridgeResult ResolveMapEntry(MapEntryRequest request, out long canonicalMapId);
+         BridgeResult AdvanceWorld(double realSeconds, double speed, IList<string> onlinePlayerIds);
+--- a/src/Core/ModSettings.cs
++++ b/src/Core/ModSettings.cs
+@@ -10,6 +10,8 @@
+         public int SchemaVersion = 1;
+         public int StartingEmployeeCount = 4;
+         public int MaxBasesPerPlayer = 1;
++        public int RaidDurationMinutes = 10;
++        public int RaidCooldownMinutes = 60;
+         public bool JoinHostGalaxyOnFirstSpawn = true;
+         public int DefaultMaxPlayers = 4;
+         public int DefaultPort = 27515;
+@@ -32,6 +34,7 @@
+             if (settings.SchemaVersion != 1) throw new InvalidDataException("不支持的 MOD 全局设置格式：" + settings.SchemaVersion);
+             ValidateStartingEmployeeCount(settings.StartingEmployeeCount);
+             ValidateMaxBasesPerPlayer(settings.MaxBasesPerPlayer);
++            ValidateRaidRules(settings.RaidDurationMinutes, settings.RaidCooldownMinutes);
+             if (settings.DefaultMaxPlayers < 2 || settings.DefaultMaxPlayers > 64)
+                 throw new ArgumentOutOfRangeException("DefaultMaxPlayers", "新世界默认人数上限须为 2～64。");
+             if (settings.DefaultPort < 1 || settings.DefaultPort > 65535)
+@@ -40,6 +43,13 @@
+         public static void ValidateMaxBasesPerPlayer(int count)
+         {
+             if (count < 1 || count > 64) throw new ArgumentOutOfRangeException("MaxBasesPerPlayer", "每位玩家营地/基地上限须为 1～64（不含母舰）。");
++        }
++        public static void ValidateRaidRules(int durationMinutes, int cooldownMinutes)
++        {
++            if (durationMinutes < 1 || durationMinutes > 120)
++                throw new ArgumentOutOfRangeException("RaidDurationMinutes", "袭击总时限须为 1～120 分钟。");
++            if (cooldownMinutes < 0 || cooldownMinutes > 1440)
++                throw new ArgumentOutOfRangeException("RaidCooldownMinutes", "袭击冷却须为 0～1440 分钟。");
+         }
+         public static ModSettings Load(string storageRoot)
+         {
+--- a/src/Core/Protocol.cs
++++ b/src/Core/Protocol.cs
+@@ -17,7 +17,7 @@
+     }
+     internal static class Protocol
+     {
+-        internal const int CurrentVersion = 9;
++        internal const int CurrentVersion = 10;
+         internal static string CurrentVersionText { get { return CurrentVersion.ToString(CultureInfo.InvariantCulture); } }
+         internal static string IncompatibleVersion(string remoteVersion)
+         {
+--- a/src/Entry/MultiplayerLobbyPages.cs
++++ b/src/Entry/MultiplayerLobbyPages.cs
+@@ -11,6 +11,7 @@
+     {
+         private TMP_InputField worldName, maxPlayers, maxBases, startingEmployees, port, resumePort, joinAddress, joinPort, room;
+         private TMP_InputField settingsEmployees, settingsPlayers, settingsPort, settingsMaxBases;
++        private TMP_InputField raidDuration, raidCooldown, settingsRaidDuration, settingsRaidCooldown;
+         private TMP_Text starterHint, saveDetails, emptySaves, saveCount, settingsHint;
+         private UnityEngine.UI.Button steamButton, resumeSteamButton, loadButton, newModeButton, continueModeButton, settingsSteamButton;
+         private UnityEngine.UI.Button spawnNearHostButton, settingsSpawnNearHostButton;
+@@ -159,7 +160,7 @@
+             SetCaption(steamButton, "Steam 好友房间：" + (useSteam ? "开" : "关"));
+             SetCaption(resumeSteamButton, "Steam 好友房间：" + (resumeSteam ? "开" : "关"));
+             SetCaption(spawnNearHostButton, "新玩家与房主同星系出生：" + (joinHostGalaxyOnFirstSpawn ? "开" : "关"));
+-            if (starterHint != null) starterHint.text = "首次加入发放 " + startingEmployees.text + " 名雇员；基地上限不含母舰。\n出生规则创建后固定；重连保留原位置。";
++            if (starterHint != null) starterHint.text = "首次加入 " + startingEmployees.text + " 名雇员；基地上限不含母舰。\n战斗与搜刮共用时限，击倒守军不重置。";
+             RefreshPresetState();
+             WorldSummary selected = worlds.FirstOrDefault(w => w.WorldId == selectedWorldId);
+             if (loadButton != null) loadButton.interactable = !Busy && !Connected && selected != null && String.IsNullOrEmpty(selected.Error);
+@@ -178,13 +179,16 @@
+         {
+             Label(parent, "SettingsHeading", "MOD 全局设置", 24, 0, 0, 984, 38);
+             Label(parent, "SettingsScope", "保存为后续创建与连接的默认值；当前房间和已有世界的规则不会改变。", 17, 0, 48, 984, 54).enableWordWrapping = true;
+-            Section(parent, "StartDefaults", -12, 116, 492, 296); Section(parent, "ConnectionDefaults", 498, 116, 498, 296);
++            Section(parent, "StartDefaults", -12, 116, 492, 344); Section(parent, "ConnectionDefaults", 498, 116, 498, 344);
+             Label(parent, "StarterDefaultLabel", "开局总雇员", 19, 0, 136, 270, 34);
+             settingsEmployees = Input(parent, "SettingsEmployees", "", 300, 128, 160, 44, 2, false);
+             Label(parent, "StarterDefaultHint", "每人首次加入新世界获得 1～32 名随机雇员；重连、续档不补发。", 16, 0, 182, 460, 56).enableWordWrapping = true;
+             Label(parent, "BasesDefaultLabel", "每人营地 / 基地上限", 18, 0, 254, 280, 34);
+             settingsMaxBases = Input(parent, "SettingsMaxBases", "", 300, 246, 160, 44, 2, false);
+             Label(parent, "BasesDefaultHint", "1～64 处，不含母舰。只影响后续新世界，已有存档保持原规则。", 16, 0, 306, 460, 62).enableWordWrapping = true;
++            Label(parent, "RaidDurationDefaultLabel", "战斗＋搜刮时限（分钟）", 18, 0, 382, 280, 30);
++            settingsRaidDuration = Input(parent, "SettingsRaidDuration", "", 300, 376, 160, 40, 3, false);
++            Label(parent, "RaidDurationDefaultHint", "1～120 分钟，含战斗与搜刮；击倒守军不重置。", 15, 0, 428, 460, 28);
+             Label(parent, "PlayersDefaultLabel", "默认人数上限", 18, 516, 136, 230, 34);
+             settingsPlayers = Input(parent, "SettingsMaxPlayers", "", 792, 128, 192, 44, 2, false);
+             Label(parent, "PortDefaultLabel", "默认端口", 18, 516, 202, 230, 34);
+@@ -196,15 +200,18 @@
+                 SetCaption(settingsSpawnNearHostButton, "新玩家与房主同星系出生：" + (settingsJoinHostGalaxyOnFirstSpawn ? "开" : "关"));
+             });
+             Label(parent, "SpawnDefaultHint", "只影响新世界；创建后固定，重连保留原位置。", 16, 516, 374, 468, 32);
+-            Button(parent, "SaveSettings", "保存全局设置", 0, 426, 300, 48, SaveGlobalSettings);
+-            Button(parent, "CopyLocalRecovery", "复制本机登录恢复码", 516, 426, 468, 48, CopyRecoveryCode);
+-            settingsHint = Label(parent, "SettingsHint", "", 16, 0, 496, 984, 60); settingsHint.enableWordWrapping = true;
++            Label(parent, "RaidCooldownDefaultLabel", "袭击冷却（0～1440 分钟）", 17, 516, 418, 300, 30);
++            settingsRaidCooldown = Input(parent, "SettingsRaidCooldown", "", 824, 412, 160, 40, 4, false);
++            Button(parent, "SaveSettings", "保存全局设置", 0, 468, 300, 40, SaveGlobalSettings);
++            Button(parent, "CopyLocalRecovery", "复制本机登录恢复码", 516, 468, 468, 40, CopyRecoveryCode);
++            settingsHint = Label(parent, "SettingsHint", "", 16, 0, 516, 984, 42); settingsHint.enableWordWrapping = true;
+             FillSettings(defaults);
+         }
+         private void FillSettings(ModSettings settings)
+         {
+             settingsEmployees.text = settings.StartingEmployeeCount.ToString(); settingsPlayers.text = settings.DefaultMaxPlayers.ToString();
+             settingsMaxBases.text = settings.MaxBasesPerPlayer.ToString();
++            settingsRaidDuration.text = settings.RaidDurationMinutes.ToString(); settingsRaidCooldown.text = settings.RaidCooldownMinutes.ToString();
+             settingsPort.text = settings.DefaultPort.ToString(); settingsSteam = settings.DefaultUseSteam;
+             settingsJoinHostGalaxyOnFirstSpawn = settings.JoinHostGalaxyOnFirstSpawn;
+             SetCaption(settingsSteamButton, "默认 Steam 好友房间：" + (settingsSteam ? "开" : "关"));
+@@ -215,10 +222,12 @@
+         {
+             var defaults = new ModSettings { StartingEmployeeCount = Int(settingsEmployees, 1, 32), DefaultMaxPlayers = Int(settingsPlayers, 2, 64),
+                 MaxBasesPerPlayer = Int(settingsMaxBases, 1, 64), DefaultPort = Int(settingsPort, 1, 65535), DefaultUseSteam = settingsSteam,
++                RaidDurationMinutes = Int(settingsRaidDuration, 1, 120), RaidCooldownMinutes = Int(settingsRaidCooldown, 0, 1440),
+                 JoinHostGalaxyOnFirstSpawn = settingsJoinHostGalaxyOnFirstSpawn };
+             Runtime.SaveSettings(defaults);
+             startingEmployees.text = defaults.StartingEmployeeCount.ToString(); maxPlayers.text = defaults.DefaultMaxPlayers.ToString();
+             maxBases.text = defaults.MaxBasesPerPlayer.ToString();
++            raidDuration.text = defaults.RaidDurationMinutes.ToString(); raidCooldown.text = defaults.RaidCooldownMinutes.ToString();
+             port.text = resumePort.text = joinPort.text = defaults.DefaultPort.ToString();
+             useSteam = resumeSteam = defaults.DefaultUseSteam && !Runtime.DirectLaunch;
+             joinHostGalaxyOnFirstSpawn = defaults.JoinHostGalaxyOnFirstSpawn;
+--- a/src/Entry/MultiplayerPresetSelection.cs
++++ b/src/Entry/MultiplayerPresetSelection.cs
+@@ -54,10 +54,14 @@
+             maxPlayers = Input(parent, "MaxPlayers", defaults.DefaultMaxPlayers.ToString(), 700, 134, 80, 36, 2);
+             Label(parent, "PortLabel", "端口", 17, 802, 140, 80, 30);
+             port = Input(parent, "HostPort", defaults.DefaultPort.ToString(), 890, 134, 94, 36, 5);
+-            Label(parent, "MaxBasesLabel", "每人营地 / 基地上限", 18, 596, 180, 284, 30);
+-            maxBases = Input(parent, "MaxBases", defaults.MaxBasesPerPlayer.ToString(), 890, 174, 94, 36, 2);
+-            Label(parent, "StarterLabel", "开局雇员总数", 18, 596, 220, 284, 30);
+-            startingEmployees = Input(parent, "StartingEmployees", defaults.StartingEmployeeCount.ToString(), 890, 214, 94, 36, 2);
++            Label(parent, "MaxBasesLabel", "基地上限", 17, 596, 180, 96, 30);
++            maxBases = Input(parent, "MaxBases", defaults.MaxBasesPerPlayer.ToString(), 700, 174, 80, 36, 2);
++            Label(parent, "StarterLabel", "雇员总数", 17, 802, 180, 88, 30);
++            startingEmployees = Input(parent, "StartingEmployees", defaults.StartingEmployeeCount.ToString(), 890, 174, 94, 36, 2);
++            Label(parent, "RaidDurationLabel", "总时限/分", 17, 596, 220, 100, 30);
++            raidDuration = Input(parent, "RaidDuration", defaults.RaidDurationMinutes.ToString(), 700, 214, 80, 36, 3);
++            Label(parent, "RaidCooldownLabel", "冷却分钟", 17, 802, 220, 88, 30);
++            raidCooldown = Input(parent, "RaidCooldown", defaults.RaidCooldownMinutes.ToString(), 890, 214, 94, 36, 4);
+             steamButton = Button(parent, "EnableSteam", "", 596, 258, 388, 36, () => { EnsureSteamAvailable(); useSteam = !useSteam; RefreshCreateState(); });
+             connectionButtons.Add(steamButton);
+             joinHostGalaxyOnFirstSpawn = defaults.JoinHostGalaxyOnFirstSpawn;
+@@ -79,6 +83,7 @@
+             if (String.IsNullOrWhiteSpace(worldName.text)) throw new ArgumentException("请填写世界名称。");
+             var options = new WorldOptions { Name = worldName.text.Trim(), MaxPlayers = Int(maxPlayers, 2, 64),
+                 MaxBasesPerPlayer = Int(maxBases, 1, 64), StartingEmployeeCount = Int(startingEmployees, 1, 32),
++                RaidDurationMinutes = Int(raidDuration, 1, 120), RaidCooldownMinutes = Int(raidCooldown, 0, 1440),
+                 JoinHostGalaxyOnFirstSpawn = joinHostGalaxyOnFirstSpawn };
+             TransportOptions transport = HostOptions(port, useSteam);
+             options.StartPresetJson = NativeWorldPresets.BuildStartPresetJson(selected.Id);
+--- a/src/Game/GameHooks.cs
++++ b/src/Game/GameHooks.cs
+@@ -258,10 +258,12 @@
+             __state = null;
+             if (Bridge == null) return true;
+             if (!Bridge.IsSimulator || !Bridge.Context.IsAttackAllowed(Bridge.CurrentMapId)) return false;
+-            if (Bridge.Context.IsProtectedDefender(__instance.getUID()) && KnockedOut.Contains(__instance.getUID())) return false;
++            if (Bridge.Context.IsProtectedDefender(__instance.getUID()) && IsKnockedOut(__instance.getUID())) return false;
+             string from = hurtStruct.from == null ? null : Bridge.Context.OwnerOfEntity(hurtStruct.from.getUID());
+             string target = Bridge.Context.OwnerOfEntity(__instance.getUID());
+             if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(target) && from != target && Bridge.Context.GetRelation(from, target) == Relation.Friendly) return false;
++            if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(target) && from != target && Bridge.Context.GetAttack(Bridge.CurrentMapId) == null
++                && !Bridge.EnsureGroundRaid(from, Bridge.CurrentMapId)) return false;
+             __state = new HitState { Hp = __instance.roleBean.attr_Hp.hp,
+                 Before = Bridge.Context.IsProtectedDefender(__instance.getUID()) ? NativeWire.Pack(__instance.roleBean) : null };
+             return true;
+@@ -273,6 +275,8 @@
+             if (!Bridge.IsSimulator || !Bridge.Context.IsAttackAllowed(Bridge.CurrentMapId)) return false;
+             string from = hurtStruct.from == null ? null : Bridge.Context.OwnerOfEntity(hurtStruct.from.getUID());
+             string owner = Bridge.Context.OwnerOfEntity(__instance.getUID()) ?? Bridge.Context.OwnerOfMap(Bridge.CurrentMapId);
++            if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(owner) && from != owner && Bridge.Context.GetRelation(from, owner) != Relation.Friendly
++                && Bridge.Context.GetAttack(Bridge.CurrentMapId) == null && !Bridge.EnsureGroundRaid(from, Bridge.CurrentMapId)) return false;
+             return string.IsNullOrEmpty(from) || string.IsNullOrEmpty(owner) || from == owner || Bridge.Context.GetRelation(from, owner) != Relation.Friendly;
+         }
+         private static void BuildHitPostfix(BaseBuild __instance, HurtStruct hurtStruct, float __state)
+@@ -377,7 +381,7 @@
+             if (Bridge == null) return true;
+             BaseHero hero = (BaseHero)NativeWire.Get(__instance, "hero");
+             if (!Bridge.Context.IsProtectedDefender(hero.getUID())) return true;
+-            if (KnockedOut.Contains(hero.getUID()) || hero.heroBean.isFallDown()) { Incapacitate(hero); return false; }
++            if (IsKnockedOut(hero.getUID()) || hero.heroBean.isFallDown()) { Incapacitate(hero); return false; }
+             if (hero.heroBean.isHpDead()) { Incapacitate(hero); return false; }
+             return true;
+         }
+@@ -390,7 +394,7 @@
+             {
+                 FWHeroBean hero = (FWHeroBean)NativeWire.Get(list[i], "hero");
+                 string workerOwner = Bridge.Context.OwnerOfEntity(hero.getUID());
+-                if (workerOwner != owner && Bridge.Context.GetRelation(workerOwner, owner) != Relation.Friendly) list.RemoveAt(i);
++                if (workerOwner != owner) list.RemoveAt(i);
+             }
+         }
+         private static bool WorkPermissionPrefix(MethodBase __originalMethod, object[] __args)
+@@ -409,10 +413,17 @@
+                 return build == null || Bridge.CanUseGroundWorkTarget(role, build.getUID());
+             }
+             if (Bridge.CanPerformGroundWork(role, plan)) return true;
+-            return (NativeCommands.IsPlayerIntent || Bridge.Executing) && __originalMethod.Name.IndexOf("carry", StringComparison.OrdinalIgnoreCase) >= 0
+-                && Bridge.Context.HasPermission(owner, Bridge.CurrentMapId, -1, Permission.Loot);
+-        }
+-        internal static bool IsKnockedOut(long uid) { return KnockedOut.Contains(uid); }
++            return false;
++        }
++        internal static bool IsKnockedOut(long uid)
++        {
++            if (!KnockedOut.Contains(uid)) return false;
++            // Rescue/recovery changes the real HP. The protection marker must not make a
++            // recovered defender permanently absent from the live looting check.
++            FWHeroBean hero = Bridge == null ? null : Bridge.FindPersistentBean(uid) as FWHeroBean;
++            if (hero != null && !hero.isDead() && !hero.isFallDown()) { KnockedOut.Remove(uid); return false; }
++            return true;
++        }
+         internal static void EndProtection(IEnumerable<long> heroes) { foreach (long uid in heroes) KnockedOut.Remove(uid); }
+     }
+ }
+--- a/src/Game/NativeBaseCreation.cs
++++ b/src/Game/NativeBaseCreation.cs
+@@ -12,7 +12,10 @@
+         {
+             FWStarMapInfo map;
+             if (!Maps.TryGetValue(mapId, out map) || map.starSpread == null) throw new InvalidOperationException("地块资产目录尚未加载：" + mapId);
+-            return replicator.Beans(map.starSpread).Where(bean => bean is FWBuildBean || bean is FWPlanBean).Select(NativeWire.Uid).Distinct().ToList();
++            var entities = replicator.Beans(map.starSpread).ToList();
++            return entities.Where(bean => bean is FWBuildBean || bean is FWPlanBean).Select(NativeWire.Uid)
++                .Concat(map.starSpread.zones.Select(zone => zone.getUID()))
++                .Concat(entities.OfType<FWBox>().Select(box => box.areaZoneBean.getUID())).Where(uid => uid >= 0).Distinct().ToList();
+         }
+         public BridgeResult CreateBase(BaseCreationRequest request, string ownerPlayerId, bool formalBase)
+         {
+@@ -27,6 +30,8 @@
+                 BaseCreationStatus status = Context.GetBaseCreationStatus(ownerPlayerId, map.starMapId);
+                 if (!status.Allowed || status.WillBecomeFormalBase != formalBase) throw new NativeRejectionException(status.Reason ?? "创建营地规则已变化，请重新操作。");
+                 if (map.isRootBase() || map.isBranchBase()) throw new NativeRejectionException("这张地图已存在原版基地，不能重复创建或猜测归属。");
++                List<string> activeOwners = ActiveGroundPlayerIds(map.starMapId);
++                if (activeOwners == null || activeOwners.Any(id => id != ownerPlayerId)) throw new NativeRejectionException("其他玩家仍有可活动雇员，或地块状态尚未同步，不能建立基地。");
+                 if (!PlayerHeroes(ownerPlayerId).Any(hero => hero.isInMap(map.starMapId) && !hero.isDead())) throw new NativeRejectionException("须先让自己的雇员通过原版远征抵达这片地表，才能建立营地。");
+                 if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 64 || request.Icon == null || request.Icon.Length > 128) throw new NativeRejectionException("营地名称或图标无效。");
+                 using (EnterPlayer(ownerPlayerId))
+@@ -45,14 +50,15 @@
+             {
+                 FWStarMapInfo map;
+                 FWGameData player;
+-                if (!Maps.TryGetValue(mapId, out map) || !Players.TryGetValue(ownerPlayerId, out player) || Context.OwnerOfMap(mapId) != ownerPlayerId || !map.isBranchBase())
+-                    throw new NativeRejectionException("原版仅允许废弃自己的普通分营地。");
++                if (!Maps.TryGetValue(mapId, out map) || !Players.TryGetValue(ownerPlayerId, out player) || Context.OwnerOfMap(mapId) != ownerPlayerId || !(map.isBranchBase() || map.isRootBase()))
++                    throw new NativeRejectionException("只能将自己的地表基地转为中立地块。");
+                 try { FWPlayerLocationGuard.EnsureSurfaceMap(player, map); }
+                 catch (InvalidOperationException error) { throw new NativeRejectionException(error.Message, error); }
+                 using (EnterPlayer(ownerPlayerId))
+                 {
+                     map.updateLastTime(); map.setType(FWStarMapInfo.TYPE_NORMAL);
+                     player.developStarMapIds.Remove(mapId);
++                    if (player.lastBaseStarMapId == mapId) player.lastBaseStarMapId = -1;
+                     // Native abandonment retains the map, stock and resident characters.
+                 }
+             });
+@@ -68,6 +74,18 @@
+                 // Retain native records outside the session's managed surface-map registry.
+                 player.developStarMapIds.RemoveAll(id => managedSurfaceMapIds.Contains(id) && !ownedSurfaceMapIds.Contains(id));
+                 foreach (long mapId in ownedSurfaceMapIds) if (!player.developStarMapIds.Contains(mapId)) player.developStarMapIds.Add(mapId);
++                foreach (long mapId in managedSurfaceMapIds)
++                {
++                    FWStarMapInfo map;
++                    if (!Maps.TryGetValue(mapId, out map)) continue;
++                    string mapOwner = Context.OwnerOfMap(mapId);
++                    if (mapOwner == null && (map.isRootBase() || map.isBranchBase())) map.setType(FWStarMapInfo.TYPE_NORMAL);
++                    else if (mapOwner == playerId && ownedSurfaceMapIds.Contains(mapId))
++                    {
++                        if (mapId == initialFormalBaseMapId) map.setType(FWStarMapInfo.TYPE_ROOT_BASE);
++                        else if (!map.isRootBase()) map.setType(FWStarMapInfo.TYPE_DEPUTY_BASE);
++                    }
++                }
+                 // lastBaseStarMapId is also native recent-view state. Initialize it only on
+                 // this player's first formal-base transition; later policies must retain it.
+                 if (initialFormalBaseMapId >= 0) player.lastBaseStarMapId = initialFormalBaseMapId;
+@@ -99,6 +117,7 @@
+             harmony.Patch(AccessTools.Method(typeof(LocalCoreHandle), "giveupSMI", new[] { typeof(FWStarMapInfo), typeof(callback) }), prefix: new HarmonyMethod(typeof(NativeBaseCreation), nameof(AbandonPrefix)));
+             harmony.Patch(AccessTools.Method(typeof(ExpeditionFaction), "refreshButton"), prefix: new HarmonyMethod(typeof(NativeBaseCreation), nameof(RefreshPrefix)));
+             harmony.Patch(AccessTools.Method(typeof(ExpeditionFaction), "onEvent_创建基地", new[] { typeof(GameObject) }), prefix: new HarmonyMethod(typeof(NativeBaseCreation), nameof(CreateButtonPrefix)));
++            harmony.Patch(AccessTools.Method(typeof(ExpeditionFaction), "onEvent_废弃基地", new[] { typeof(GameObject) }), prefix: new HarmonyMethod(typeof(NativeBaseCreation), nameof(AbandonButtonPrefix)));
+         }
+         private static FWStarMapInfo SelectedMap(ExpeditionFaction panel)
+         {
+@@ -109,9 +128,26 @@
+         }
+         private static void RefreshPrefix(ExpeditionFaction __instance)
+         {
+-            if (Bridge == null || Bridge.Applying || Bridge.Seeding || !(bool)NativeWire.Get(__instance, "but_创建基地")) return;
++            if (Bridge == null || Bridge.Applying || Bridge.Seeding) return;
+             FWStarMapInfo map = SelectedMap(__instance);
++            bool ownBase = map != null && Bridge.Context.OwnerOfMap(map.starMapId) == Bridge.Context.LocalPlayerId && (map.isRootBase() || map.isBranchBase());
++            NativeWire.Set(__instance, "but_废弃基地", ownBase);
+             if (map == null || !Bridge.Context.GetBaseCreationStatus(Bridge.Context.LocalPlayerId, map.starMapId).Allowed) NativeWire.Set(__instance, "but_创建基地", false);
++        }
++        private static bool AbandonButtonPrefix(ExpeditionFaction __instance)
++        {
++            if (Bridge == null || Bridge.Applying || Bridge.Seeding) return true;
++            FWStarMapInfo map = SelectedMap(__instance);
++            if (map == null || Bridge.Context.OwnerOfMap(map.starMapId) != Bridge.Context.LocalPlayerId)
++            { FairyUIDispatcher.showToast("只能将自己的基地转为中立地块。"); return false; }
++            FairyUIDispatcher.showTip("将此基地转为中立地块？已有区域和创建者归属保留，资源按中立地块规则处理。",
++                LanguageDef.getTextByID(Lan.btn_Confirm), LanguageDef.getTextByID(Lan.btn_Cancel), choice =>
++                {
++                    if (choice != Tip.TIP_CONFIRM) return;
++                    Bridge.SubmitNativeBaseCommand(new GameCommand { Kind = CommandKind.AbandonBase, MapId = map.starMapId },
++                        () => NativeWire.Call(__instance, "refresh_EventBean"));
++                });
++            return false;
+         }
+         private static bool CreateButtonPrefix(ExpeditionFaction __instance)
+         {
+--- a/src/Game/NativeGroundInteraction.cs
++++ b/src/Game/NativeGroundInteraction.cs
+@@ -10,8 +10,7 @@
+         // while an employee always belongs to their original PlayerId.
+         internal bool CanShareGroundWork(string worker, string owner)
+         {
+-            return string.IsNullOrEmpty(worker) || string.IsNullOrEmpty(owner) || worker == owner
+-                || Context.GetRelation(worker, owner) == Relation.Friendly;
++            return string.IsNullOrEmpty(worker) || string.IsNullOrEmpty(owner) || worker == owner;
+         }
+ 
+         internal bool CanUseGroundWorkTarget(BaseRole worker, long target)
+@@ -25,11 +24,29 @@
+             if (worker == null || plan == null) return true;
+             string actor = Context.OwnerOfEntity(worker.getUID());
+             if (string.IsNullOrEmpty(actor)) return true;
++            ActionStruct_Resuce rescue = plan.actionStruct as ActionStruct_Resuce;
++            if (rescue != null && rescue.wounderRole != null)
++            {
++                string rescued = Context.OwnerOfEntity(rescue.wounderRole.getUID());
++                return string.IsNullOrEmpty(rescued) || actor == rescued
++                    || (Context.IsFriendlyToward != null && Context.IsFriendlyToward(actor, rescued));
++            }
+             if (!NativeGroundCommandOwnership.CanWorkPlanZones(this, worker, plan)) return false;
++            ActionStruct_Carry carrying = plan.actionStruct as ActionStruct_Carry;
++            if (carrying != null || plan.getTaskType() == FWPlanBean.TASK_CARRY)
++            {
++                string orderOwner = plan.planBean == null ? null : Context.OwnerOfEntity(plan.planBean.getUID());
++                if (!CanShareGroundWork(actor, orderOwner)) return false;
++                if (carrying != null && carrying.pickAction != null)
++                    foreach (PickAction_PutBase put in carrying.pickAction.puts)
++                        if (put.toAssistPlan != null && !CanPerformGroundWork(worker, put.toAssistPlan)) return false;
++                return true;
++            }
+             if (plan.planBean == null && plan.getTaskType() == FWPlanBean.TASK_Grow && NativeGroundCommandOwnership.PlantZone(plan) != null)
+                 return true; // Generated planting work follows its real zone, including an own zone on a visited map.
+             BaseBuild assignedBuilding = plan.getPlanBuild();
+-            if (assignedBuilding != null && !CanUseGroundWorkTarget(worker, assignedBuilding.getUID())) return false;
++            if (assignedBuilding != null && !NativeGroundInteraction.IsPublicFieldWork(plan.getTaskType())
++                && !CanUseGroundWorkTarget(worker, assignedBuilding.getUID())) return false;
+             FWPlanBean bean = plan.planBean;
+             if (bean != null)
+             {
+@@ -38,7 +55,8 @@
+                 // A new own demolition/refuel order cannot grant access to a foreign
+                 // building merely by placing the actor's identity on its plan.
+                 string targetOwner = bean.objectUID > 0 ? Context.OwnerOfEntity(bean.objectUID) : null;
+-                if (!CanShareGroundWork(actor, targetOwner)) return false;
++                if (!NativeGroundInteraction.IsPublicFieldWork(plan.getTaskType()) && plan.getTaskType() != FWPlanBean.TASK_CARRY
++                    && !CanShareGroundWork(actor, targetOwner)) return false;
+                 if (author != null || targetOwner != null) return true;
+             }
+             if (assignedBuilding != null) return true;
+@@ -52,34 +70,29 @@
+             ActionStruct_Table table = plan.actionStruct as ActionStruct_Table;
+             BaseBuild furniture = table == null ? null : table.furniture as BaseBuild;
+             if (furniture != null) return CanUseGroundWorkTarget(worker, furniture.getUID());
+-            ActionStruct_Carry carry = plan.actionStruct as ActionStruct_Carry;
+-            if (carry != null)
+-            {
+-                if (carry.carryThing != null && !CanUseGroundWorkTarget(worker, carry.carryThing.getUID())) return false;
+-                if (carry.pickAction != null)
+-                {
+-                    foreach (PickAction_PickBase pick in carry.pickAction.picks)
+-                        if (pick.takeThing != null && !CanUseGroundWorkTarget(worker, pick.takeThing.getUID())) return false;
+-                    foreach (PickAction_PutBase put in carry.pickAction.puts)
+-                        if (put.toAssistPlan != null && !CanPerformGroundWork(worker, put.toAssistPlan)) return false;
+-                    return true;
+-                }
+-                if (carry.carryThing != null) return true;
+-            }
+             // Existing unregistered map work keeps its original map ownership.
+             // New persistent plans are registered at the insertion boundary below.
+             return !NativeGroundInteraction.IsWorkPlan(plan)
++                || NativeGroundInteraction.IsPublicFieldWork(plan.getTaskType())
+                 || CanShareGroundWork(actor, Context.OwnerOfMap(CurrentMapId));
+         }
+ 
+         internal void ValidateGroundPlanMutation(string playerId, FWPlanBean plan, bool creating)
+         {
+             if (plan == null) throw new InvalidOperationException("任务数据不存在。");
++            string baseOwner = Context.OwnerOfMap(CurrentMapId);
++            if (creating && !string.IsNullOrEmpty(baseOwner) && baseOwner != playerId
++                && !NativeGroundInteraction.IsPublicFieldWork(plan.taskType)
++                && plan.taskType != FWPlanBean.TASK_CARRY && plan.taskType != FWPlanBean.TASK_RescueTarget)
++                throw new InvalidOperationException("不能在其他玩家的基地发布建造、种植或生产管理命令。");
+             string author = Context.OwnerOfEntity(plan.getUID());
+             if (creating ? author != null && author != playerId : !NativeGroundCommandOwnership.CanEdit(this, playerId, plan.getUID()))
+                 throw new InvalidOperationException("只能修改或取消自己发布的命令。");
+             string target = plan.objectUID > 0 ? Context.OwnerOfEntity(plan.objectUID) : null;
+-            if (!CanShareGroundWork(playerId, target))
++            if (plan.taskType == FWPlanBean.TASK_RescueTarget && target != null
++                && (playerId == target || Context.IsFriendlyToward != null && Context.IsFriendlyToward(playerId, target))) return;
++            if (!NativeGroundInteraction.IsPublicFieldWork(plan.taskType) && plan.taskType != FWPlanBean.TASK_CARRY
++                && !CanShareGroundWork(playerId, target))
+                 throw new InvalidOperationException("当前关系不允许对该玩家的设施安排工作。");
+         }
+ 
+@@ -123,6 +136,19 @@
+         private static readonly FieldInfo TargetLock = AccessTools.Field(typeof(AI_BaseFight), "isTargetLock");
+         private static GameBridge Bridge => GameBridge.Active;
+ 
++        // Gathering and demolition remain legal on a visited base. Their resulting
++        // items still pass the separate pickup/loot checks, never work-sharing.
++        internal static bool IsPublicFieldWork(int task)
++        {
++            switch (task)
++            {
++                case FWPlanBean.TASK_Felling: case FWPlanBean.TASK_Mining: case FWPlanBean.TASK_Harvesty:
++                case FWPlanBean.TASK_Weeding: case FWPlanBean.TASK_Destroy: case FWPlanBean.TASK_RemoveRoof:
++                case FWPlanBean.TASK_Uninstall: case FWPlanBean.TASK_Ore_Destroy: case FWPlanBean.TASK_FISHING: return true;
++                default: return false;
++            }
++        }
++
+         internal static bool IsWorkPlan(RolePlan plan)
+         {
+             if (plan == null) return false;
+@@ -135,7 +161,7 @@
+                 case FWPlanBean.TASK_Build: case FWPlanBean.TASK_Grow: case FWPlanBean.TASK_STUDY:
+                 case FWPlanBean.TASK_MakeButcher: case FWPlanBean.TASK_MakeProduct: case FWPlanBean.TASK_AddMaterial:
+                 case FWPlanBean.TASK_ProductOperate: case FWPlanBean.TASK_REPAIR: case FWPlanBean.TASK_FISHING:
+-                case FWPlanBean.TASK_Medical: case FWPlanBean.TASK_AddFood: return true;
++                case FWPlanBean.TASK_Medical: case FWPlanBean.TASK_AddFood: case FWPlanBean.TASK_RescueTarget: return true;
+                 default: return false;
+             }
+         }
+--- a/src/Game/NativeGroundCommandOwnership.cs
++++ b/src/Game/NativeGroundCommandOwnership.cs
+@@ -8,7 +8,8 @@
+ namespace FreeWorldMultiplayer
+ {
+     // Author identity uses the existing persisted/networked UID ownership table.
+-    // Cooperation grants work permission; it never grants mutation permission.
++    // Friendship never grants production or mutation permission. Pickup uses the
++    // independent loot rule so a legal raid is not treated as helping the owner.
+     internal static class NativeGroundCommandOwnership
+     {
+         [ThreadStatic] private static BaseRole candidateWorker;
+@@ -37,14 +38,15 @@
+                 if (zone != null && !CanWorkZone(bridge, worker, zone)) return false;
+             }
+             ActionStruct_Carry carry = plan.actionStruct as ActionStruct_Carry;
+-            if (carry != null && carry.carryThing != null && carry.carryThing.zoneBean != null && !CanWorkZone(bridge, worker, carry.carryThing.zoneBean)) return false;
++            string actor = worker == null ? null : bridge.Context.OwnerOfEntity(worker.getUID());
++            if (carry != null && carry.carryThing != null && !bridge.CanTakeGroundThing(actor, carry.carryThing)) return false;
+             PickActionGroup picks = plan.pickAction ?? (carry == null ? null : carry.pickAction);
+             if (picks != null)
+             {
+                 foreach (PickAction_PickBase pick in picks.picks)
+                 {
+                     BaseThing thing = pick.takeThing == null ? null : pick.takeThing.getThing();
+-                    if (thing != null && thing.zoneBean != null && !CanWorkZone(bridge, worker, thing.zoneBean)) return false;
++                    if (thing != null && !bridge.CanTakeGroundThing(actor, thing)) return false;
+                 }
+                 foreach (PickAction_PutBase put in picks.puts)
+                 {
+@@ -140,7 +142,13 @@
+         private static void AreaCandidatesPostfix(ref List<BaseZoneArea> __result)
+         {
+             if (Bridge != null && !Bridge.Applying && candidateWorker != null && __result != null)
+-                __result = __result.Where(z => z != null && CanWorkZone(Bridge, candidateWorker, z.zoneBean)).ToList();
++            {
++                string actor = Bridge.Context.OwnerOfEntity(candidateWorker.getUID());
++                // Source-zone discovery may see a defeated owner's storage.
++                // Destination discovery/free slots still require own storage.
++                __result = __result.Where(z => z != null && (CanWorkZone(Bridge, candidateWorker, z.zoneBean)
++                    || ZoneDef.isStoreType(z.zoneBean.id) && Bridge.CanTakeGroundZone(actor, z.zoneBean))).ToList();
++            }
+         }
+         private static void WorkerEnter(object[] __args, out BaseRole __state)
+         { __state = candidateWorker; BaseRole role = __args.OfType<BaseRole>().FirstOrDefault(); if (role != null) candidateWorker = role; }
+--- a/src/Game/NativeGroundZones.cs
++++ b/src/Game/NativeGroundZones.cs
+@@ -33,6 +33,7 @@
+         }
+         internal static void Install(Harmony harmony)
+         {
++            NativeGroundStorageQuota.Install(harmony);
+             Patch(harmony, typeof(MapZoneManager), "addZoneArea", nameof(AddAreaPrefix));
+             foreach (string name in new[] { "Zone_AreaExpand_LN", "Zone_AreaReduce_LN", "Zone_AreaReduces_ByLevel_LN", "Zone_AreaReduces_BySubType_LN", "Zone_Remove" })
+                 Patch(harmony, typeof(LocalCoreHandle), name, nameof(MutationPrefix));
+@@ -123,7 +124,9 @@
+                     case "Expand":
+                         if (data.Cells.Any(p => !zone.isInZone(p.x, p.y) && !MapManager.instance.zoneManager.couldCreateZoneArea(zone.allianceID, zone.id, p.x, p.y)))
+                             throw new InvalidOperationException("区域扩张位置已被占用。");
+-                        LocalCoreHandle.Zone_AreaExpand_LN(area, data.Cells.Where(p => !zone.isInZone(p.x, p.y)).ToList()); break;
++                        List<FWPoint> expansion = data.Cells.Where(p => !zone.isInZone(p.x, p.y)).GroupBy(p => new { p.x, p.y }).Select(g => g.First()).ToList();
++                        NativeGroundStorageQuota.RequireGrowth(bridge, command.PlayerId, map, zone.id, 0, expansion.Count);
++                        LocalCoreHandle.Zone_AreaExpand_LN(area, expansion); break;
+                     case "Reduce": case "EraseLevel": case "EraseSubtype":
+                         LocalCoreHandle.Zone_AreaReduce_LN(area, data.Cells);
+                         if (zone.cells.Count == 0) LocalCoreHandle.Zone_Remove(zone); break;
+@@ -139,6 +142,9 @@
+         }
+         private static void AddArea(GameBridge bridge, string actor, Mutation data, UserFWStarSpread map)
+         {
++            string baseOwner = bridge.Context.OwnerOfMap(map.starMapId);
++            if (!string.IsNullOrEmpty(baseOwner) && baseOwner != actor)
++                throw new InvalidOperationException("只能在中立地块或自己的基地创建区域。");
+             string[] ids = { ZoneDef.ZONE_ID_PLANT, ZoneDef.ZONE_ID_STORE, ZoneDef.ZONE_ID_RUBBISH, ZoneDef.ZONE_ID_Transport, ZoneDef.ZONE_ID_LIFE, ZoneDef.ZONE_ID_Shepherd };
+             if (!ids.Contains(data.ZoneId) || data.Limit < 1 || data.X0 < 0 || data.Y0 < 0 || data.X1 < data.X0 || data.Y1 < data.Y0 || data.X1 >= map.xLength || data.Y1 >= map.yLength)
+                 throw new InvalidOperationException("新增区域范围或类型无效。");
+@@ -158,6 +164,7 @@
+                 }
+             });
+             if (cells.Count == 0) return;
++            int newCellCount = cells.Count;
+             // Preserve native adjacency merging within one author. Adjacent foreign
+             // zones keep their original UID, configuration, cells and author.
+             var merge = new List<FWAreaZoneBean>();
+@@ -166,6 +173,7 @@
+                     if (zone.id == data.ZoneId && zone.allianceID == RoleAlliance.Alliance_MINE && zone.isNewed()
+                         && zone.getUID() < data.MergeBefore && NativeGroundCommandOwnership.CanEdit(bridge, actor, zone.getUID()) && zone.isCloset(cells))
+                     { merge.Add(zone); cells.AddRange(zone.cells); }
++            NativeGroundStorageQuota.RequireGrowth(bridge, actor, map, data.ZoneId, 1 - merge.Count, newCellCount);
+             FWAreaZoneBean created = data.ZoneId == ZoneDef.ZONE_ID_PLANT ? (FWAreaZoneBean)new FWPlantAreaZoneBean(data.ZoneId, RoleAlliance.Alliance_MINE)
+                 : data.ZoneId == ZoneDef.ZONE_ID_Shepherd ? new FWAnimalAreaZoneBean(data.ZoneId, RoleAlliance.Alliance_MINE)
+                 : new FWAreaZoneBean(data.ZoneId, RoleAlliance.Alliance_MINE);
+@@ -173,6 +181,7 @@
+             foreach (FWAreaZoneBean zone in merge) LocalCoreHandle.Zone_Remove(zone);
+             foreach (FWPlanBean plan in clearing) LocalCoreHandle.Plan_addNewPlan_LN(plan);
+             LocalCoreHandle.Zone_Add_LN(created);
++            bridge.Context.RegisterEntityOwner(created.getUID(), actor);
+         }
+     }
+ }
+--- /dev/null
++++ b/src/Game/NativeGroundStorageQuota.cs
+@@ -0,0 +1,48 @@
++using System;
++using System.Linq;
++using HarmonyLib;
++
++namespace FreeWorldMultiplayer
++{
++    // Native store types are STORE and RUBBISH (ZoneDef.isStoreType). Quotas
++    // are recomputed from persistent zones, so base -> neutral keeps old zones
++    // without rewriting their UID/author or relying on a transient counter.
++    internal static class NativeGroundStorageQuota
++    {
++        private const int MaxZones = 3, MaxCells = 270;
++        private static bool Applies(GameBridge bridge, long map, string type)
++        { return bridge.Context.OwnerOfMap(map) == null && ZoneDef.isStoreType(type); }
++        private static FWAreaZoneBean[] Owned(GameBridge bridge, string actor, UserFWStarSpread map, string type)
++        {
++            return map.zones.Where(z => z.id == type && NativeGroundCommandOwnership.Owner(bridge, z.getUID()) == actor).ToArray();
++        }
++        internal static void RequireGrowth(GameBridge bridge, string actor, UserFWStarSpread map, string type, int addedZones, int addedCells)
++        {
++            if (!Applies(bridge, map.starMapId, type) || addedCells == 0 && addedZones <= 0) return;
++            FWAreaZoneBean[] owned = Owned(bridge, actor, map, type);
++            long cells = owned.Sum(z => (long)z.cells.Select(p => new { p.x, p.y }).Distinct().Count());
++            if (owned.Length > MaxZones || cells > MaxCells || owned.Length + addedZones > MaxZones || cells + addedCells > MaxCells)
++                throw new InvalidOperationException("每位玩家在每块中立地块的同类型储存区最多 3 个、合计 270 格；超限旧区可保留和缩减，暂不能新增或扩建。");
++        }
++        internal static void Install(Harmony harmony)
++        {
++            var target = AccessTools.Method(typeof(ZoneDef), "getZoneRemainTiledSum", new[] { typeof(string), typeof(sbyte) });
++            if (target == null) throw new MissingMethodException(typeof(ZoneDef).FullName, "getZoneRemainTiledSum");
++            harmony.Patch(target, postfix: new HarmonyMethod(typeof(NativeGroundStorageQuota), nameof(RemainingCellsPostfix)));
++        }
++        private static void RemainingCellsPostfix(string id, sbyte alliance, ref int __result)
++        {
++            GameBridge bridge = GameBridge.Active;
++            if (bridge == null || bridge.Applying || bridge.Seeding || alliance != RoleAlliance.Alliance_MINE || !ZoneDef.isStoreType(id)) return;
++            UserFWStarSpread map = UserBean.getInstance().curStarMap;
++            if (map == null || map.starMapId != bridge.CurrentMapId) return;
++            // A base has no multiplayer quota. Its finite grid capacity is enough
++            // for any drawing operation and avoids a sentinel near int overflow.
++            if (bridge.Context.OwnerOfMap(bridge.CurrentMapId) != null)
++            { __result = (int)Math.Max(0L, Math.Min(int.MaxValue / 2L, (long)map.xLength * map.yLength)); return; }
++            FWAreaZoneBean[] owned = Owned(bridge, bridge.ActingPlayer ?? bridge.Context.LocalPlayerId, map, id);
++            long cells = owned.Sum(z => (long)z.cells.Select(p => new { p.x, p.y }).Distinct().Count());
++            __result = owned.Length > MaxZones ? 0 : (int)Math.Max(0L, MaxCells - cells);
++        }
++    }
++}
+--- /dev/null
++++ b/src/Game/NativeGroundLoot.cs
+@@ -0,0 +1,116 @@
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace FreeWorldMultiplayer
++{
++    public sealed partial class GameBridge
++    {
++        private readonly Dictionary<string, GameCommand> pendingGroundRaids = new Dictionary<string, GameCommand>();
++        private readonly Dictionary<string, DateTime> groundRaidRetryAt = new Dictionary<string, DateTime>();
++        // Never use only the currently viewed scene: a non-viewed map still has defenders.
++        public List<string> ActiveGroundPlayerIds(long mapId)
++        {
++            FWStarMapInfo map;
++            if (!Maps.TryGetValue(mapId, out map) || map.starSpread == null || Players.Count == 0) return null;
++            if (CurrentMapId == mapId && !IsNativeMapReady(mapId)) return null;
++            return Players.Keys.Where(id => PlayerHeroes(id).Any(h => h.isInMap(mapId) && GroundHeroActive(h))).ToList();
++        }
++        internal bool GroundHeroActive(FWHeroBean hero)
++        { return hero != null && !hero.isDead() && !hero.prisoner && !hero.isFallDown() && !GameHooks.IsKnockedOut(hero.getUID()); }
++
++        internal string GroundZoneOwner(FWAreaZoneBean zone, long mapId)
++        {
++            if (zone == null) return null;
++            string owner = Context.OwnerOfEntity(zone.getUID());
++            if (owner != null) return owner;
++            FWStarMapInfo map;
++            if (Maps.TryGetValue(mapId, out map) && map.starSpread != null)
++                foreach (FWBox box in replicator.Beans(map.starSpread).OfType<FWBox>())
++                    if (ReferenceEquals(box.areaZoneBean, zone)) return Context.OwnerOfEntity(box.getUID()) ?? Context.OwnerOfMap(mapId);
++            return Context.OwnerOfMap(mapId);
++        }
++        internal bool CanTakeGroundZone(string actor, FWAreaZoneBean zone)
++        {
++            string owner = GroundZoneOwner(zone, CurrentMapId);
++            return owner == null || owner == actor || Context.CanLootGroundOwner(actor, owner, CurrentMapId);
++        }
++        internal string ProtectedGroundItemOwner(long mapId, FWThingBean item)
++        {
++            string mapOwner = Context.OwnerOfMap(mapId);
++            if (mapOwner != null) return mapOwner;
++            FWStarMapInfo map;
++            if (item == null || !Maps.TryGetValue(mapId, out map) || map.starSpread == null) return null;
++            // Cell membership is authoritative, including stock whose native scene is unloaded.
++            FWAreaZoneBean zone = map.starSpread.zones.FirstOrDefault(z => ZoneDef.isStoreType(z.id) && z.isInZone(item.cellX, item.cellY));
++            if (zone != null) return GroundZoneOwner(zone, mapId);
++            foreach (FWBox box in replicator.Beans(map.starSpread).OfType<FWBox>())
++                if (box.areaZoneBean.isInZone(item.cellX, item.cellY)) return Context.OwnerOfEntity(box.getUID());
++            return null;
++        }
++        internal bool CanTakeGroundThing(string actor, BaseThing thing)
++        { return thing == null || CanTakeGroundItem(actor, CurrentMapId, thing.thingBean); }
++        private bool CanTakeGroundItem(string actor, long mapId, FWThingBean item)
++        {
++            string owner = ProtectedGroundItemOwner(mapId, item);
++            return owner == null || owner == actor || Context.CanLootGroundOwner(actor, owner, mapId);
++        }
++        internal bool IsGroundRaidParticipant(AttackRecord attack, string actor)
++        { return attack != null && (attack.AttackerPlayerId == actor || attack.ParticipantPlayerIds.Contains(actor)); }
++        private List<long> GroundRaidHeroes(AttackRecord attack, string actor)
++        {
++            List<long> heroes;
++            return attack.ParticipantHeroIds.TryGetValue(actor, out heroes) ? heroes
++                : attack.AttackerPlayerId == actor ? attack.AttackerHeroIds : new List<long>();
++        }
++        private long GroundRaidFleet(AttackRecord attack, string actor)
++        {
++            long fleet;
++            return attack.ParticipantFleetIds.TryGetValue(actor, out fleet) ? fleet : actor == attack.AttackerPlayerId ? attack.SourceFleetId : -1;
++        }
++        internal bool EnsureGroundRaid(string actor, long mapId, long heroUid = -1)
++        {
++            if (string.IsNullOrEmpty(actor) || !Players.ContainsKey(actor)) return false;
++            if (Context.OwnerOfMap(mapId) == actor) return true; // Resident defenders never become a returning raid party.
++            FWStarMapInfo map;
++            if (!Maps.TryGetValue(mapId, out map) || map.starSpread == null) return false;
++            if (map.starSpread.isAirMap()) return true;
++            if (ActiveGroundPlayerIds(mapId) == null) return false;
++            AttackRecord attack = Context.GetAttack(mapId);
++            string key = actor + ":" + mapId + ":" + heroUid;
++            if (attack != null && attack.Stage == AttackStage.Active && IsGroundRaidParticipant(attack, actor)
++                && (heroUid < 0 || GroundRaidHeroes(attack, actor).Contains(heroUid)))
++            { pendingGroundRaids.Remove(key); groundRaidRetryAt.Remove(key); return true; }
++            if (Context.IsRaidCoolingDown(mapId)) return false;
++            DateTime retryAt;
++            if (groundRaidRetryAt.TryGetValue(key, out retryAt) && retryAt > DateTime.UtcNow) return false;
++            var heroes = PlayerHeroes(actor).Where(h => h.isInMap(mapId) && GroundHeroActive(h)).Select(h => h.getUID()).ToList();
++            if (heroes.Count == 0) return false;
++            // Use a completed, saved native landing. Never choose a different fleet's larger
++            // vehicle to manufacture a new raid capacity after employees are already ashore.
++            TransferRecord arrival = NativeLandings.Values.Where(l => l.MapId == mapId && l.PlayerId == actor && l.Complete)
++                .Select(l => Context.GetTransfer(l.ExpeditionUid)).Where(t => t != null && !t.Returning && t.PlayerId == actor
++                    && t.Request.DestinationMapId == mapId && t.Request.HeroIds.Any(heroes.Contains)
++                    && (heroUid < 0 || t.Request.HeroIds.Contains(heroUid)))
++                .OrderBy(t => t.TransferId, StringComparer.Ordinal).FirstOrDefault();
++            if (arrival == null) return false;
++            FWFleet fleet = arrival.Request.SourceFleetId >= 0 ? TransferFleet(actor, arrival.Request.SourceFleetId) : Players[actor].galaxyBlock.playerFleet;
++            var request = new RaidRequest { PlayerId = actor, AlreadyOnGround = true, ExistingExpeditionId = arrival.NativeExpeditionId,
++                MapId = mapId, SourceMapId = arrival.Request.SourceMapId, SourceFleetId = fleet.getUID(),
++                AttackerHeroIds = heroes.Where(arrival.Request.HeroIds.Contains).ToList(), NativeTransportJson = arrival.Request.NativeManifestJson };
++            GameCommand command;
++            if (!pendingGroundRaids.TryGetValue(key, out command))
++            {
++                command = new GameCommand { CommandId = Guid.NewGuid().ToString("N"), Kind = CommandKind.StartRaid, MapId = mapId,
++                    PlayerId = actor, PayloadJson = JsonData.Write(request) };
++                pendingGroundRaids[key] = command;
++                Context.RegisterCommandCallback(command.CommandId, result =>
++                { if (!result.Success && !result.Applied) pendingGroundRaids.Remove(key); });
++            }
++            groundRaidRetryAt[key] = DateTime.UtcNow.AddSeconds(1);
++            CommandResult submitted = Context.SubmitCommand(command);
++            attack = Context.GetAttack(mapId);
++            return submitted.Success && attack != null && attack.Stage == AttackStage.Active && IsGroundRaidParticipant(attack, actor);
++        }
++    }
++}
+--- a/src/Game/NativeRaid.cs
++++ b/src/Game/NativeRaid.cs
+@@ -31,7 +31,8 @@
+             {
+                 Manifest manifest = NativeWire.Parse<Manifest>(request.NativeTransportJson);
+                 if (manifest.Heroes.Count == 0 || manifest.Heroes.Distinct().Count() != manifest.Heroes.Count
+-                    || !manifest.Heroes.OrderBy(u => u).SequenceEqual(request.AttackerHeroIds.OrderBy(u => u)))
++                    || (!request.AlreadyOnGround && !manifest.Heroes.OrderBy(u => u).SequenceEqual(request.AttackerHeroIds.OrderBy(u => u)))
++                    || (request.AlreadyOnGround && (request.AttackerHeroIds.Count == 0 || request.AttackerHeroIds.Any(uid => !manifest.Heroes.Contains(uid)))))
+                     throw new InvalidOperationException("出征清单与本场雇员名单不一致或重复。");
+                 if (manifest.Items.Any(i => i.Count <= 0) || manifest.Items.Select(i => i.Uid).Distinct().Count() != manifest.Items.Count)
+                     throw new InvalidOperationException("出征物资数量无效或同一来源重复选择。");
+@@ -40,6 +41,21 @@
+                 FWFleet fleet = OwnedFleets(attackerPlayerId).SingleOrDefault(f => f.getUID() == request.SourceFleetId);
+                 if (fleet == null) throw new InvalidOperationException("本场返航舰队不属于出征玩家。");
+                 FWExpedition carrier = null;
++                if (request.AlreadyOnGround)
++                {
++                    TransferRecord original = Context.GetTransfer(request.ExistingExpeditionId);
++                    if (original == null || original.Returning || original.PlayerId != attackerPlayerId || original.Request.DestinationMapId != request.MapId
++                        || original.Request.SourceMapId != request.SourceMapId
++                        || request.SourceFleetId != (original.Request.SourceFleetId >= 0 ? original.Request.SourceFleetId : Players[attackerPlayerId].galaxyBlock.playerFleet.getUID())
++                        || original.Request.NativeManifestJson != request.NativeTransportJson
++                        || (original.Stage != TransferStage.Arrived && original.Stage != TransferStage.Landing)
++                        || request.AttackerHeroIds.Any(uid => !PlayerHeroes(attackerPlayerId).Any(h => h.getUID() == uid && h.isInMap(request.MapId) && GroundHeroActive(h))))
++                        throw new InvalidOperationException("在场袭击须使用本人真实返航舰队载具和当前地块可活动雇员。");
++                    data = new RaidStartData { Capacity = vehicle.Carrying, ProtectedDefenderHeroIds = Players.Keys
++                        .Where(id => id != attackerPlayerId && !Context.IsPlayerOnline(id)).SelectMany(PlayerHeroes).Where(h => h.isInMap(request.MapId) && !h.isDead())
++                        .Select(h => h.getUID()).Distinct().ToList() };
++                    return BridgeResult.Ok();
++                }
+                 if (request.ExistingExpeditionId > 0)
+                 {
+                     TransferRecord transfer = Context.GetTransfer(request.ExistingExpeditionId);
+@@ -61,7 +77,8 @@
+                     if (Context.OwnerOfEntity(uid) != attackerPlayerId || !atSource) throw new InvalidOperationException("出征雇员不在该玩家实际始发地。");
+                 }
+                 data = new RaidStartData { Capacity = vehicle.Carrying, ProtectedDefenderHeroIds = Players.Values.SelectMany(p => p.heros)
+-                    .Where(h => h.isInMap(request.MapId) && Context.OwnerOfEntity(h.getUID()) == Context.OwnerOfMap(request.MapId) && !h.isDead())
++                    .Where(h => h.isInMap(request.MapId) && Context.OwnerOfEntity(h.getUID()) == Context.OwnerOfMap(request.MapId)
++                        && !Context.IsPlayerOnline(Context.OwnerOfEntity(h.getUID())) && !h.isDead())
+                     .Select(h => h.getUID()).ToList() };
+                 return BridgeResult.Ok();
+             }
+@@ -71,15 +88,16 @@
+         {
+             return Run(() =>
+             {
+-                FWExpedition expedition = RequireRaidCarrier(attack);
++                FWExpedition expedition = attack.AlreadyOnGround ? null : RequireRaidCarrier(attack);
+                 Attacks[attack.AttackId] = attack;
+                 if (String.IsNullOrEmpty(attack.NativeBattleState))
+-                    attack.NativeBattleState = NativeWire.Json(new RaidNativeState { LandingExpeditionId = expedition.getUID() });
++                    attack.NativeBattleState = NativeWire.Json(new RaidNativeState { LandingExpeditionId = expedition == null ? attack.LandingExpeditionId : expedition.getUID() });
+                 // The second, arrival-time binding happens only after the preceding offline
+                 // interval is settled. Capture this generation's actual resident defenders.
+-                if (attack.Stage == AttackStage.Loading)
+-                    attack.ProtectedDefenderHeroIds = PlayerHeroes(attack.DefenderPlayerId)
+-                        .Where(h => h.isInMap(attack.MapId) && !h.isDead()).Select(h => h.getUID()).Distinct().ToList();
++                if (attack.Stage == AttackStage.Loading && attack.DefenderPlayerId != null)
++                    attack.ProtectedDefenderHeroIds = attack.ProtectedDefenderHeroIds.Concat(PlayerHeroes(attack.DefenderPlayerId)
++                        .Where(h => h.isInMap(attack.MapId) && !Context.IsPlayerOnline(attack.DefenderPlayerId) && !h.isDead())
++                        .Select(h => h.getUID())).Distinct().ToList();
+                 // ArriveTransfer queues the actual AirSupport landing at the route's due time.
+             });
+         }
+@@ -122,24 +140,28 @@
+             New_ExpeditionPakTeams team = dialog == null ? null : dialog.pakTeam;
+             FWStarMapInfo source = team == null ? null : team.getStartStarMapinfo();
+             AttackRecord attack = source == null ? null : Context.GetAttack(source.starMapId);
+-            if (attack == null || attack.AttackerPlayerId != Context.LocalPlayerId || attack.Stage == AttackStage.Finished) return false;
++            if (attack == null || !IsGroundRaidParticipant(attack, Context.LocalPlayerId) || attack.Stage == AttackStage.Finished) return false;
++            var items = new List<FWThingBean>(); team.getCollectThingUID(ref items);
++            var heroes = new List<long>(); team.getCollectRoleBean(ref heroes);
++            var animals = new List<long>(); team.getCollectAnimalBean(ref animals);
++            bool protectedCargo = items.Any(item => { string owner = ProtectedGroundItemOwner(source.starMapId, item); return owner != null && owner != Context.LocalPlayerId; });
++            bool carryingLoot = LootReservations.Any(r => r.AttackId == attack.AttackId && (heroes.Contains(r.HeroUid) || items.Any(i => i.getUID() == r.CarryUid)));
++            if (!protectedCargo && !carryingLoot && (items.Count != 0 || heroes.Count != 0 || animals.Count != 0)) return false;
+             // Reuse the native bottom confirmation. This also admits the V1 empty evacuation,
+             // which the single-player onEvent_Create rejects before creating any expedition.
+             dialog.thingPicker.hide(); dialog.rolePicker.hide();
+             AirShipFleetInfoBean destination = (AirShipFleetInfoBean)NativeWire.Call(team, "getTargetFleet");
+             if (attack.Stage != AttackStage.Active || attack.EvacuationUsed)
+             { FairyUIDispatcher.showToast("本场尚未完成空投，或唯一撤离已经使用。"); return true; }
+-            if (destination == null || destination.bean.getUID() != attack.SourceFleetId)
++            long returnFleet = GroundRaidFleet(attack, Context.LocalPlayerId);
++            if (destination == null || destination.bean.getUID() != returnFleet)
+             { FairyUIDispatcher.showToast("请选择本场出征时登记的返航舰队。"); return true; }
+             string vehicle = NativeWire.Parse<Manifest>(attack.NativeTransportJson).VehicleId;
+             if (team.vehicleBean == null || team.vehicleBean.getId() != vehicle)
+             { FairyUIDispatcher.showToast("请选择本场出征时登记的空投仓。"); return true; }
+             if (team.mission != null)
+             { FairyUIDispatcher.showToast("袭击撤离不能同时提交其他任务运输。"); return true; }
+-            var items = new List<FWThingBean>(); team.getCollectThingUID(ref items);
+-            var heroes = new List<long>(); team.getCollectRoleBean(ref heroes);
+-            var animals = new List<long>(); team.getCollectAnimalBean(ref animals);
+-            if (animals.Count != 0 || heroes.Any(uid => !attack.AttackerHeroIds.Contains(uid)))
++            if (animals.Count != 0 || heroes.Any(uid => !GroundRaidHeroes(attack, Context.LocalPlayerId).Contains(uid)))
+             { FairyUIDispatcher.showToast("本次撤离只能选择本场进攻雇员和物资。"); return true; }
+             var selectedHeroes = PlayerHeroes(Context.LocalPlayerId).Where(h => heroes.Contains(h.getUID())).ToList();
+             if (selectedHeroes.Count != heroes.Count)
+@@ -153,7 +175,7 @@
+                     if (current == null || current.AttackId != attackId || current.Stage != AttackStage.Active || current.EvacuationUsed)
+                     { FairyUIDispatcher.showToast("本场袭击状态已变化，不能提交这次撤离。"); return; }
+                     var start = new FWExpeditionGoalPos(FWBagGoalPos.BagType._无, FWGoalPos.GoalType._STAR_MAP_INFO, source.starMapId);
+-                    var end = new FWExpeditionGoalPos(FWBagGoalPos.BagType._无, FWGoalPos.GoalType._FLEET, current.SourceFleetId);
++                    var end = new FWExpeditionGoalPos(FWBagGoalPos.BagType._无, FWGoalPos.GoalType._FLEET, GroundRaidFleet(current, Context.LocalPlayerId));
+                     string submissionKey = SubmitNativeTransfer(start, end, -1, selectedHeroes, new List<FWAnimalBean>(), items, vehicle, false,
+                         () => { nativeRaidTransportRetries.Remove(dialog); if (dialog != null) dialog.closeDialog(); });
+                     if (submissionKey != null) nativeRaidTransportRetries[dialog] = submissionKey;
+@@ -166,6 +188,11 @@
+             {
+                 Manifest manifest = NativeWire.Parse<Manifest>(evacuation.NativeManifestJson);
+                 Manifest departure = NativeWire.Parse<Manifest>(attack.NativeTransportJson);
++                string actor = string.IsNullOrEmpty(evacuation.PlayerId) ? attack.AttackerPlayerId : evacuation.PlayerId;
++                if (!IsGroundRaidParticipant(attack, actor)) throw new NativeRejectionException("撤离玩家不属于本场参与方。");
++                List<long> actorHeroes = GroundRaidHeroes(attack, actor);
++                long destinationFleet = evacuation.DestinationFleetId >= 0 ? evacuation.DestinationFleetId : GroundRaidFleet(attack, actor);
++                TransferFleet(actor, destinationFleet);
+                 if (String.IsNullOrEmpty(attack.NativeBattleState)) throw new NativeRejectionException("已保存袭击缺少原生战场载体状态，不能再次生成运输。");
+                 RaidNativeState state = NativeWire.Parse<RaidNativeState>(attack.NativeBattleState);
+                 if (state == null || state.LandingExpeditionId != attack.LandingExpeditionId || state.EvacuationExpeditionId > 0)
+@@ -173,7 +200,7 @@
+                 if (manifest.VehicleId != departure.VehicleId) throw new NativeRejectionException("撤离必须沿用开战登记的唯一载具。");
+                 if (manifest.Items.Select(i => i.Uid).Distinct().Count() != manifest.Items.Count || manifest.Heroes.Distinct().Count() != manifest.Heroes.Count)
+                     throw new NativeRejectionException("撤离清单重复选择同一实体。");
+-                if (manifest.Animals.Count != 0 || manifest.Heroes.Any(uid => !attack.AttackerHeroIds.Contains(uid))) throw new NativeRejectionException("撤离不能夹带本场以外的角色。");
++                if (manifest.Animals.Count != 0 || manifest.Heroes.Any(uid => !actorHeroes.Contains(uid) || Context.OwnerOfEntity(uid) != actor)) throw new NativeRejectionException("撤离只能运输本场本人雇员，不能搬走其他玩家的人。");
+                 var materials = new Dictionary<long, int>();
+                 double weight = 0;
+                 foreach (CargoLine item in manifest.Items)
+@@ -183,32 +210,34 @@
+                     long sourceUid = item.Uid;
+                     if (loan != null)
+                     {
+-                        if (loan.AttackId != attack.AttackId || loan.Count < item.Count || !attack.AttackerHeroIds.Contains(loan.HeroUid)) throw new NativeRejectionException("战利品预占记录不属于本场或数量不足。");
+-                        FWHeroBean carrier = Players[attack.AttackerPlayerId].heros.Single(h => h.getUID() == loan.HeroUid && h.isInMap(attack.MapId));
++                        if (loan.AttackId != attack.AttackId || loan.Count < item.Count || !actorHeroes.Contains(loan.HeroUid)) throw new NativeRejectionException("战利品预占记录不属于本场本人或数量不足。");
++                        FWHeroBean carrier = Players[actor].heros.Single(h => h.getUID() == loan.HeroUid && h.isInMap(attack.MapId));
+                         if (carrier.isDead() || !carrier.carry_Daily.Concat(carrier.carry_Task).Any(t => t.getUID() == loan.CarryUid && t.getSum() >= item.Count)) throw new NativeRejectionException("战利品携带者已死亡或预占物品不再随身。");
+                         sourceUid = loan.SourceUid;
+                     }
+                     int quantity; materials.TryGetValue(sourceUid, out quantity); materials[sourceUid] = checked(quantity + item.Count);
+                 }
+-                if (materials.Count != 0 && !AreDefendersDefeated(attack)) throw new NativeRejectionException("守军尚未失去作战能力，当前只能空仓撤离。");
+                 foreach (var item in materials)
+                 {
+                     FWThingBean source = Maps[attack.MapId].starSpread.things.SingleOrDefault(t => t.getUID() == item.Key);
+                     if (source == null || source.getSum() < item.Value) throw new NativeRejectionException("预占战利品来源已变化或不足。");
++                    string protectedOwner = ProtectedGroundItemOwner(attack.MapId, source);
++                    if (protectedOwner != null && protectedOwner != actor && !Context.CanLootGroundOwner(actor, protectedOwner, attack.MapId))
++                        throw new NativeRejectionException("守军、增援或友好合作条件已变化，受保护物品不能运输。");
+                     FWThingBean portion = NativeWire.Unpack<FWThingBean>(NativeWire.Pack(source)); portion.setSum(item.Value); weight += portion.getWeight();
+                 }
+                 foreach (long uid in manifest.Heroes)
+-                    if (!Players[attack.AttackerPlayerId].heros.Any(h => h.getUID() == uid && h.isInMap(attack.MapId) && !h.isDead() && !h.prisoner)) throw new NativeRejectionException("撤离雇员已不在本场地块或不可运输。");
++                    if (!Players[actor].heros.Any(h => h.getUID() == uid && h.isInMap(attack.MapId) && !h.isDead() && !h.prisoner)) throw new NativeRejectionException("撤离雇员已不在本场地块或不可运输。");
+                 if (weight > attack.Capacity) throw new NativeRejectionException("战利品超过开战锁定的单个原版空投仓容量。");
+                 manifest.Items = materials.Select(p => new CargoLine { Uid = p.Key, Count = p.Value }).ToList();
+                 evacuation.CapacityUsed = weight;
+                 if (materials.Count == 0 && manifest.Heroes.Count == 0) return;
+-                var transfer = new TransferRecord { TransferId = evacuation.TransferId, PlayerId = attack.AttackerPlayerId,
+-                    Request = new TransferRequest { SourceMapId = attack.MapId, DestinationFleetId = attack.SourceFleetId,
++                var transfer = new TransferRecord { TransferId = evacuation.TransferId, PlayerId = actor,
++                    Request = new TransferRequest { SourceMapId = attack.MapId, DestinationFleetId = destinationFleet,
+                         HeroIds = manifest.Heroes.ToList(), NativeManifestJson = NativeWire.Json(manifest) } };
+                 var borrowed = LootReservations.Where(r => r.AttackId == attack.AttackId).Select(r =>
+                 {
+-                    FWHeroBean hero = Players[attack.AttackerPlayerId].heros.Single(h => h.getUID() == r.HeroUid);
++                    FWHeroBean hero = Players[Context.OwnerOfEntity(r.HeroUid)].heros.Single(h => h.getUID() == r.HeroUid);
+                     FWThingBean copy = (r.CarryType == FWRoleBean.carryType.type_Daily ? hero.carry_Daily : hero.carry_Task).Single(t => t.getUID() == r.CarryUid);
+                     return Tuple.Create(NativeWire.Parse<LootReservation>(NativeWire.Json(r)), NativeWire.Pack(copy));
+                 }).ToList();
+@@ -217,7 +246,7 @@
+                 {
+                     // The carrier gets real source stock once. Loan copies never enter the outbound
+                     // expedition or the saved fleet inventory, including copies held by unselected roles.
+-                    foreach (long hero in attack.AttackerHeroIds) ReleaseAllLoot(hero);
++                    foreach (long hero in borrowed.Select(r => r.Item1.HeroUid).Distinct()) ReleaseAllLoot(hero);
+                     FWExpedition expedition = BuildNativeExpedition(transfer);
+                     state.EvacuationExpeditionId = expedition.getUID(); attack.NativeBattleState = NativeWire.Json(state);
+                     evacuation.Transfer = transfer;
+@@ -229,7 +258,7 @@
+                     foreach (var backup in borrowed)
+                     {
+                         LootReservation loan = backup.Item1;
+-                        FWHeroBean hero = Players[attack.AttackerPlayerId].heros.Single(h => h.getUID() == loan.HeroUid);
++                        FWHeroBean hero = Players[Context.OwnerOfEntity(loan.HeroUid)].heros.Single(h => h.getUID() == loan.HeroUid);
+                         List<FWThingBean> bag = loan.CarryType == FWRoleBean.carryType.type_Daily ? hero.carry_Daily : hero.carry_Task;
+                         if (bag.Any(t => t.getUID() == loan.CarryUid) || LootReservations.Any(r => r.CarryUid == loan.CarryUid))
+                             throw new InvalidOperationException("Cannot restore a rejected evacuation over a duplicate loan.");
+@@ -251,12 +280,14 @@
+                     Attacks.Remove(attack.AttackId);
+                     return;
+                 }
+-                using (EnterPlayer(attack.AttackerPlayerId))
+-                {
+-                    foreach (long uid in attack.AttackerHeroIds)
++                foreach (string participant in attack.ParticipantPlayerIds.Concat(new[] { attack.AttackerPlayerId }).Distinct())
++                using (EnterPlayer(participant))
++                {
++                    foreach (long uid in GroundRaidHeroes(attack, participant))
+                     {
+                         ReleaseAllLoot(uid);
+-                        FWHeroBean hero = PlayerHeroes(attack.AttackerPlayerId).Single(h => h.getUID() == uid);
++                        FWHeroBean hero = PlayerHeroes(participant).SingleOrDefault(h => h.getUID() == uid);
++                        if (hero == null) throw new InvalidOperationException("本场参与雇员记录丢失：" + uid);
+                         if (hero.isDead()) continue;
+                         if (hero.isInMap(attack.MapId))
+                         {
+@@ -270,8 +301,10 @@
+                                 hero.carry_Daily.Clear();
+                             }
+                             if (projection != null) MapManager.instance.heroManager.removeRole(hero);
+-                            hero.starMapId = -1; hero.fleetUid = attack.SourceFleetId;
+-                            OwnedFleets(attack.AttackerPlayerId).Single(f => f.getUID() == attack.SourceFleetId).AddHero(hero);
++                            hero.starMapId = -1; hero.fleetUid = GroundRaidFleet(attack, participant);
++                            FWFleet returnFleet = TransferFleet(participant, hero.fleetUid);
++                            if (!returnFleet.getHeros().Any(h => h.getUID() == uid)) returnFleet.AddHero(hero);
++                            Players[participant].heros.Remove(hero);
+                         }
+                     }
+                 }
+@@ -282,15 +315,18 @@
+         }
+         public bool AreDefendersDefeated(AttackRecord attack)
+         {
+-            return attack.ProtectedDefenderHeroIds.All(uid =>
+-            {
+-                FWHeroBean hero = Players.Values.SelectMany(p => p.heros).FirstOrDefault(h => h.getUID() == uid);
+-                return hero != null && (hero.isFallDown() || GameHooks.IsKnockedOut(uid));
+-            });
++            List<string> activeOwners = ActiveGroundPlayerIds(attack.MapId);
++            if (activeOwners == null) return false;
++            if (attack.DefenderPlayerId != null) return !activeOwners.Contains(attack.DefenderPlayerId);
++            for (int i = 0; i < activeOwners.Count; i++)
++                for (int j = i + 1; j < activeOwners.Count; j++)
++                    if (!Context.IsFriendlyToward(activeOwners[i], activeOwners[j]) || !Context.IsFriendlyToward(activeOwners[j], activeOwners[i])) return false;
++            return true;
+         }
+         public bool IsMapReady(long mapId) { return IsNativeMapReady(mapId); }
+         public bool IsRaidReady(AttackRecord attack)
+         {
++            if (attack.AlreadyOnGround) return ActiveGroundPlayerIds(attack.MapId) != null;
+             if (attack.LandingExpeditionId <= 0) throw new InvalidOperationException("袭击缺少持久化原生落仓记录。");
+             NativeLanding landing;
+             if (!NativeLandings.TryGetValue(attack.LandingExpeditionId, out landing)) throw new InvalidOperationException("袭击落仓记录未随战场检查点恢复。");
+--- a/src/Game/NativeRaidLoot.cs
++++ b/src/Game/NativeRaidLoot.cs
+@@ -21,13 +21,14 @@
+         internal bool HandlePickup(BaseRole role, FWRoleBean roleBean, FWThingBean item, int count, FWRoleBean.carryType carryType, callbackInt callback)
+         {
+             string actor = Context.OwnerOfEntity(roleBean.getUID());
+-            string owner = Context.OwnerOfMap(CurrentMapId);
++            string owner = ProtectedGroundItemOwner(CurrentMapId, item);
+             if (string.IsNullOrEmpty(actor)) return true; // Native NPC inventory remains native.
+-            if (!IsSimulator || !Context.IsAttackAllowed(CurrentMapId)) { callback?.Invoke(Callback.FAILED); return false; }
+-            if (string.IsNullOrEmpty(owner) || actor == owner || Context.GetRelation(actor, owner) == Relation.Friendly) return true;
++            if (!IsSimulator) { callback?.Invoke(Callback.FAILED); return false; }
++            if (string.IsNullOrEmpty(owner) || actor == owner) return true;
++            if (!EnsureGroundRaid(actor, CurrentMapId, roleBean.getUID())) { callback?.Invoke(Callback.FAILED); return false; }
+             AttackRecord attack = Context.GetAttack(CurrentMapId);
+-            if (attack == null || attack.AttackerPlayerId != actor || !Context.HasPermission(actor, CurrentMapId, item.getUID(), Permission.Loot)
+-                || !AreDefendersDefeated(attack) || count < 1)
++            if (attack == null || !IsGroundRaidParticipant(attack, actor) || !GroundRaidHeroes(attack, actor).Contains(roleBean.getUID())
++                || !Context.CanLootGroundOwner(actor, owner, CurrentMapId) || count < 1)
+             { callback?.Invoke(Callback.FAILED); return false; }
+             int reserved = LootReservations.Where(r => r.AttackId == attack.AttackId && r.SourceUid == item.getUID()).Sum(r => r.Count);
+             if (item.getSum() - reserved < count) { callback?.Invoke(Callback.FAILED); return false; }
+@@ -81,7 +82,7 @@
+             foreach (LootReservation reservation in reservations)
+             {
+                 FWHeroBean hero = heroOf(reservation.HeroUid);
+-                if (reservation.AttackId != attack.AttackId || !attack.AttackerHeroIds.Contains(reservation.HeroUid)
++                if (reservation.AttackId != attack.AttackId || !GroundRaidHeroes(attack, Context.OwnerOfEntity(reservation.HeroUid)).Contains(reservation.HeroUid)
+                     || hero == null || hero.isDead() || !hero.isInMap(mapId) || reservation.SourceUid == reservation.CarryUid)
+                     throw new InvalidOperationException("Loot reservation party/source identity mismatch.");
+                 List<FWThingBean> bag;
+--- a/src/Game/NativeTransfers.cs
++++ b/src/Game/NativeTransfers.cs
+@@ -116,8 +116,6 @@
+                     throw new InvalidOperationException("运输清单重复选择同一实体。");
+                 if (request.HeroIds == null || !request.HeroIds.OrderBy(x => x).SequenceEqual(manifest.Heroes.OrderBy(x => x))) throw new InvalidOperationException("运输雇员名单与原单不一致。");
+                 ValidateGiftCarrier(transfer, manifest);
+-                string sourceOwner = request.SourceMapId >= 0 ? Context.OwnerOfMap(request.SourceMapId) : transfer.PlayerId;
+-                if (!CommittingRaidTransfer && sourceOwner != transfer.PlayerId && manifest.Items.Count != 0) throw new InvalidOperationException("不能直接运输他人地块库存。");
+                 FWGameData owner = Players[transfer.PlayerId];
+                 FWFleet sourceFleet = request.SourceFleetId >= 0 ? TransferFleet(transfer.PlayerId, request.SourceFleetId) : null;
+                 IList<FWThingBean> source = SourceItems(request, transfer.PlayerId, false);
+@@ -126,6 +124,17 @@
+                 {
+                     FWThingBean bean = source.SingleOrDefault(t => t.getUID() == line.Uid);
+                     if (bean == null || line.Count <= 0 || bean.getSum() < line.Count) throw new InvalidOperationException("运输来源库存不足：" + line.Uid);
++                    if (request.SourceMapId >= 0)
++                    {
++                        string protectedOwner = ProtectedGroundItemOwner(request.SourceMapId, bean);
++                        if (protectedOwner != null && protectedOwner != transfer.PlayerId)
++                        {
++                            if (!CommittingRaidTransfer || !Context.CanLootGroundOwner(transfer.PlayerId, protectedOwner, request.SourceMapId))
++                                throw new InvalidOperationException("受保护物品须满足当前搜刮条件，并使用本场唯一撤离。");
++                        }
++                        if (!CommittingRaidTransfer && ReservedSourceCount(line.Uid) > bean.getSum() - line.Count)
++                            throw new InvalidOperationException("物品已被本场搜刮预占，不能重复运输。");
++                    }
+                     FWThingBean portion = NativeWire.Unpack<FWThingBean>(NativeWire.Pack(bean)); portion.setSum(line.Count);
+                     portions.Add(Tuple.Create(bean, line.Count, portion));
+                 }
+@@ -134,6 +143,7 @@
+                 {
+                     FWHeroBean hero = sourceFleet != null ? sourceFleet.getHeros().SingleOrDefault(h => h.getUID() == uid) : owner.heros.SingleOrDefault(h => h.getUID() == uid && h.isInMap(request.SourceMapId));
+                     if (hero == null || Context.OwnerOfEntity(uid) != transfer.PlayerId || hero.isDead() || hero.prisoner) throw new InvalidOperationException("运输雇员不在真实始发地或不可出征：" + uid);
++                    if (!CommittingRaidTransfer && LootReservations.Any(r => r.HeroUid == uid)) throw new InvalidOperationException("携带本场战利品的雇员须使用本场唯一搜刮撤离。");
+                     heroes.Add(hero);
+                 }
+                 var animals = new List<FWAnimalBean>();
+@@ -175,7 +185,7 @@
+                         var inventories = new List<IList<FWThingBean>>();
+                         if (sourceFleet != null) inventories.Add(sourceFleet.getThings());
+                         if (request.DestinationFleetId >= 0) inventories.Add(TransferFleet(transfer.PlayerId, request.DestinationFleetId).getThings());
+-                        if (request.SourceMapId >= 0 && sourceOwner == transfer.PlayerId) inventories.Add(source);
++                        if (request.SourceMapId >= 0 && Context.OwnerOfMap(request.SourceMapId) == transfer.PlayerId) inventories.Add(source);
+                         if (request.DestinationMapId >= 0 && Context.OwnerOfMap(request.DestinationMapId) == transfer.PlayerId) inventories.Add(Maps[request.DestinationMapId].starSpread.things);
+                         foreach (IList<FWThingBean> inventory in inventories)
+                         {
+@@ -303,10 +313,22 @@
+                 DestinationMapId = (end.goalType == (int)FWGoalPos.GoalType._STAR_MAP_INFO) ? end.getGoalUid() : -1,
+                 DestinationFleetId = (end.goalType == (int)FWGoalPos.GoalType._FLEET) ? end.getGoalUid() : -1,
+                 HeroIds = manifest.Heroes.ToList(), NativeManifestJson = NativeWire.Json(manifest) };
+-            ApplyVisitAuthorization(request, manifest);
++            bool foreignStock = request.SourceMapId >= 0 && (things ?? new List<FWThingBean>()).Any(item =>
++            {
++                string protectedOwner = ProtectedGroundItemOwner(request.SourceMapId, item);
++                return protectedOwner != null && protectedOwner != Context.LocalPlayerId;
++            });
++            if (foreignStock && !EnsureGroundRaid(Context.LocalPlayerId, request.SourceMapId))
++            { FairyUIDispatcher.showToast("本场搜刮尚未完成登记或条件不满足，请稍后重新确认运输。"); return null; }
++            if (foreignStock && manifest.Heroes.Any(uid => !EnsureGroundRaid(Context.LocalPlayerId, request.SourceMapId, uid)))
++            { FairyUIDispatcher.showToast("选中雇员的本场入场记录尚未完成，请稍后重新确认运输。"); return null; }
+             AttackRecord attack = request.SourceMapId >= 0 ? Context.GetAttack(request.SourceMapId) : null;
+-            bool evacuating = attack != null && attack.AttackerPlayerId == Context.LocalPlayerId && attack.Stage != AttackStage.Finished;
+-            if (evacuating && (request.DestinationMapId >= 0 || request.DestinationFleetId != attack.SourceFleetId))
++            bool carryingLoot = attack != null && LootReservations.Any(r => r.AttackId == attack.AttackId
++                && (manifest.Heroes.Contains(r.HeroUid) || manifest.Items.Any(i => i.Uid == r.CarryUid)));
++            bool evacuating = attack != null && IsGroundRaidParticipant(attack, Context.LocalPlayerId) && attack.Stage != AttackStage.Finished
++                && (foreignStock || carryingLoot || manifest.Items.Count == 0 && manifest.Heroes.Count == 0 && manifest.Animals.Count == 0);
++            if (!evacuating) ApplyVisitAuthorization(request, manifest);
++            if (evacuating && (request.DestinationMapId >= 0 || request.DestinationFleetId != GroundRaidFleet(attack, Context.LocalPlayerId)))
+             { FairyUIDispatcher.showToast("本场撤离须返回出征时登记的舰队。"); return null; }
+             if (evacuating && manifest.VehicleId != NativeWire.Parse<Manifest>(attack.NativeTransportJson).VehicleId)
+             { FairyUIDispatcher.showToast("本场撤离须沿用出征时登记的空投仓。"); return null; }
+@@ -329,6 +351,7 @@
+             // The ordinary native transport confirmation is also the unique raid evacuation
+             // confirmation. No second MOD button or second independently built manifest exists.
+             object payload = evacuating ? (object)new RaidEvacuation { AttackId = attack.AttackId, TransferId = id,
++                PlayerId = Context.LocalPlayerId, DestinationFleetId = request.DestinationFleetId,
+                 NativeManifestJson = request.NativeManifestJson,
+                 CapacityUsed = evacuationWeight } : request;
+             pending = new NativeTransportSubmission { Completed = completed, Command = new GameCommand { CommandId = id,
+--- a/src/Session/Authority.cs
++++ b/src/Session/Authority.cs
+@@ -101,11 +101,11 @@
+                 string targetOwner = entityOwner;
+                 return targetOwner != playerId && (targetOwner == null || GetRelation(playerId, targetOwner) != Relation.Friendly);
+             }
+-            MapRecord map;
+             if (permission == Permission.Loot)
+             {
+-                AttackRecord attack;
+-                return World.Maps.TryGetValue(mapId, out map) && map.ActiveAttackId != null && World.Attacks.TryGetValue(map.ActiveAttackId, out attack) && attack.Stage == AttackStage.Active && attack.AttackerPlayerId == playerId && attack.DefendersDefeated && !attack.EvacuationUsed && attack.ElapsedSeconds < 600 && !Paused;
++                AttackRecord attack = ActiveGroundAttack(mapId);
++                return attack != null && IsRaidParticipant(attack, playerId)
++                    && CanLootGroundOwner(playerId, mapOwner ?? entityOwner, mapId);
+             }
+             if (permission == Permission.Transfer) return entityOwner == playerId; // Personal heroes/carry gifts only; never direct foreign stock-to-ship.
+             // Plans and buildings belong to their creator, including on unclaimed ground.
+@@ -116,10 +116,12 @@
+                 // No existing target means issuing a new personal plan. Native creation records
+                 // the issuing player before workers can acquire that plan.
+                 if (entityId < 0) return true;
+-                return interactionOwner == null || interactionOwner == playerId || GetRelation(playerId, interactionOwner) == Relation.Friendly;
+-            }
+-            return permission == Permission.TakeInventory && (interactionOwner == null || interactionOwner == playerId
+-                || interactionOwner != null && GetRelation(playerId, interactionOwner) == Relation.Friendly);
++                return interactionOwner == null || interactionOwner == playerId;
++            }
++            // Neutral loose inventory is public unless the native storage-zone lookup protects
++            // it. Historical entity ownership alone is not a neutral storage boundary.
++            return permission == Permission.TakeInventory && (mapOwner == null || mapOwner == playerId
++                || CanLootGroundOwner(playerId, mapOwner, mapId));
+         }
+         public bool CanSimulateMap(long mapId)
+         {
+--- a/src/Session/BaseRules.cs
++++ b/src/Session/BaseRules.cs
+@@ -33,7 +33,13 @@
+             else if (target.OwnerPlayerId != null) status.Reason = target.OwnerPlayerId == playerId ? "该地块已经是你的营地。" : "该地块已由其他玩家占领。";
+             else if (target.ActiveAttackId != null) status.Reason = "战场不能创建营地。";
+             else if (status.OwnedCount >= status.Limit) status.Reason = "营地/基地已达到房间上限 " + status.Limit + " 处（不含母舰）。";
+-            else { status.Allowed = true; status.WillBecomeFormalBase = player.FormalBaseMapId < 0 && status.OwnedCount == 0; }
++            else
++            {
++                var present = bridge.ActiveGroundPlayerIds(mapId);
++                if (present == null) status.Reason = "地块雇员状态正在同步，请同步完成后再创建基地。";
++                else if (present.Any(id => id != playerId)) status.Reason = "地块内还有其他玩家可活动的雇员，不能建立基地（包括友好玩家）。";
++                else { status.Allowed = true; status.WillBecomeFormalBase = player.FormalBaseMapId < 0; }
++            }
+             return status;
+         }
+ 
+@@ -51,7 +57,8 @@
+             map.OwnerPlayerId = actor.PlayerId;
+             // Only the trusted adapter's build/plan identities can change with a land claim.
+             // Employee and animal identities are never part of this ownership transfer.
+-            foreach (long id in propertyIds) World.EntityOwners[id] = actor.PlayerId;
++            foreach (long id in propertyIds)
++                if (!World.EntityOwners.ContainsKey(id)) World.EntityOwners[id] = actor.PlayerId;
+             if (status.WillBecomeFormalBase) actor.FormalBaseMapId = map.MapId;
+             map.LastSimulatedWorldMM = World.WorldTimeMM;
+             BroadcastPolicy();
+@@ -62,14 +69,19 @@
+         private CommandResult AbandonPlayerBase(GameCommand command, PlayerRecord actor)
+         {
+             MapRecord map = EnsureMap(command.MapId);
+-            if (map.OwnerPlayerId != actor.PlayerId || map.MapId == actor.MotherShipMapId || map.MapId == actor.FormalBaseMapId)
+-                throw new InvalidOperationException("只能通过原版入口废弃自己的普通分营地，不能废弃母舰或正式基地。");
++            if (map.OwnerPlayerId != actor.PlayerId || map.MapId == actor.MotherShipMapId)
++                throw new InvalidOperationException("只能将自己的地表基地转为中立地块，不能废弃母舰。");
+             if (map.ActiveAttackId != null) throw new InvalidOperationException("战斗中的营地不能废弃。");
++            if (map.Mode == MapMode.Offline) SettleOffline(map);
+             var propertyIds = bridge.GetMapPropertyEntityIds(map.MapId);
+-            if (propertyIds == null || propertyIds.Any(id => id < 0)) throw new InvalidOperationException("营地地块资产身份不完整，未废弃基地。");
+-            ApplyCriticalNative(() => bridge.AbandonBase(map.MapId, actor.PlayerId), "沿原版规则废弃普通营地并释放名额");
++            if (propertyIds == null || propertyIds.Any(id => id < 0)) throw new InvalidOperationException("地块区域及任务身份尚未完整同步，不能转换为中立。");
++            // Older saves relied on the base owner as a fallback author. Materialize that
++            // author before removing land ownership, without changing somebody else's author.
++            foreach (long id in propertyIds)
++                if (!World.EntityOwners.ContainsKey(id)) World.EntityOwners[id] = actor.PlayerId;
++            ApplyCriticalNative(() => bridge.AbandonBase(map.MapId, actor.PlayerId), "基地转为中立并保留区域作者和地表资产");
+             map.OwnerPlayerId = null;
+-            foreach (long id in propertyIds) World.EntityOwners.Remove(id);
++            if (actor.FormalBaseMapId == map.MapId) actor.FormalBaseMapId = -1;
+             map.LastSimulatedWorldMM = World.WorldTimeMM;
+             BroadcastPolicy();
+             RebaseMap(map.MapId);
+--- a/src/Session/RaidRules.cs
++++ b/src/Session/RaidRules.cs
+@@ -22,7 +22,7 @@
+         {
+             MapRecord map; PlayerRecord defender;
+             if (!NeedsOfflineRaid(transfer, out map, out defender)) return null;
+-            if (map.ActiveAttackId != null) throw new NativeRejectionException("目标地块已有实际战斗，原运输单可等待或取消返航。");
++            if (map.ActiveAttackId != null) return null; // Reinforcements join the one existing map battle on arrival.
+             if (map.RaidCooldownSeconds > 0) throw new NativeRejectionException("目标地块仍在所有进攻方共用的袭击冷却中，原运输单可等待或取消返航。");
+             PlayerRecord actor = World.Players[transfer.PlayerId];
+             var request = new RaidRequest { MapId = map.MapId, SourceMapId = transfer.Request.SourceMapId,
+@@ -33,13 +33,16 @@
+             BridgeResult inspected = bridge.InspectRaid(request, transfer.PlayerId, out data);
+             if (inspected == null || !inspected.Success) throw new NativeRejectionException("核对原版出征载体失败：" + (inspected == null ? "未返回预检结果。" : inspected.Error));
+             if (data == null || data.Capacity <= 0 || double.IsNaN(data.Capacity) || double.IsInfinity(data.Capacity)) throw new InvalidOperationException("实际出征空投仓容量无效。");
+-            return new AttackRecord { AttackId = Guid.NewGuid().ToString("N"), MapId = map.MapId,
++            var attack = new AttackRecord { AttackId = Guid.NewGuid().ToString("N"), MapId = map.MapId,
+                 AttackerPlayerId = actor.PlayerId, DefenderPlayerId = defender.PlayerId,
+                 LandingTransferId = transfer.TransferId, LandingExpeditionId = existingCarrier ? transfer.NativeExpeditionId : -1,
+                 SourceMapId = request.SourceMapId, SourceFleetId = request.SourceFleetId,
+                 RegisteredMapRevision = map.Revision, DropPodId = checked(++World.UidHighWater),
+                 NativeTransportJson = request.NativeTransportJson, Capacity = data.Capacity, Stage = AttackStage.InTransit,
++                DurationSeconds = World.Options.RaidDurationMinutes * 60.0, CooldownSeconds = World.Options.RaidCooldownMinutes * 60.0,
+                 AttackerHeroIds = request.AttackerHeroIds, ProtectedDefenderHeroIds = new List<long>() };
++            RegisterRaidParticipant(attack, actor.PlayerId, request);
++            return attack;
+         }
+         private AttackRecord TransferAttack(TransferRecord transfer)
+         {
+@@ -49,6 +52,10 @@
+         private void ClearUnlandedRaid(TransferRecord transfer)
+         {
+             AttackRecord attack = TransferAttack(transfer);
++            // A reinforcement transfer owns only its own passengers. Cancelling it must not
++            // terminate the shared battle that was opened by somebody else's landing.
++            if (attack != null && attack.LandingTransferId != transfer.TransferId)
++            { transfer.AttackId = null; return; }
+             if (attack != null && attack.Stage != AttackStage.Finished)
+             {
+                 if (attack.Stage != AttackStage.InTransit) throw new InvalidOperationException("本场已进入实际落地流程，不能按未落地候选取消。");
+@@ -65,6 +72,30 @@
+                 MapRecord battle = EnsureMap(attack.MapId);
+                 if (battle.ActiveAttackId != attack.AttackId) throw new InvalidOperationException("运输关联的已落地战场不匹配，禁止覆盖其他战斗。");
+                 return null;
++            }
++            if (!transfer.Returning && transfer.Request.DestinationMapId >= 0 && transfer.Request.HeroIds.Count != 0)
++            {
++                MapRecord destination = EnsureMap(transfer.Request.DestinationMapId);
++                AttackRecord shared = ActiveGroundAttack(destination.MapId);
++                if (shared != null && shared.AttackId != (attack == null ? null : attack.AttackId)
++                    && destination.OwnerPlayerId != transfer.PlayerId)
++                {
++                    if (shared.Blocked || shared.EvacuationUsed || shared.ElapsedSeconds >= RaidDuration(shared))
++                        return WaitForTransfer(transfer, "当前地块战斗正在结清，原运输单等待后继续落仓。");
++                    var joining = new RaidRequest { PlayerId = transfer.PlayerId, MapId = destination.MapId,
++                        SourceMapId = transfer.Request.SourceMapId,
++                        SourceFleetId = transfer.Request.SourceFleetId >= 0 ? transfer.Request.SourceFleetId : World.Players[transfer.PlayerId].FleetId,
++                        ExistingExpeditionId = transfer.NativeExpeditionId, NativeTransportJson = transfer.Request.NativeManifestJson,
++                        AttackerHeroIds = transfer.Request.HeroIds.ToList() };
++                    RaidStartData ignored;
++                    BridgeResult inspected = bridge.InspectRaid(joining, transfer.PlayerId, out ignored);
++                    if (inspected == null || !inspected.Success) return WaitForTransfer(transfer, inspected == null ? "增援载体状态尚未同步。" : inspected.Error);
++                    ClearUnlandedRaid(transfer);
++                    RegisterRaidParticipant(shared, transfer.PlayerId, joining);
++                    transfer.AttackId = shared.AttackId;
++                    transfer.Error = null; raidArrivalRetryAt.Remove(transfer.TransferId);
++                    return null;
++                }
+             }
+             MapRecord map; PlayerRecord defender;
+             if (!NeedsOfflineRaid(transfer, out map, out defender))
+--- a/src/Session/Commands.cs
++++ b/src/Session/Commands.cs
+@@ -291,18 +291,11 @@
+             }
+             PlayerRecord player = World.Players[command.PlayerId];
+             MapRecord sourceMap;
+-            AttackRecord sourceAttack;
+-            if (World.Maps.TryGetValue(request.SourceMapId, out sourceMap) && sourceMap.ActiveAttackId != null
+-                && World.Attacks.TryGetValue(sourceMap.ActiveAttackId, out sourceAttack) && sourceAttack.AttackerPlayerId == player.PlayerId
+-                && IsBattleStage(sourceAttack)) throw new InvalidOperationException("本场进攻须使用原版运输确认中的唯一撤离，不能另开普通运输绕过撤离次数或容量。");
++            World.Maps.TryGetValue(request.SourceMapId, out sourceMap);
+             foreach (long heroId in request.HeroIds) if (OwnerOfEntity(heroId) != command.PlayerId) throw new InvalidOperationException("不能带走别人的雇员。");
+-            if (request.SourceMapId >= 0 && OwnerOfMap(request.SourceMapId) != command.PlayerId && request.HeroIds.Count == 0) throw new InvalidOperationException("不能直接将他人库存装船运输。");
+-            if (request.SourceMapId >= 0 && OwnerOfMap(request.SourceMapId) != command.PlayerId)
+-            {
+-                Newtonsoft.Json.Linq.JObject manifest = Newtonsoft.Json.Linq.JObject.Parse(request.NativeManifestJson ?? "{}");
+-                foreach (var property in manifest.Properties())
+-                    if (string.Equals(property.Name, "Items", StringComparison.OrdinalIgnoreCase) && property.Value.HasValues) throw new InvalidOperationException("异地撤离只允许自己的雇员及其实际随身物品，不能混入基地库存清单。");
+-            }
++            // Native departure validates every real item against its storage boundary. Owner=null
++            // is a public surface, not a foreign-base denial. Protected cargo can only depart
++            // inside EvacuateRaid's single authoritative transaction, never this ordinary path.
+             // A host-local source has already flushed at the critical command boundary.
+             // Keep its complete pre-debit baseline so departure can use the normal map delta.
+             if (sourceMap != null && (sourceMap.SimulatorPlayerId == null || sourceMap.SimulatorPlayerId == LocalPlayerId))
+@@ -375,14 +368,64 @@
+         }
+         private CommandResult StartAttack(GameCommand command)
+         {
+-            if (PlayerHasFleetBattle(command.PlayerId)) throw new InvalidOperationException("舰战尚未结束，不能发起新的地表袭击。");
+-            throw new InvalidOperationException("请通过原版远征向敌对离线地块派遣雇员；袭击绑定该运输原单，并在实际落仓后开始计时。");
++            RaidRequest request = JsonData.Read<RaidRequest>(command.PayloadJson ?? "{}");
++            if (request == null || !request.AlreadyOnGround || request.AttackerHeroIds == null)
++                throw new InvalidOperationException("地表袭击必须来自真实在场雇员及原版返航载具。");
++            MapRecord map = EnsureMap(command.MapId);
++            string actorId = string.IsNullOrEmpty(request.PlayerId) ? command.PlayerId : request.PlayerId;
++            PlayerRecord actor;
++            if (!World.Players.TryGetValue(actorId, out actor)) throw new InvalidOperationException("实际参战玩家不存在。");
++            if (actorId != command.PlayerId && (map.SimulatorPlayerId != command.PlayerId || map.AuthorityEpoch != command.AuthorityEpoch))
++                throw new InvalidOperationException("只有当前地块模拟者可为真实在场雇员登记战斗。");
++            if (Paused || map.AwaitingAuthorityReady || map.SimulatorPlayerId == null) throw new InvalidOperationException("地块暂停或仍在同步，不能登记战斗。");
++            if (PlayerHasFleetBattle(actorId)) throw new InvalidOperationException("舰战尚未结束，不能发起新的地表袭击。");
++            if (World.Players.Values.Any(p => p.MotherShipMapId == map.MapId)) throw new InvalidOperationException("母舰不属于地表搜刮战场。");
++            if (map.OwnerPlayerId == actorId) throw new InvalidOperationException("基地拥有者不需要登记搜刮自己的基地。");
++            request.MapId = map.MapId;
++            TransferRecord originalCarrier = RestoreGroundRaidCarrier(actorId, map.MapId, request);
++            RaidStartData data;
++            BridgeResult inspected = bridge.InspectRaid(request, actorId, out data);
++            if (inspected == null || !inspected.Success) throw new NativeRejectionException(inspected == null ? "真实在场载具核验未返回结果。" : inspected.Error);
++            if (data == null || data.Capacity <= 0 || double.IsNaN(data.Capacity) || double.IsInfinity(data.Capacity))
++                throw new InvalidOperationException("实际原版空投仓容量无效。");
++            AttackRecord attack = ActiveGroundAttack(map.MapId);
++            if (attack != null)
++            {
++                if (attack.Blocked || attack.EvacuationUsed || attack.ElapsedSeconds >= RaidDuration(attack))
++                    throw new InvalidOperationException("本场战斗已结束或不能继续加入。");
++                RegisterRaidParticipant(attack, actorId, request);
++                BroadcastPolicy();
++                return CommandResult.Ok(command.CommandId, JsonData.Write(attack));
++            }
++            if (map.ActiveAttackId != null) throw new InvalidOperationException("地块有未结清战斗，不能重新登记。");
++            if (map.RaidCooldownSeconds > 0) throw new InvalidOperationException("地块仍在所有玩家共用的搜刮冷却中。");
++            if (bridge.ActiveGroundPlayerIds(map.MapId) == null) throw new InvalidOperationException("地块雇员状态正在同步，不能按无人驻守开启搜刮。");
++            if (map.Mode == MapMode.Offline) SettleOffline(map);
++            attack = new AttackRecord { AttackId = Guid.NewGuid().ToString("N"), MapId = map.MapId,
++                AttackerPlayerId = actorId, DefenderPlayerId = map.OwnerPlayerId, AlreadyOnGround = true,
++                SourceMapId = request.SourceMapId, SourceFleetId = request.SourceFleetId,
++                RegisteredMapRevision = map.Revision, DropPodId = checked(++World.UidHighWater),
++                NativeTransportJson = request.NativeTransportJson, LandingExpeditionId = originalCarrier.NativeExpeditionId,
++                LandingTransferId = originalCarrier.TransferId,
++                Capacity = data.Capacity, Stage = AttackStage.Loading,
++                DurationSeconds = World.Options.RaidDurationMinutes * 60.0, CooldownSeconds = World.Options.RaidCooldownMinutes * 60.0,
++                AttackerHeroIds = request.AttackerHeroIds.Distinct().ToList(),
++                ProtectedDefenderHeroIds = (data.ProtectedDefenderHeroIds ?? new List<long>())
++                    .Where(uid => OwnerOfEntity(uid) != null && !IsPlayerOnline(OwnerOfEntity(uid))).Distinct().ToList() };
++            RegisterRaidParticipant(attack, actorId, request);
++            MapMode previous = map.Mode;
++            World.Attacks.Add(attack.AttackId, attack); map.ActiveAttackId = attack.AttackId; map.Mode = MapMode.Battle;
++            try { ApplyCriticalNative(() => bridge.BeginRaid(attack), "将真实在场雇员登记到唯一地表战斗"); }
++            catch (NativeRejectionException) { World.Attacks.Remove(attack.AttackId); map.ActiveAttackId = null; map.Mode = previous; throw; }
++            if (bridge.IsRaidReady(attack)) attack.Stage = AttackStage.Active;
++            BroadcastPolicy();
++            return CommandResult.Ok(command.CommandId, JsonData.Write(attack));
+         }
+         private CommandResult ReadyAttack(GameCommand command)
+         {
+             string id = JsonData.Read<AttackReference>(command.PayloadJson).AttackId;
+             AttackRecord attack;
+-            if (!World.Attacks.TryGetValue(id, out attack) || attack.AttackerPlayerId != command.PlayerId || !IsBattleStage(attack)) throw new InvalidOperationException("袭击登记尚未实际进入战场或已失效。");
++            if (!World.Attacks.TryGetValue(id, out attack) || !IsRaidParticipant(attack, command.PlayerId) || !IsBattleStage(attack)) throw new InvalidOperationException("袭击登记尚未实际进入战场或已失效。");
+             MapRecord map = World.Maps[attack.MapId];
+             if (map.ActiveAttackId != attack.AttackId || map.AwaitingAuthorityReady || map.SimulatorPlayerId == null) throw new InvalidOperationException("战场尚未完成地图同步。");
+             if (!bridge.IsRaidReady(attack)) throw new InvalidOperationException("原生空投尚未真实落仓完成。");
+@@ -393,9 +436,19 @@
+         {
+             RaidEvacuation request = JsonData.Read<RaidEvacuation>(command.PayloadJson);
+             AttackRecord attack;
+-            if (!World.Attacks.TryGetValue(request.AttackId, out attack) || attack.AttackerPlayerId != command.PlayerId) throw new InvalidOperationException("袭击不属于该进攻玩家。");
+-            if (attack.Stage != AttackStage.Active || attack.EvacuationUsed || attack.ElapsedSeconds >= 600 || Paused) throw new InvalidOperationException("袭击已结束、暂停或唯一撤离已经用过。");
+-            attack.DefendersDefeated = bridge.AreDefendersDefeated(attack);
++            if (request == null || !World.Attacks.TryGetValue(request.AttackId, out attack) || !IsRaidParticipant(attack, command.PlayerId)) throw new InvalidOperationException("玩家没有加入本场地表搜刮。");
++            if (attack.Stage != AttackStage.Active || attack.Blocked || attack.EvacuationUsed || attack.ElapsedSeconds >= RaidDuration(attack) || Paused) throw new InvalidOperationException("袭击已结束、暂停或唯一撤离已经用过。");
++            request.PlayerId = command.PlayerId;
++            if (request.DestinationFleetId < 0)
++            {
++                long sourceFleet;
++                request.DestinationFleetId = attack.ParticipantFleetIds != null && attack.ParticipantFleetIds.TryGetValue(command.PlayerId, out sourceFleet)
++                    ? sourceFleet : World.Players[command.PlayerId].FleetId;
++            }
++            if (OwnerOfEntity(request.DestinationFleetId) != command.PlayerId) throw new InvalidOperationException("搜刮只能运输到执行玩家自己的舰队。");
++            attack.DefendersDefeated = attack.DefenderPlayerId != null
++                ? HasGroundLootQualification(command.PlayerId, attack.DefenderPlayerId, attack.MapId)
++                : bridge.AreDefendersDefeated(attack);
+             // Empty early evacuation is legal. The native adapter checks the actual manifest:
+             // carrying defender-owned loot still requires the defenders to have been defeated.
+             if (request.CapacityUsed < 0 || double.IsNaN(request.CapacityUsed) || double.IsInfinity(request.CapacityUsed) || request.CapacityUsed > attack.Capacity) throw new InvalidOperationException("战利品超过开战锁定的一个空投仓容量。");
+@@ -404,12 +457,13 @@
+             request.Transfer = null; // The client cannot supply the authoritative carrier returned by the bridge.
+             attack.EvacuationUsed = true;
+             attack.EvacuationTransferId = request.TransferId;
++            attack.EvacuatingPlayerId = command.PlayerId;
+             try { ApplyCriticalNative(() => bridge.EvacuateRaid(attack, request), "按唯一原版空投仓确认期限内撤离"); }
+-            catch (NativeRejectionException) { attack.EvacuationUsed = false; attack.EvacuationTransferId = null; throw; }
++            catch (NativeRejectionException) { attack.EvacuationUsed = false; attack.EvacuationTransferId = null; attack.EvacuatingPlayerId = null; throw; }
+             catch (Exception ex) { attack.Blocked = true; attack.Error = ex.Message; throw; }
+             if (request.Transfer != null)
+             {
+-                if (request.Transfer.TransferId != request.TransferId || request.Transfer.PlayerId != attack.AttackerPlayerId
++                if (request.Transfer.TransferId != request.TransferId || request.Transfer.PlayerId != command.PlayerId
+                     || request.Transfer.NativeExpeditionId < 0 || request.Transfer.ArrivalWorldMM < 0)
+                     throw new InvalidOperationException("原生撤离未返回可持久化的唯一返航载体。");
+                 request.Transfer.Stage = TransferStage.InTransit;
+@@ -430,9 +484,9 @@
+             if (activated.Count != 0) { BroadcastPolicy(); PersistTransition("raid:landed:" + string.Join(":", activated)); }
+             foreach (AttackRecord attack in World.Attacks.Values.Where(x => x.Stage == AttackStage.Active && !x.Blocked).ToList())
+             {
+-                if (!activated.Contains(attack.AttackId)) attack.ElapsedSeconds = Math.Min(600, attack.ElapsedSeconds + seconds);
++                if (!activated.Contains(attack.AttackId)) attack.ElapsedSeconds = Math.Min(RaidDuration(attack), attack.ElapsedSeconds + seconds);
+                 attack.DefendersDefeated = bridge.AreDefendersDefeated(attack);
+-                if (attack.ElapsedSeconds >= 600) { FinishAttack(attack, RaidFinishReason.Timeout); PersistTransition("finish:" + attack.AttackId); }
++                if (attack.ElapsedSeconds >= RaidDuration(attack)) { FinishAttack(attack, RaidFinishReason.Timeout); PersistTransition("finish:" + attack.AttackId); }
+             }
+         }
+         private void AdvanceTransfers()
+@@ -476,7 +530,7 @@
+             attack.Stage = AttackStage.Finished; attack.FinishReason = reason;
+             if (!inTransit)
+             {
+-                map.ActiveAttackId = null; map.RaidCooldownSeconds = 3600;
++                map.ActiveAttackId = null; map.RaidCooldownSeconds = Math.Max(0, attack.CooldownSeconds);
+                 RefreshCheckpoint(map); ReassignMap(map);
+             }
+             BroadcastPolicy();
+@@ -484,8 +538,10 @@
+         private static bool IsBattleStage(AttackRecord attack) { return attack.Stage == AttackStage.Loading || attack.Stage == AttackStage.Active; }
+         public bool IsProtectedDefender(long heroId)
+         {
+-            return World != null && World.Attacks.Values.Any(attack => IsBattleStage(attack) && World.Maps.ContainsKey(attack.MapId)
+-                && World.Maps[attack.MapId].ActiveAttackId == attack.AttackId && attack.ProtectedDefenderHeroIds.Contains(heroId));
++            string owner = OwnerOfEntity(heroId);
++            return World != null && (owner != null && World.Players.ContainsKey(owner) && !IsPlayerOnline(owner)
++                || World.Attacks.Values.Any(attack => IsBattleStage(attack) && World.Maps.ContainsKey(attack.MapId)
++                && World.Maps[attack.MapId].ActiveAttackId == attack.AttackId && attack.ProtectedDefenderHeroIds.Contains(heroId)));
+         }
+         public bool IsAttackAllowed(long mapId)
+         {
+@@ -494,14 +550,12 @@
+             if (!World.Maps.TryGetValue(mapId, out map)) return false;
+             if (map.ActiveAttackId == null)
+             {
+-                PlayerRecord owner;
+-                // Visiting or landing remains legal. Hostile activity against an offline occupied
+-                // base must be registered first, so its defenders and persisted deadline are protected.
+-                if (map.OwnerPlayerId != null && World.Players.TryGetValue(map.OwnerPlayerId, out owner) && !owner.Online) return false;
++                // The real first-hit hook registers foreign combat before applying damage.
++                // A map-wide offline/cooldown ban here would also suppress the owner's defence.
+                 return map.Mode == MapMode.Realtime;
+             }
+             AttackRecord attack;
+-            return World.Attacks.TryGetValue(map.ActiveAttackId, out attack) && attack.Stage == AttackStage.Active && attack.ElapsedSeconds < 600;
++            return World.Attacks.TryGetValue(map.ActiveAttackId, out attack) && attack.Stage == AttackStage.Active && !attack.Blocked && attack.ElapsedSeconds < RaidDuration(attack);
+         }
+     }
+ }
+--- a/src/Session/MultiplayerSession.cs
++++ b/src/Session/MultiplayerSession.cs
+@@ -155,6 +155,8 @@
+                 GetBaseCreationStatus = GetBaseCreationStatus,
+                 GetPlayerRevision = id => World != null && World.Players.ContainsKey(id) ? World.Players[id].PersonalRevision : 0,
+                 OwnerOfEntity = OwnerOfEntity, OwnerOfMap = OwnerOfMap, GetRelation = GetRelation,
++                IsPlayerOnline = IsPlayerOnline, IsFriendlyToward = IsFriendlyToward,
++                CanLootGroundOwner = CanLootGroundOwner, IsRaidCoolingDown = IsRaidCoolingDown,
+                 GetPlayerDisplayName = id => World != null && id != null && World.Players.ContainsKey(id) ? World.Players[id].Nickname : "玩家",
+                 HasPermission = HasPermission, RegisterEntityOwner = RegisterEntityOwner,
+                 ReportDamage = ReportDamage, IsProtectedDefender = IsProtectedDefender,
+@@ -176,6 +178,7 @@
+             if (!options.JoinHostGalaxyOnFirstSpawn.HasValue) options.JoinHostGalaxyOnFirstSpawn = ModSettingsStore.Load(storageRoot).JoinHostGalaxyOnFirstSpawn;
+             ModSettingsStore.ValidateStartingEmployeeCount(options.StartingEmployeeCount.Value);
+             ModSettingsStore.ValidateMaxBasesPerPlayer(options.MaxBasesPerPlayer);
++            ModSettingsStore.ValidateRaidRules(options.RaidDurationMinutes, options.RaidCooldownMinutes);
+             string steamAccount = RequireLocalSteamAccount(transportOptions);
+             IsHost = true;
+             LocalPlayerId = Guid.NewGuid().ToString("N");
+@@ -206,6 +209,7 @@
+             if (World.Options == null) throw new InvalidDataException("联机存档缺少新世界规则。");
+             if (World.Options.StartingEmployeeCount.HasValue) ModSettingsStore.ValidateStartingEmployeeCount(World.Options.StartingEmployeeCount.Value);
+             ModSettingsStore.ValidateMaxBasesPerPlayer(World.Options.MaxBasesPerPlayer);
++            ModSettingsStore.ValidateRaidRules(World.Options.RaidDurationMinutes, World.Options.RaidCooldownMinutes);
+             PlayerRecord host;
+             if (!World.Players.TryGetValue(World.HostPlayerId, out host)) throw new InvalidDataException("联机存档缺少明确的房主记录。");
+             string steamAccount = ResolveLocalHostSteamAccount(host, transportOptions, resolveLocalHostIdentity);
+--- a/src/Session/MapViewLoading.cs
++++ b/src/Session/MapViewLoading.cs
+@@ -401,7 +401,7 @@
+             // defender reads, FinishRaid, checkpoint capture and persistence stay behind the FIFO.
+             foreach (AttackRecord attack in World.Attacks.Values)
+                 if (attack.Stage == AttackStage.Active && !attack.Blocked)
+-                    attack.ElapsedSeconds = Math.Min(600, attack.ElapsedSeconds + seconds);
++                    attack.ElapsedSeconds = Math.Min(RaidDuration(attack), attack.ElapsedSeconds + seconds);
+         }
+         private bool DeferDisconnectUntilMapReady()
+         {
+--- /dev/null
++++ b/src/Session/GroundRules.cs
+@@ -0,0 +1,122 @@
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace FreeWorldMultiplayer
++{
++    public sealed partial class MultiplayerSession
++    {
++        public bool IsPlayerOnline(string playerId)
++        {
++            PlayerRecord player;
++            return World != null && playerId != null && World.Players.TryGetValue(playerId, out player) && player.Online;
++        }
++
++        public bool IsFriendlyToward(string actor, string target)
++        {
++            if (actor == null || target == null || World == null) return false;
++            if (actor == target) return true;
++            RelationshipRecord pair = FindRelationship(actor, target, false);
++            return pair != null && (pair.PlayerA == actor ? pair.FriendlyConsentA : pair.FriendlyConsentB);
++        }
++
++        private bool AreMutuallyFriendly(string a, string b)
++        {
++            return a == b || GetRelation(a, b) == Relation.Friendly && IsFriendlyToward(a, b) && IsFriendlyToward(b, a);
++        }
++
++        public bool IsRaidCoolingDown(long mapId)
++        {
++            MapRecord map;
++            return World != null && World.Maps.TryGetValue(mapId, out map) && map.RaidCooldownSeconds > 0;
++        }
++
++        // This is the current garrison/coalition check. Native pickup/transport registers
++        // its raid at execution, rather than starting a timer while merely finding work.
++        private bool HasGroundLootQualification(string actor, string owner, long mapId)
++        {
++            if (World == null || actor == null || owner == null || !World.Players.ContainsKey(actor)) return false;
++            if (actor == owner) return true;
++            MapRecord map;
++            if (!World.Maps.TryGetValue(mapId, out map)) return false;
++            if (World.Players.Values.Any(p => p.MotherShipMapId == mapId)) return false;
++            List<string> present = bridge.ActiveGroundPlayerIds(mapId);
++            if (present == null) return false;
++            // Unknown employee ownership is not evidence that an area is undefended.
++            if (present.Any(p => p == null || !World.Players.ContainsKey(p))) return false;
++            if (map.OwnerPlayerId != null) return !present.Contains(map.OwnerPlayerId);
++            if (present.Contains(owner)) return false;
++            string[] active = present.Distinct().ToArray();
++            if (active.Length == 0) return true;
++            if (!active.Contains(actor)) return false;
++            for (int i = 0; i < active.Length; i++)
++                for (int j = i + 1; j < active.Length; j++)
++                    if (!AreMutuallyFriendly(active[i], active[j])) return false;
++            return true;
++        }
++
++        public bool CanLootGroundOwner(string actor, string owner, long mapId)
++        {
++            if (actor == owner && actor != null) return true;
++            if (owner == null || !HasGroundLootQualification(actor, owner, mapId)) return false;
++            AttackRecord attack = ActiveGroundAttack(mapId);
++            if (Paused || closing) return false;
++            if (attack == null) return !IsRaidCoolingDown(mapId);
++            return attack.Stage == AttackStage.Active && !attack.Blocked
++                && (!attack.EvacuationUsed || attack.EvacuatingPlayerId == actor)
++                && attack.ElapsedSeconds < RaidDuration(attack);
++        }
++
++        private AttackRecord ActiveGroundAttack(long mapId)
++        {
++            MapRecord map; AttackRecord attack;
++            return World != null && World.Maps.TryGetValue(mapId, out map) && map.ActiveAttackId != null
++                && World.Attacks.TryGetValue(map.ActiveAttackId, out attack) && IsBattleStage(attack) ? attack : null;
++        }
++
++        private static double RaidDuration(AttackRecord attack)
++        {
++            return attack.DurationSeconds >= 60 && attack.DurationSeconds <= 7200 ? attack.DurationSeconds : 600;
++        }
++
++        private static bool IsRaidParticipant(AttackRecord attack, string playerId)
++        {
++            return attack != null && playerId != null && (attack.AttackerPlayerId == playerId
++                || attack.ParticipantPlayerIds != null && attack.ParticipantPlayerIds.Contains(playerId));
++        }
++
++        private TransferRecord RestoreGroundRaidCarrier(string actor, long mapId, RaidRequest request)
++        {
++            // A client-selected vehicle/fleet is not proof of the actual landing pod. Recover
++            // its saved, debited transfer before inspecting capacity or opening a new battle.
++            var candidates = World.Transfers.Values.Where(t => t.PlayerId == actor && !t.Returning && t.Request != null
++                && t.Request.DestinationMapId == mapId && t.NativeExpeditionId > 0
++                && (t.Stage == TransferStage.Arrived || t.Stage == TransferStage.Landing)
++                && t.Request.HeroIds != null && t.Request.HeroIds.Any(uid => request.AttackerHeroIds.Contains(uid))).ToList();
++            TransferRecord carrier = candidates.FirstOrDefault(t => t.NativeExpeditionId == request.ExistingExpeditionId)
++                ?? candidates.OrderBy(t => t.TransferId, StringComparer.Ordinal).FirstOrDefault();
++            if (carrier == null) throw new InvalidOperationException("未找到本次在场雇员已落地的真实出征运输单，不能用任意载具生成搜刮额度。");
++            request.ExistingExpeditionId = carrier.NativeExpeditionId;
++            request.SourceMapId = carrier.Request.SourceMapId;
++            request.SourceFleetId = carrier.Request.SourceFleetId >= 0 ? carrier.Request.SourceFleetId : World.Players[actor].FleetId;
++            request.NativeTransportJson = carrier.Request.NativeManifestJson;
++            request.AttackerHeroIds = request.AttackerHeroIds.Where(carrier.Request.HeroIds.Contains).Distinct().ToList();
++            return carrier;
++        }
++
++        private void RegisterRaidParticipant(AttackRecord attack, string playerId, RaidRequest request)
++        {
++            if (attack.ParticipantPlayerIds == null) attack.ParticipantPlayerIds = new List<string>();
++            if (attack.ParticipantHeroIds == null) attack.ParticipantHeroIds = new Dictionary<string, List<long>>();
++            if (attack.ParticipantFleetIds == null) attack.ParticipantFleetIds = new Dictionary<string, long>();
++            if (!attack.ParticipantPlayerIds.Contains(attack.AttackerPlayerId)) attack.ParticipantPlayerIds.Add(attack.AttackerPlayerId);
++            if (!attack.ParticipantHeroIds.ContainsKey(attack.AttackerPlayerId)) attack.ParticipantHeroIds[attack.AttackerPlayerId] = attack.AttackerHeroIds.ToList();
++            if (!attack.ParticipantFleetIds.ContainsKey(attack.AttackerPlayerId)) attack.ParticipantFleetIds[attack.AttackerPlayerId] = attack.SourceFleetId;
++            if (!attack.ParticipantPlayerIds.Contains(playerId)) attack.ParticipantPlayerIds.Add(playerId);
++            List<long> heroes;
++            if (!attack.ParticipantHeroIds.TryGetValue(playerId, out heroes)) attack.ParticipantHeroIds[playerId] = request.AttackerHeroIds.Distinct().ToList();
++            else foreach (long uid in request.AttackerHeroIds) if (!heroes.Contains(uid)) heroes.Add(uid);
++            if (!attack.ParticipantFleetIds.ContainsKey(playerId)) attack.ParticipantFleetIds[playerId] = request.SourceFleetId;
++        }
++    }
++}
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.49
++1.50
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,14 @@
+ 发布号的唯一来源是主仓库根目录的 `VERSION`。每完成一个独立小 BUG，递增第二段整数；例如 `1.9` 后为 `1.10`。重新构建或同步同一项修复不自动递增版本。
+ 
+ 发布号与需求文档的 V1、游戏匹配目录 `v_common`、网络协议号及存档结构版本分别维护，不互相替代。
++
++## V1.50 · 2026-10-19
++
++- 落实地块权限与合作搜刮追加要求：中立公共资源/本人储存物正常取运，他人储存物须满足当前地块守军和合作资格；两两双向友好可共同搜刮，但活动队友的储存物仍受保护。运输执行重判复苏与增援，禁止搬走其他玩家雇员。
++- 合作共用本场实际出征单仓容量与唯一一次战利品撤离，先成功运走者取得物资；战斗与搜刮共享默认 10 分钟，默认地块冷却 60 分钟。房主可在全局默认设置及新建世界配置时间，续开沿用已保存世界规则。
++- 中立储存区按每玩家/每地块/每类型最多 3 区、合计 270 格；友好不再协助劳动，工作台仅所属玩家使用，保留救助与协助战斗。区域和任务创建者权限独立。
++- 任何其他玩家的活动雇员均阻止中立地块认领基地，包括友好/中立。基地转中立保留区域作者和超限旧区，超限禁新增扩建。协议升为 10，双方需一起更新。
++- 本轮三端只构建打包，不安装、不运行测试或游戏；游戏与跨机效果由用户验收，具体打包状态见本轮实现报告。
+ 
+ ## V1.49 · 2026-10-19
+ 
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -6,7 +6,7 @@
+ 
+ ## 方案与设计
+ 
+-- [地块权限与合作搜刮规则](plans/地块权限与合作搜刮规则-20261019.md)（2026-10-19 用户确认的补充要求，需求记录）
++- [地块权限与合作搜刮规则](plans/地块权限与合作搜刮规则-20261019.md)（2026-10-19 用户确认并授权实现的追加要求）
+ - [MOD 联机兼容与扩展接口设计](plans/MOD联机兼容与扩展接口设计-20261019.md)（设计稿，未实现）
+ - [V1整合清单.md](plans/V1整合清单.md)
+ - [地表联机方案.md](plans/地表联机方案.md)
+@@ -31,6 +31,7 @@
+ 
+ ## SVG 流程图
+ 
++- [地块权限与合作搜刮](diagrams/地块权限与合作搜刮.svg)
+ - [MOD 联机扩展流程](diagrams/MOD联机扩展流程.svg)
+ - [V1并行整合.svg](diagrams/V1并行整合.svg)
+ - [同星系联机流程.svg](diagrams/同星系联机流程.svg)
+--- a/docs/plans/地块权限与合作搜刮规则-20261019.md
++++ b/docs/plans/地块权限与合作搜刮规则-20261019.md
+@@ -4,7 +4,9 @@
+ 
+ 本文记录本次对话中用户已确认的要求，是对 [联机方案 V1](联机方案%20V1.md) 中地块权限、友好协作和搜刮规则的后续调整。同一事项与旧方案冲突时，以本次确认的规则为准；未涉及的规则沿用原方案。
+ 
+-本文为需求记录，不代表功能已经实现或游戏效果已经验收。本轮只保存文档。
++本文记录用户确认的功能需求。2026-10-19 用户已明确要求实现；源码、三端构建打包与游戏内验收分别记录，不以本文或构建成功代替游戏验收。
++
++![地块权限与合作搜刮流程](../diagrams/地块权限与合作搜刮.svg)
+ 
+ ## 1. 地块类型与雇员控制
+ 
+@@ -60,6 +62,8 @@
+ 
+ 友好雇员之间不再相互协助工作，不因友好关系参与对方的生产、建造、搬运等工作任务。
+ 
++工作台按所属玩家独立使用：A 的工作台只能由 A 的雇员使用，友好关系不开放使用权。生产选材仍需遵守储存区物品保护。
++
+ 保留以下合作：
+ 
+ - 救助对方雇员。
+@@ -100,8 +104,35 @@
+ - 超限时禁止新增和扩建，直到对应统计恢复到上限内；不强制删除已有区域来凑配额。
+ - 原储存区中的物品转换后按中立地块的储存区保护规则处理。
+ 
+-## 9. 未纳入本次要求的假设
++## 9. 中立地块建立基地
++
++- 多个玩家正在同一中立地块建设、活动时，任何一方都不能直接认领为自己的基地。
++- 只统计当前地块内的雇员。存在其他玩家仍能活动的雇员时，阻止建立基地；友好、中立、敌对一视同仁，友好关系不提供认领豁免。
++- 清除其他玩家仍能活动的雇员后，才可以按正常基地创建规则认领；原有基地数量上限仍有效。
++- 合作搜刮资格不等于共同占地资格：友方仍能活动时，也会阻止另一方直接建立基地。
++- 击倒其他玩家不授予其区域管理权，区域及任务的创建者权限继续独立处理。
++
++## 10. 合作搜刮额度与物资归属
++
++- 合作方共用本场原有单空投仓容量及唯一一次战利品撤离机会，不按玩家人数增加容量或撤离次数。
++- 谁先成功完成战利品运输，运走的物品就归谁，不另做平均分配或自动共享。
++- “抢到”以房主确认成功的实际运输事务为准。点击、选择物品或请求排队不代表已经获得物品，其他请求不能重复扣取同一库存或重复使用本场额度。
++- 合作不授予运输其他玩家雇员的权利；各玩家仍只能控制和运输自己的雇员。
++- 中立地块的公共资源、自己的储存区物品正常运输，不消耗针对受保护财物的搜刮额度。
++
++## 11. 离线保护与房主时间配置
++
++- 中立地块上的离线玩家雇员被攻击，同样享受离线守军倒地保护；沿用原方案的本场致死转倒地，不因无人在线防守而永久删除雇员。
++- 默认袭击总时限为 10 分钟：**战斗加搜刮合计 10 分钟**。击倒守军后不重置、不另加 10 分钟；合作方、增援、重连也不另开时限。
++- 默认同一被袭地块冷却为 60 分钟，对进攻方共同生效；不能换一个合作玩家绕过冷却。
++- 袭击总时限和袭击冷却允许房主配置，沿用现有全局默认设置及新建世界规则的保存方式；续开使用该世界已保存的配置。
++- 时间沿用房间有效现实时间：不受倍速影响，房主暂停时停表；房间关闭后停止，续开不重置已保存的计时或冷却。
++- 公共资源正常运输不属于搜刮，不因为本条而整体受袭击时限或冷却限制。
++
++## 12. 未纳入本次要求的内容
+ 
+ 前面讨论中曾提出“拆除或攻击导致物品飞出储存区”的假设，但没有确认游戏存在这种机制，该建议已撤回。本次不据此增加物品掉落保护或来源追踪要求。
+ 
+-本文只记录上述已确认规则，不自行追加俘虏、区域接管、共同劳动或其他新系统。
++地表主动赠送的额外入口尚未确认，本次沿用已有母舰赠送渠道，不因友好关系自动开放他人受保护库存。
++
++本文只记录上述已确认规则，不自行追加俘虏、区域接管、共同劳动、第三方 MOD 兼容框架或其他新系统。
+--- a/docs/plans/联机方案 V1.md
++++ b/docs/plans/联机方案 V1.md
+@@ -5,6 +5,7 @@
+ ## 零、开工与交付边界
+ 
+ - **本文是 V1 唯一现行依据**。同目录早期构想、实现方案、源码评估和旧流程图仅保留作历史参考；冲突时以本文及下方用户后续追加要求为准，不因旧文档自行增加功能或本体适配开发。
++- **2026-10-19 地块权限追加要求**：按用户确认的 [地块权限与合作搜刮规则](地块权限与合作搜刮规则-20261019.md) 实现。该文对旧的友好共同劳动、背包默认赠送、基地废弃及搜刮参与者规则作后续调整；同一事项以追加要求为准。包括中立储存配额、工作台专属、所有其他玩家阻止认领、两两双向友好共同搜刮且共用唯一运输额度、可配置的战斗加搜刮总时限与冷却。地表额外赠送入口、第三方 MOD 兼容框架不在本次范围。
+ - **已授权开始实现**。用户于 2026-10-15 明确授权按新保留范围继续 MOD 开发与构建，并要求主代理仅主控、协调和整合，实际功能由子智能体实现。Project3 始终只读。旧 Steam DLL 依赖缺口与开发实现分开记录，不能把仓库、检查工具或部分代码视为完整 V1。
+ - **完整 V1 一次性交付**。本文全部功能属于同一交付范围，不以原型或部分功能替代，不改成分期交付。
+ - Steam 发行版接入、Harmony 兼容性及无 Steam 启动仍是技术待确认项。发现纯 MOD 路线存在实际缺口时须明确说明，不能擅自修改本体、替换本体运行库、删减功能或宣称已解决。
+--- /dev/null
++++ b/docs/diagrams/地块权限与合作搜刮.svg
+@@ -0,0 +1,47 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850">
++  <defs>
++    <style>text{font-family:'Microsoft YaHei','Noto Sans CJK SC',sans-serif;fill:#e7edf5}.title{font-size:28px;font-weight:700}.head{font-size:20px;font-weight:700}.body{font-size:17px}.small{font-size:15px;fill:#afbdd0}.box{fill:#172639;stroke:#38536e;stroke-width:1.5}.ok{fill:#143b35;stroke:#3d9d82;stroke-width:1.5}.warn{fill:#423420;stroke:#b78b46;stroke-width:1.5}.line{stroke:#7892ac;stroke-width:2;fill:none;marker-end:url(#arrow)}</style>
++    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#7892ac"/></marker>
++  </defs>
++  <rect width="1200" height="850" rx="18" fill="#0c1725"/>
++  <text x="40" y="52" class="title">地块权限与合作搜刮</text>
++  <text x="40" y="82" class="small">雇员只由所属玩家指挥 · 友好保留救助和协助战斗 · 工作台与区域管理各自独立</text>
++  <rect x="40" y="110" width="540" height="140" rx="12" class="box"/>
++  <text x="62" y="145" class="head">中立地块</text>
++  <text x="62" y="179" class="body">公共资源、自己的储存物：正常拿取和运输</text>
++  <text x="62" y="211" class="body">他人储存物：进入受保护物品判定</text>
++  <text x="62" y="236" class="small">每人 / 每地块 / 每类型：3 个储存区，合计 270 格</text>
++  <rect x="620" y="110" width="540" height="140" rx="12" class="box"/>
++  <text x="642" y="145" class="head">玩家基地</text>
++  <text x="642" y="179" class="body">基地管理由所属玩家执行</text>
++  <text x="642" y="211" class="body">其他玩家可进入与战斗，取物服从搜刮保护</text>
++  <text x="642" y="236" class="small">转中立：保留区域作者，旧超额区域保留但禁增扩</text>
++  <path d="M310 250V282H560" class="line"/>
++  <path d="M890 250V282H640" class="line"/>
++  <rect x="225" y="305" width="750" height="125" rx="12" class="box"/>
++  <text x="250" y="340" class="head">只判断当前地块的雇员</text>
++  <text x="250" y="373" class="body">基地：所属玩家无活动守军；中立：只剩本人，或两两双向友好的合作方</text>
++  <text x="250" y="405" class="body">仍有活动雇员的队友，其储存区继续受保护</text>
++  <path d="M360 430V463" class="line"/>
++  <path d="M840 430V463" class="line"/>
++  <rect x="40" y="475" width="540" height="110" rx="12" class="warn"/>
++  <text x="62" y="512" class="head">条件不满足</text>
++  <text x="62" y="548" class="body">不能拿取、搬运、运输受保护物品</text>
++  <text x="62" y="573" class="small">公共资源与本人库存的正常运输不受此限制</text>
++  <rect x="620" y="475" width="540" height="110" rx="12" class="ok"/>
++  <text x="642" y="512" class="head">条件满足</text>
++  <text x="642" y="548" class="body">开放搜刮；发运时重判复苏、增援和关系</text>
++  <text x="642" y="573" class="small">只拿物品，不把其他玩家雇员作为战利品带走</text>
++  <path d="M890 585V616" class="line"/>
++  <rect x="620" y="628" width="540" height="160" rx="12" class="ok"/>
++  <text x="642" y="663" class="head">一场共同额度，谁先运走归谁</text>
++  <text x="642" y="698" class="body">合作共用单仓容量、唯一一次战利品撤离</text>
++  <text x="642" y="730" class="body">默认战斗＋搜刮合计 10 分钟，冷却 60 分钟</text>
++  <text x="642" y="763" class="small">时间由房主配置 · 房主确认同一运输事务，防重复结算</text>
++  <rect x="40" y="628" width="540" height="160" rx="12" class="box"/>
++  <text x="62" y="663" class="head">中立地块认领基地</text>
++  <text x="62" y="698" class="body">其他玩家仍有活动雇员：阻止认领</text>
++  <text x="62" y="730" class="body">友好、中立、敌对均阻止，不因合作而豁免</text>
++  <text x="62" y="763" class="small">认领与搜刮分开；区域作者权限不因战胜而转移</text>
++  <text x="40" y="824" class="small">需求流程说明 · 实现、三端打包与用户游戏验收分别记录 · 2026-10-19</text>
++</svg>

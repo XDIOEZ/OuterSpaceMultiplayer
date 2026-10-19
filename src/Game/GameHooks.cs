@@ -244,10 +244,12 @@ namespace FreeWorldMultiplayer
             __state = null;
             if (Bridge == null) return true;
             if (!Bridge.IsSimulator || !Bridge.Context.IsAttackAllowed(Bridge.CurrentMapId)) return false;
-            if (Bridge.Context.IsProtectedDefender(__instance.getUID()) && KnockedOut.Contains(__instance.getUID())) return false;
+            if (Bridge.Context.IsProtectedDefender(__instance.getUID()) && IsKnockedOut(__instance.getUID())) return false;
             string from = hurtStruct.from == null ? null : Bridge.Context.OwnerOfEntity(hurtStruct.from.getUID());
             string target = Bridge.Context.OwnerOfEntity(__instance.getUID());
             if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(target) && from != target && Bridge.Context.GetRelation(from, target) == Relation.Friendly) return false;
+            if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(target) && from != target && Bridge.Context.GetAttack(Bridge.CurrentMapId) == null
+                && !Bridge.EnsureGroundRaid(from, Bridge.CurrentMapId)) return false;
             __state = new HitState { Hp = __instance.roleBean.attr_Hp.hp,
                 Before = Bridge.Context.IsProtectedDefender(__instance.getUID()) ? NativeWire.Pack(__instance.roleBean) : null };
             return true;
@@ -259,6 +261,8 @@ namespace FreeWorldMultiplayer
             if (!Bridge.IsSimulator || !Bridge.Context.IsAttackAllowed(Bridge.CurrentMapId)) return false;
             string from = hurtStruct.from == null ? null : Bridge.Context.OwnerOfEntity(hurtStruct.from.getUID());
             string owner = Bridge.Context.OwnerOfEntity(__instance.getUID()) ?? Bridge.Context.OwnerOfMap(Bridge.CurrentMapId);
+            if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(owner) && from != owner && Bridge.Context.GetRelation(from, owner) != Relation.Friendly
+                && Bridge.Context.GetAttack(Bridge.CurrentMapId) == null && !Bridge.EnsureGroundRaid(from, Bridge.CurrentMapId)) return false;
             return string.IsNullOrEmpty(from) || string.IsNullOrEmpty(owner) || from == owner || Bridge.Context.GetRelation(from, owner) != Relation.Friendly;
         }
         private static void BuildHitPostfix(BaseBuild __instance, HurtStruct hurtStruct, float __state)
@@ -363,7 +367,7 @@ namespace FreeWorldMultiplayer
             if (Bridge == null) return true;
             BaseHero hero = (BaseHero)NativeWire.Get(__instance, "hero");
             if (!Bridge.Context.IsProtectedDefender(hero.getUID())) return true;
-            if (KnockedOut.Contains(hero.getUID()) || hero.heroBean.isFallDown()) { Incapacitate(hero); return false; }
+            if (IsKnockedOut(hero.getUID()) || hero.heroBean.isFallDown()) { Incapacitate(hero); return false; }
             if (hero.heroBean.isHpDead()) { Incapacitate(hero); return false; }
             return true;
         }
@@ -376,7 +380,7 @@ namespace FreeWorldMultiplayer
             {
                 FWHeroBean hero = (FWHeroBean)NativeWire.Get(list[i], "hero");
                 string workerOwner = Bridge.Context.OwnerOfEntity(hero.getUID());
-                if (workerOwner != owner && Bridge.Context.GetRelation(workerOwner, owner) != Relation.Friendly) list.RemoveAt(i);
+                if (workerOwner != owner) list.RemoveAt(i);
             }
         }
         private static bool WorkPermissionPrefix(MethodBase __originalMethod, object[] __args)
@@ -395,10 +399,17 @@ namespace FreeWorldMultiplayer
                 return build == null || Bridge.CanUseGroundWorkTarget(role, build.getUID());
             }
             if (Bridge.CanPerformGroundWork(role, plan)) return true;
-            return (NativeCommands.IsPlayerIntent || Bridge.Executing) && __originalMethod.Name.IndexOf("carry", StringComparison.OrdinalIgnoreCase) >= 0
-                && Bridge.Context.HasPermission(owner, Bridge.CurrentMapId, -1, Permission.Loot);
+            return false;
         }
-        internal static bool IsKnockedOut(long uid) { return KnockedOut.Contains(uid); }
+        internal static bool IsKnockedOut(long uid)
+        {
+            if (!KnockedOut.Contains(uid)) return false;
+            // Rescue/recovery changes the real HP. The protection marker must not make a
+            // recovered defender permanently absent from the live looting check.
+            FWHeroBean hero = Bridge == null ? null : Bridge.FindPersistentBean(uid) as FWHeroBean;
+            if (hero != null && !hero.isDead() && !hero.isFallDown()) { KnockedOut.Remove(uid); return false; }
+            return true;
+        }
         internal static void EndProtection(IEnumerable<long> heroes) { foreach (long uid in heroes) KnockedOut.Remove(uid); }
     }
 }

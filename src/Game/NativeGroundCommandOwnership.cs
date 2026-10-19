@@ -8,7 +8,8 @@ using Script.FairyScripts.ALibrary.Astar;
 namespace FreeWorldMultiplayer
 {
     // Author identity uses the existing persisted/networked UID ownership table.
-    // Cooperation grants work permission; it never grants mutation permission.
+    // Friendship never grants production or mutation permission. Pickup uses the
+    // independent loot rule so a legal raid is not treated as helping the owner.
     internal static class NativeGroundCommandOwnership
     {
         [ThreadStatic] private static BaseRole candidateWorker;
@@ -37,14 +38,15 @@ namespace FreeWorldMultiplayer
                 if (zone != null && !CanWorkZone(bridge, worker, zone)) return false;
             }
             ActionStruct_Carry carry = plan.actionStruct as ActionStruct_Carry;
-            if (carry != null && carry.carryThing != null && carry.carryThing.zoneBean != null && !CanWorkZone(bridge, worker, carry.carryThing.zoneBean)) return false;
+            string actor = worker == null ? null : bridge.Context.OwnerOfEntity(worker.getUID());
+            if (carry != null && carry.carryThing != null && !bridge.CanTakeGroundThing(actor, carry.carryThing)) return false;
             PickActionGroup picks = plan.pickAction ?? (carry == null ? null : carry.pickAction);
             if (picks != null)
             {
                 foreach (PickAction_PickBase pick in picks.picks)
                 {
                     BaseThing thing = pick.takeThing == null ? null : pick.takeThing.getThing();
-                    if (thing != null && thing.zoneBean != null && !CanWorkZone(bridge, worker, thing.zoneBean)) return false;
+                    if (thing != null && !bridge.CanTakeGroundThing(actor, thing)) return false;
                 }
                 foreach (PickAction_PutBase put in picks.puts)
                 {
@@ -140,7 +142,13 @@ namespace FreeWorldMultiplayer
         private static void AreaCandidatesPostfix(ref List<BaseZoneArea> __result)
         {
             if (Bridge != null && !Bridge.Applying && candidateWorker != null && __result != null)
-                __result = __result.Where(z => z != null && CanWorkZone(Bridge, candidateWorker, z.zoneBean)).ToList();
+            {
+                string actor = Bridge.Context.OwnerOfEntity(candidateWorker.getUID());
+                // Source-zone discovery may see a defeated owner's storage.
+                // Destination discovery/free slots still require own storage.
+                __result = __result.Where(z => z != null && (CanWorkZone(Bridge, candidateWorker, z.zoneBean)
+                    || ZoneDef.isStoreType(z.zoneBean.id) && Bridge.CanTakeGroundZone(actor, z.zoneBean))).ToList();
+            }
         }
         private static void WorkerEnter(object[] __args, out BaseRole __state)
         { __state = candidateWorker; BaseRole role = __args.OfType<BaseRole>().FirstOrDefault(); if (role != null) candidateWorker = role; }
