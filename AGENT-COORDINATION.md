@@ -322,6 +322,12 @@
 - 开工状态：以上目标文件 Git 工作区当前干净，其他 Agent 的大量 dirty/untracked 原样保留。本任务独立窄提交；如源码输入并行变化则不抢统一构建，默认仅 BuildOnly、不安装、不运行游戏。完成后在本条登记结果并释放占用。
 - 结果：核心源码/测试已提交 `b6e8b88`（3 文件）；原始重入回归先失败，修复后生产链接 `MapCacheNegotiationChecks` 60,070 项通过，预热待重试 Tick 2000 次测得快照路径 0 B 托管分配。`pwsh.exe -File Sync-ModCopies.ps1 -BuildOnly` 三端编译打包完成，来源 `AD98E989E2B6C1328FD536B4B8CE371910F0E80517CF6BE8C4DCB90316586A79`，仍 V1.49。未安装、未启动/验收游戏、未 push；其它历史 dirty/untracked 全部保留。源码、构建及 Git index 占用已释放。
 
+### optimization-map-cache-expiry-tick-20261019 / 主控 /root
+- 认领：`src/Session/MapCacheExpiry.cs`、`src/Session/MapSnapshotCache.cs` 的 Tick 快照/Reset 窄改，以及 `tools/MapCacheNegotiationChecks/ProductionSessionChecks.cs` 和 `ProductionSessionStubs.cs` 的生产源码回归。以上目标开始时无未提交修改；其它历史 dirty/untracked 和他人协调内容全部保留。
+- 目标：消除地图缓存过期检查在空闲/等待状态的逐帧 LINQ 快照分配；防止超时回调同步清空待处理视图后，继续读已删除的计时键。只复用现有 `VisitTickSnapshot<T>`；保持 FIFO、超时、ACK、任期和错误语义，不改协议/存档/版本。
+- 本轮用户明确不要三端构建：仅局部 .NET 检查与本地窄提交，不打包、安装、运行游戏、push；源码冻结后登记证据并释放。
+- 结果：核心源码及回归已提交 `d0bc2c3`（4 文件，120+/30-）。链接实际生产 `MapSnapshotCache`/`MapCacheExpiry` 的本地测试 60,074 项通过；合成活跃 3,000 Tick 曾测得 96,000 B 回调捕获分配，延后建立回调后最终空闲/活跃 Tick 均测得 0 B。保留原 30/60 秒回退与超时、入队顺序、身份绑定和断线策略；未进行 Unity/双端实机验收。没有自行构建三端/打包/安装、修改 VERSION/协议/存档或 push；源码与 Git index 占用已释放，全部历史 dirty/untracked 保留。
+
 <!-- ground-rules-implementation-20261019:start -->
 ### ground-rules-implementation-20261019 / 主控 /root
 - 用户明确要求完成 MD 的功能需求。主控负责补齐文档、配置入口、契约协调、整合、版本、本地窄提交与三端 BuildOnly；不安装、不测试/启动游戏。
