@@ -168,6 +168,7 @@ namespace FreeWorldMultiplayer
             if (IsStarting) { TickHostCreation(); return; }
             // Unity's unscaled delta is the authority; no client wall-clock or game speed drives raid timers.
             double seconds = unscaledSeconds;
+            TickPersonalOutbound(seconds); // A rejected enqueue retains its original already-captured personal delta.
             TickUidRenewal(seconds); // Unscaled, including paused rooms and lost UID replies.
             TickUnauthenticatedPeers(seconds); // Host idle-handshake lease is independent of pause and game speed.
             TickRejectedPeerEvictions(seconds); // Rejected network peers must not stop the room if Disconnect fails.
@@ -410,6 +411,7 @@ namespace FreeWorldMultiplayer
             if (shutdown) return;
             if (IsStarting || bridge.IsCreatingWorld) { CancelHostCreation(); return; }
             shutdown = true;
+            ClearPersonalOutbound();
             Exception transportError = null, bridgeError = null;
             try { transport.Dispose(); }
             catch (Exception error) { transportError = error; }

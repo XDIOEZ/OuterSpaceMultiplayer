@@ -270,11 +270,10 @@ namespace FreeWorldMultiplayer
                     World.Players[personal.PlayerId].PersonalRevision = personal.Revision; break;
                 case "personalAck":
                     PlayerUpdate personalAck = JsonData.Payload<PlayerUpdate>(message.Payload);
-                    World.Players[personalAck.PlayerId].PersonalRevision = personalAck.Revision; personalInFlight.Remove(personalAck.PlayerId); break;
+                    ReceivePersonalAcknowledgement(personalAck); break;
                 case "personalReset":
                     PlayerFieldState reset = JsonData.Payload<PlayerFieldState>(message.Payload);
-                    Require(bridge.ApplyPlayerFields(reset), "重新同步个人进度白名单基准");
-                    World.Players[reset.PlayerId].PersonalRevision = reset.PersonalRevision; personalInFlight.Remove(reset.PlayerId); break;
+                    CompletePersonalReset(reset); break;
                 case "execute": ExecuteOnSimulator(JsonData.Payload<GameCommand>(message.Payload)); break;
                 case "result": NotifyCommandResult(JsonData.Payload<CommandResult>(message.Payload)); break;
                 case "saved": World.SaveGeneration = JsonData.Payload<long>(message.Payload); break;

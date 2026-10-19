@@ -436,7 +436,7 @@ namespace FreeWorldMultiplayer
                 else
                 {
                     if (update.PlayerId != LocalPlayerId) throw new InvalidOperationException("客户端不能在地图事务外提交其他玩家个人进度。");
-                    personalInFlight.Add(update.PlayerId); Send("host", "personalUpdate", update);
+                    SendCapturedPersonalUpdate(update);
                 }
             }
         }
