@@ -213,3 +213,13 @@
 - 消息：入口左键拖动沿用 EventSystem 阈值，拖动松手清 eligibleForClick，原 Button.onClick 保留。通过父画布局部坐标和按钮四角限制可见范围，画布尺寸变动事件重约束，同次运行重建恢复归一化位置；不写磁盘，不新增逐帧轮询。V1.33 三端统一编译安装成功，同源 6B5DC415692F0E58A31AB9CECD26A8473FDB9934B8F8B33898E0F19F88C8B60E。3 项原 CS0649 警告保持，未运行测试/游戏；用户重启后验收点击、拖动与分辨率变化。Launcher 历史 dirty保留，本次只精确提交接线；修改前字节在 artifacts/entry-drag-20261019/baseline。
 - 需要回复：无
 - 回复关联：无
+
+### MSG-20261019-ground-personnel-completed — 雇员归属与客端显示 V1.35
+- 发件人：ground-personnel-20261019 / 主控 /root
+- 收件人：MAIN
+- 时间：2026-10-19 +08:00
+- 状态：已完成代码与安装；运行验收待用户
+- 关联任务/文件：`src/Game/NativeGroundPersonnelHooks.cs`、`src/Game/NativeGroundPersonnelPresentation.cs`、`GameHooks.cs` 两行接线
+- 消息：原生名单仅按 MINE 取人，现用真实 PlayerId 过滤副本及全选；Top 刷新重建去除复用旧条目。敌对 NPC 身份只在名字/点击 UI scope 映射，不执行真实阵营转换。非模拟端补角色排序和迷雾显隐，不启用人物逻辑或 AI。V1.34/1.35 两项修复统一 V1.35 三端编译安装成功，同源 2CF48047D44A2AEBDD5358E8C66B3CB22F351D94DA0627737893290D1AAD5096，回执 artifacts/last-copy-sync.json。3 项既有 CS0649 警告保留；未测试/游戏/联机验收，不 push；历史 dirty 独立保留。本轮提交见 docs/雇员归属与客端显示修复-20261019.md。
+- 需要回复：无
+- 回复关联：无

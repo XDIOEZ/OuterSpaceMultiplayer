@@ -22,6 +22,7 @@ namespace FreeWorldMultiplayer
         internal static void Install(Harmony harmony)
         {
             KnockedOut.Clear();
+            NativeGroundPersonnelHooks.Install(harmony);
             Patch(harmony, typeof(FWGameData), "createUID", "UidPrefix");
             Patch(harmony, typeof(FWUidCounter), "nextUid", "UidPrefix");
             Patch(harmony, typeof(FWUidItem), "createUID", "UidItemPrefix");
@@ -126,6 +127,7 @@ namespace FreeWorldMultiplayer
             TimeInfo.UpdateLoop(MapManager.getNowSpeed());
             CatPlayerr.setUpdateTime(TimeInfo.elapsedTime_MM);
             SpinePlayer.setGameScaleGlobal(MapManager.getNowSpeed());
+            Bridge.PresentNativeGroundPersonnel();
             __instance.casePaint();
             return false;
         }

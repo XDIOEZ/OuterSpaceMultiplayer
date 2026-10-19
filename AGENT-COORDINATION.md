@@ -17,6 +17,7 @@
 
 | 任务 ID | 负责人 | 目标 / 文件范围 | 状态与下一步 |
 | --- | --- | --- | --- |
+| ground-personnel-20261019 | 主控 /root；功能 ground_fix；只读 personnel_audit（占用释放） | 新 NativeGroundPersonnelHooks.cs / NativeGroundPersonnelPresentation.cs；GameHooks.cs 两行接线；VERSION/CHANGELOG、统一构建安装、窄提交 | V1.35 三端编译安装成功，同源 2CF48047D44A2AEBDD5358E8C66B3CB22F351D94DA0627737893290D1AAD5096。名单按真实本方归属、敌对仅 UI 作用域代理、客端补渲染排序/迷雾显隐；未运行测试或游戏，用户重启双端验收。保留历史 dirty，仅提交本轮新增文件及等效两行接线；版本/索引/构建在本轮提交后释放。 |
 | doc-organization-20261019 | 主控 /root；只读子 Agent doc_reference_review（占用释放） | 根目录与 docs 的 MD/SVG 分类移动、文档导航与路径引用；不占用源码/脚本/版本 | 已完成分类整理与索引，保留已有 dirty/untracked 原内容；仅提交整理差异，不测试、不构建、不安装；本轮提交完成后释放 Git index。 |
 | ui-entry-drag-20261019 | 主控 /root；子 Agent entry_drag（占用释放） | 新 `src/Entry/MultiplayerEntryDrag.cs`，`ModPluginLauncher.cs` EnsureEntry 单行接线；VERSION/CHANGELOG、窄提交、统一构建同步 | V1.33 三端编译安装完成，同源 6B5DC415692F0E58A31AB9CECD26A8473FDB9934B8F8B33898E0F19F88C8B60E，回执 artifacts/last-copy-sync.json。左键拖动使用原生阈值并取消本次点击，按画布坐标限制按钮可见范围，重建恢复本次运行位置；不写玩家数据、无 Update 轮询。旧 3 项 CS0649 警告保留，无编译错误；未跑测试/游戏，用户重启后验收。只提交本轮新组件与 tracked 单行接线，其他 dirty保留；本轮提交结束后版本/索引/构建释放。 |
 | ui-procedural-modifier-stall-20261019 | 主控 /root；子 Agent ui_stall（功能占用释放） | 四份 Entry 文件的初始化存档懒读与圆角 Modifier 保留；VERSION/CHANGELOG、三端统一同步与窄提交 | V1.32 三端编译安装成功，同源 7045247DF6A944AE970611CE4B1FD10A162DA5717212A18079164FD46D3A82E3；未运行测试、游戏或帧时验收。保留旧 dirty/untracked；tracked 文件只提交本轮等效窄改，两份既有 untracked 不整份暂存，本轮完整差异保存在 docs/patches/ui-procedural-modifier-stall-20261019.patch。BUG-18 的继续列表同步读取仍待后续，不宣称所有卡顿已解决。提交结果见 docs/reports/UI打开瞬时卡顿修复-20261019.md，本轮完成后版本/索引/构建占用释放。 |
