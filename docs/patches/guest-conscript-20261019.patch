@@ -1,0 +1,84 @@
+diff --git a/src/Game/GameBridge.cs b/src/Game/GameBridge.cs
+index 85690fa..e1b0c32 100644
+--- a/src/Game/GameBridge.cs
++++ b/src/Game/GameBridge.cs
+@@ -504,7 +504,7 @@ namespace FreeWorldMultiplayer
+                     RoleCommand.order_Fight_Move(actor, payload.Value<short>("X"), payload.Value<short>("Y")); break;
+                 case CommandKind.Conscript:
+                     if (actor == null) throw new InvalidOperationException("Missing command hero.");
+-                    RoleCommand.order_Fight_Conscript(actor, true); break;
++                    RoleCommand.order_Fight_Conscript(actor, payload.Value<bool>("Manual")); break;
+                 case CommandKind.Attack:
+                     if (actor == null) throw new InvalidOperationException("Missing command hero.");
+                     SpriteObject target = replicator.SceneObject(command.TargetEntityId);
+diff --git a/src/Game/NativeMapReplicator.cs b/src/Game/NativeMapReplicator.cs
+index c3abc88..b704023 100644
+--- a/src/Game/NativeMapReplicator.cs
++++ b/src/Game/NativeMapReplicator.cs
+@@ -39,6 +39,7 @@ namespace FreeWorldMultiplayer
+             public bool Loop;
+             public bool IsAttack;
+             public long TargetUid = -1;
++            public bool? FightActive, FightManual;
+         }
+         internal sealed class Delta
+         {
+@@ -74,6 +75,7 @@ namespace FreeWorldMultiplayer
+             internal object Value;
+         }
+         private readonly GameBridge bridge;
++        private static readonly FieldInfo ReplicaRunAi = typeof(BaseRole).GetField("runAI", BindingFlags.Instance | BindingFlags.NonPublic);
+         private const int NativeIdentitySchema = 3;
+         private readonly Dictionary<long, long> revisions = new Dictionary<long, long>();
+         private readonly Dictionary<long, HashSet<long>> knownHeroes = new Dictionary<long, HashSet<long>>();
+@@ -353,10 +355,13 @@ namespace FreeWorldMultiplayer
+                 foreach (BaseRole hero in MapManager.instance.heroManager.getAllRoles().Cast<BaseRole>()
+                     .Concat(MapManager.instance.animalManager.getAnimals()).Concat(MapManager.instance.monsterManager.monsters))
+                 {
++                    AI_BaseFight fight = hero.getAIbyType(AI_Base.AI_TYPE.战斗) as AI_BaseFight;
+                     var pose = new Pose { Uid = hero.getUID(), X = hero.transform.localPosition.x, Y = hero.transform.localPosition.y,
+                         Z = hero.transform.localPosition.z, Direction = hero.mod_Move.forwardDir, Animation = hero.roleAnim.playIndex,
+                         Loop = hero.roleAnim.loop, IsAttack = hero.roleAnim.isAttackAction(),
+-                        TargetUid = hero.roleAnim.target == null ? -1 : hero.roleAnim.target.getUID() };
++                        TargetUid = hero.roleAnim.target == null ? -1 : hero.roleAnim.target.getUID(),
++                        FightActive = fight == null ? (bool?)null : hero.getRunAI() == fight,
++                        FightManual = fight == null ? (bool?)null : fight.isFightMode(AI_BaseFight.FightMode.手动) };
+                     Pose before; next.Poses.Add(pose.Uid, pose);
+                     if (!baseline.Poses.TryGetValue(pose.Uid, out before) || !SamePose(before, pose)) delta.Poses.Add(pose);
+                 }
+@@ -411,7 +416,7 @@ namespace FreeWorldMultiplayer
+             return baseline;
+         }
+         private static bool SamePose(Pose a, Pose b)
+-        { return a.X.Equals(b.X) && a.Y.Equals(b.Y) && a.Z.Equals(b.Z) && a.Direction == b.Direction && a.Animation == b.Animation && a.Loop == b.Loop && a.IsAttack == b.IsAttack && a.TargetUid == b.TargetUid; }
++        { return a.X.Equals(b.X) && a.Y.Equals(b.Y) && a.Z.Equals(b.Z) && a.Direction == b.Direction && a.Animation == b.Animation && a.Loop == b.Loop && a.IsAttack == b.IsAttack && a.TargetUid == b.TargetUid && a.FightActive == b.FightActive && a.FightManual == b.FightManual; }
+         internal MapSnapshot RestoreCheckpoint(MapSnapshot snapshot)
+         {
+             if (snapshot.IsDeltaBaseline || string.IsNullOrEmpty(snapshot.NativeJson)) throw new InvalidOperationException("A delta baseline marker cannot load a native map.");
+@@ -763,6 +768,7 @@ namespace FreeWorldMultiplayer
+         {
+             BaseRole hero = SceneObject(pose.Uid) as BaseRole;
+             if (hero == null) throw new InvalidOperationException("Pose references missing character.");
++            ApplyFightPresentation(hero, pose);
+             if (hero.cellX != hero.roleBean.cellX || hero.cellY != hero.roleBean.cellY)
+             {
+                 MapGrid.getGridNode(hero.cellX, hero.cellY).removeCrops(hero);
+@@ -796,6 +802,18 @@ namespace FreeWorldMultiplayer
+                 if (pose.Animation >= 0 && GroundAnimalAnimationChanged(hero, pose)) animal.doAction(pose.Animation, pose.Direction, pose.Loop ? -1 : 1, !pose.Loop);
+             }
+         }
++        private void ApplyFightPresentation(BaseRole role, Pose pose)
++        {
++            if (bridge.IsSimulator || !pose.FightActive.HasValue || !pose.FightManual.HasValue) return;
++            AI_BaseFight fight = role.getAIbyType(AI_Base.AI_TYPE.战斗) as AI_BaseFight;
++            if (fight == null) return;
++            if (ReplicaRunAi == null) throw new MissingFieldException(typeof(BaseRole).FullName, "runAI");
++            // Native UI reads the live AI reference/mode. Project these fields only;
++            // setRunAI/doFightMode would activate AI and interrupt replica tasks.
++            fight.setFightMode(pose.FightManual.Value ? AI_BaseFight.FightMode.手动 : AI_BaseFight.FightMode.自动);
++            if (pose.FightActive.Value) ReplicaRunAi.SetValue(role, fight);
++            else if (ReferenceEquals(role.getRunAI(), fight)) ReplicaRunAi.SetValue(role, role.baseAI);
++        }
+         public void Dispose() { ClearGroundPresentation(-1, false); revisions.Clear(); knownHeroes.Clear(); knownAnimals.Clear(); captureBaselines.Clear(); bridge.ClearNativeMapLifecycle(); }
+     }
+ }

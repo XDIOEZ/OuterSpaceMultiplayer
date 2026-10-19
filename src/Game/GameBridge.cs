@@ -527,7 +527,7 @@ namespace FreeWorldMultiplayer
                     RoleCommand.order_Fight_Move(actor, payload.Value<short>("X"), payload.Value<short>("Y")); break;
                 case CommandKind.Conscript:
                     if (actor == null) throw new InvalidOperationException("Missing command hero.");
-                    RoleCommand.order_Fight_Conscript(actor, true); break;
+                    RoleCommand.order_Fight_Conscript(actor, payload.Value<bool>("Manual")); break;
                 case CommandKind.Attack:
                     if (actor == null) throw new InvalidOperationException("Missing command hero.");
                     SpriteObject target = replicator.SceneObject(command.TargetEntityId);

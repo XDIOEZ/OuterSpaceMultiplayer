@@ -63,3 +63,14 @@
 - 消息：`3f21d34` 将模拟端的地图发布安排在 execution 声明发送之前；新的成功声明只会在 PublishLocalMaps 本身没有抛错后入队，原生 commandId 缓存不变。尚未保证捕获地图一定包含此次命令、没有既有 in-flight 差量，也没有增加提交身份/存档水位；不能单凭发送顺序声称结算完成。
 - 需要回复：请 Game/Session Owner 逐项验证原生地表建造、拆除、移动、工作和背包指令在 `CaptureMapUpdate` 中哪些操作会产生可确认的实际 MapRevision；用真实地表测试地图拒绝/断线重播，不要重复原生命令，也不要把无差量执行误报为已保存。
 - 回复关联：MSG-20261018-bug07-native-freeze-01
+
+### MSG-20261019-guest-conscript-GAME-01 — 解除征召参数恢复
+- 发件人：guest-conscript-20261019 / conscript_fix
+- 收件人：GAME / 主控
+- 时间：2026-10-19 +08:00
+- 状态：源码冻结，待主控 BuildOnly；运行验收待用户
+- 关联任务/文件：src/Game/GameBridge.cs:507；artifacts/guest-conscript-20261019/conscript-functional.patch
+- 消息：原生 UI 传入 false 表示解除征召，GameHooks 已捕获 Manual=false，但 GameBridge 的 Conscript 执行固定 true，导致开启和关闭请求均变成开启。仅将该执行参数恢复为 payload.Value<bool>("Manual")，保留权限与模拟者路径、原生任务释放/自动模式处理。修改前完整工作树文件已备份至 artifacts/guest-conscript-20261019/baseline/src/Game/GameBridge.cs；其他旧 dirty 保留。
+- 需要回复：主控统一版本与三端 BuildOnly、窄提交；用户选择客机自己雇员，分别在本人模拟地块和他人模拟地块执行开启、解除及批量开关，确认解除后恢复自动工作。另有独立 UI 投影缺口：NativeMapReplicator.Pose 不含运行时 fightMode，非模拟视图 Hero_MainView_Cmd 读取 getRunAI().isFightMode，可能缺失状态回显，已通知主控，不在本一行修复中扩大。
+- 回复关联：无
+- 处理记录：未启动游戏、未执行测试、未编译、未安装、未提交；遵用户后续统一安装要求。- 后续处理记录：主控授权同链 UI 回显修复，增加 NativeMapReplicator.Pose.FightActive/FightManual 两个 nullable bool，采集当前真实战斗 AI 活跃引用和手动模式，SamePose 纳入比较。非模拟端 ApplyPose 只 setFightMode 纯赋值并缓存反射直接设置 BaseRole.runAI 展示引用；不调用 setRunAI/doFightMode/onActiveEvent/closeAI，不推进 AI。自动战斗保持 fightAI+自动模式；仅远端 FightActive=false 且当前引用是 fightAI 才切回 baseAI，不覆写其它 AI 展示引用。新基线 NativeMapReplicator.cs 已备份，同一个本轮 patch 已含两个文件全部窄差异；V1.40 共用，源码冻结等主控 BuildOnly。未做测试或实机验收。

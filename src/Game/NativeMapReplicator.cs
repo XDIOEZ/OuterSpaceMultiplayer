@@ -36,6 +36,7 @@ namespace FreeWorldMultiplayer
             public bool Loop;
             public bool IsAttack;
             public long TargetUid = -1;
+            public bool? FightActive, FightManual;
         }
         internal sealed class Delta
         {
@@ -48,6 +49,7 @@ namespace FreeWorldMultiplayer
         }
         internal sealed class TileChange { public int X, Y; public string Ground; }
         private readonly GameBridge bridge;
+        private static readonly FieldInfo ReplicaRunAi = typeof(BaseRole).GetField("runAI", BindingFlags.Instance | BindingFlags.NonPublic);
         private readonly Dictionary<long, long> revisions = new Dictionary<long, long>();
         private readonly Dictionary<long, HashSet<long>> knownHeroes = new Dictionary<long, HashSet<long>>();
         private readonly Dictionary<long, HashSet<long>> knownAnimals = new Dictionary<long, HashSet<long>>();
@@ -182,10 +184,15 @@ namespace FreeWorldMultiplayer
             if (bridge.CurrentMapId == mapId && MapManager.instance != null)
                 foreach (BaseRole hero in MapManager.instance.heroManager.getAllRoles().Cast<BaseRole>()
                     .Concat(MapManager.instance.animalManager.getAnimals()).Concat(MapManager.instance.monsterManager.monsters))
+                {
+                    AI_BaseFight fight = hero.getAIbyType(AI_Base.AI_TYPE.战斗) as AI_BaseFight;
                     delta.Poses.Add(new Pose { Uid = hero.getUID(), X = hero.transform.localPosition.x, Y = hero.transform.localPosition.y,
                         Z = hero.transform.localPosition.z, Direction = hero.mod_Move.forwardDir, Animation = hero.roleAnim.playIndex,
                         Loop = hero.roleAnim.loop, IsAttack = hero.roleAnim.isAttackAction(),
-                        TargetUid = hero.roleAnim.target == null ? -1 : hero.roleAnim.target.getUID() });
+                        TargetUid = hero.roleAnim.target == null ? -1 : hero.roleAnim.target.getUID(),
+                        FightActive = fight == null ? (bool?)null : hero.getRunAI() == fight,
+                        FightManual = fight == null ? (bool?)null : fight.isFightMode(AI_BaseFight.FightMode.手动) });
+                }
             long revision = checked(previous.Revision + 1); revisions[mapId] = revision; next.Revision = revision;
             return new MapUpdate { MapId = mapId, BaseRevision = previous.Revision, Revision = revision,
                 NativeDeltaJson = NativeWire.Json(delta), Checkpoint = next,
@@ -468,6 +475,7 @@ namespace FreeWorldMultiplayer
         {
             BaseRole hero = SceneObject(pose.Uid) as BaseRole;
             if (hero == null) throw new InvalidOperationException("Pose references missing character.");
+            ApplyFightPresentation(hero, pose);
             if (hero.cellX != hero.roleBean.cellX || hero.cellY != hero.roleBean.cellY)
             {
                 MapGrid.getGridNode(hero.cellX, hero.cellY).removeCrops(hero);
@@ -498,6 +506,18 @@ namespace FreeWorldMultiplayer
                 animal.target = pose.TargetUid == -1 ? null : SceneObject(pose.TargetUid);
                 if (pose.Animation >= 0) animal.doAction(pose.Animation, pose.Direction, pose.Loop ? -1 : 1, !pose.Loop);
             }
+        }
+        private void ApplyFightPresentation(BaseRole role, Pose pose)
+        {
+            if (bridge.IsSimulator || !pose.FightActive.HasValue || !pose.FightManual.HasValue) return;
+            AI_BaseFight fight = role.getAIbyType(AI_Base.AI_TYPE.战斗) as AI_BaseFight;
+            if (fight == null) return;
+            if (ReplicaRunAi == null) throw new MissingFieldException(typeof(BaseRole).FullName, "runAI");
+            // Native UI reads the live AI reference/mode. Project these fields only;
+            // setRunAI/doFightMode would activate AI and interrupt replica tasks.
+            fight.setFightMode(pose.FightManual.Value ? AI_BaseFight.FightMode.手动 : AI_BaseFight.FightMode.自动);
+            if (pose.FightActive.Value) ReplicaRunAi.SetValue(role, fight);
+            else if (ReferenceEquals(role.getRunAI(), fight)) ReplicaRunAi.SetValue(role, role.baseAI);
         }
         public void Dispose() { revisions.Clear(); knownHeroes.Clear(); knownAnimals.Clear(); }
     }

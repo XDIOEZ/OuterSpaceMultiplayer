@@ -269,3 +269,7 @@
 ### fleet-intercept-20261019 — 本地提交完成与最终释放
 - 功能提交 c65503d 已完成，仅本轮17文件（含完整本轮源码增量patch），其余历史dirty/untracked保留，未push。V1.39三端安装回执已交付，上述SourceRevision与安装状态不变。
 - 本轮功能源码、版本、统一构建和Git index在本交接记录提交结束后全部释放。地表主控可只提交自己的报告收口；未执行游戏或联机验收。详见 docs/reports/舰队拦截迎战与逃跑-20261019.md。
+
+### guest-conscript-20261019 — 源码交付与后续统一构建
+- V1.40完成征召执行参数与非模拟端显示投影；两个旧dirty源码仅HEAD等效窄提交，工作树特有SamePose比较接线见 docs/patches/guest-conscript-20261019.patch。说明 docs/reports/客机解除征召修复-20261019.md。
+- 已读反馈UI的VisualTheme未闭合依赖。P3编译完成、Steam编译后被SourceRevision保护停止，未到TapTap，不安装/测试/运行。后续统一构建须包含当前完整工作树，保留历史dirty。本轮提交完成后释放版本/index/构建，feedback-errors接续下一版本。
