@@ -102,7 +102,7 @@ namespace FreeWorldMultiplayer
         {
             FWStarMapInfo map;
             if (!bridge.Maps.TryGetValue(mapId, out map)) throw new InvalidOperationException("Unknown shared map " + mapId);
-            var native = new Checkpoint { Map = NativeWire.Pack(map), Heroes = Heroes(mapId).Select(NativeWire.Pack).ToList(), Animals = Animals(mapId).Select(NativeWire.Pack).ToList() };
+            var native = new Checkpoint { Map = NativeMapPlanBaseline.PackCommittedMap(map, bridge.CurrentMapId == mapId && MapManager.instance != null), Heroes = Heroes(mapId).Select(NativeWire.Pack).ToList(), Animals = Animals(mapId).Select(NativeWire.Pack).ToList() };
             HashSet<long> heroIds, animalIds;
             if (!knownHeroes.TryGetValue(mapId, out heroIds)) knownHeroes[mapId] = heroIds = new HashSet<long>();
             if (!knownAnimals.TryGetValue(mapId, out animalIds)) knownAnimals[mapId] = animalIds = new HashSet<long>();
@@ -114,7 +114,10 @@ namespace FreeWorldMultiplayer
             native.Landings = bridge.CaptureNativeLandings(mapId);
             var result = new MapSnapshot { MapId = mapId, NativeJson = NativeWire.Json(native) };
             long revision; if (revisions.TryGetValue(mapId, out revision)) result.Revision = revision;
-            foreach (FWBaseBean bean in Beans(map.starSpread).Concat<FWBaseBean>(Heroes(mapId)).Concat(Animals(mapId)))
+            IEnumerable<FWBaseBean> mapBeans = Beans(map.starSpread);
+            if (bridge.CurrentMapId == mapId && MapManager.instance != null && NativeMapPlanBaseline.HasDraft)
+                mapBeans = mapBeans.Where(bean => !(bean is FWPlanBean)).Concat<FWBaseBean>(NativeMapPlanBaseline.CommittedPlans(map.starSpread));
+            foreach (FWBaseBean bean in mapBeans.Concat<FWBaseBean>(Heroes(mapId)).Concat(Animals(mapId)))
             {
                 if (bean is FWThingBean) continue; // Stock follows its map/bag/carrier, never an immutable employee owner.
                 string owner = bridge.Context.OwnerOfEntity(NativeWire.Uid(bean));
@@ -132,13 +135,15 @@ namespace FreeWorldMultiplayer
             }
             return result;
         }
-        private Dictionary<string, IList> Collections(FWStarMapInfo map, Checkpoint checkpoint)
+        private Dictionary<string, IList> Collections(FWStarMapInfo map, Checkpoint checkpoint, bool committedPlans = true)
         {
             var result = new Dictionary<string, IList>();
             foreach (string name in Managers.Keys)
             {
                 if (name == "heroes") result.Add(name, checkpoint == null ? Heroes(map.starMapId).ToList() : checkpoint.Heroes.Select(NativeWire.Unpack<FWHeroBean>).ToList());
                 else if (name == "ownedAnimals") result.Add(name, checkpoint == null ? Animals(map.starMapId).ToList() : checkpoint.Animals.Select(NativeWire.Unpack<FWAnimalBean>).ToList());
+                else if (name == "plans" && checkpoint == null && committedPlans && bridge.CurrentMapId == map.starMapId && MapManager.instance != null)
+                    result.Add(name, NativeMapPlanBaseline.CommittedPlans(map.starSpread));
                 else result.Add(name, (IList)NativeWire.Get(map.starSpread, name));
             }
             return result;
@@ -244,9 +249,12 @@ namespace FreeWorldMultiplayer
             if (revision == update.Revision) return;
             if (revision != update.BaseRevision) throw new InvalidOperationException("Native delta baseline mismatch; require acknowledged full checkpoint.");
             Delta delta = NativeWire.Parse<Delta>(update.NativeDeltaJson);
+            // GameBridge validated every map/personal field before this application phase.
+            if (bridge.CurrentMapId == update.MapId && MapManager.instance != null && delta.Entities.Any(change => change.Collection == "plans"))
+                NativeMapPlanBaseline.ClearDraft();
             foreach (var owner in update.EntityOwners) bridge.Context.RegisterEntityOwner(owner.Key, owner.Value);
             bool visible = bridge.CurrentMapId == update.MapId && MapManager.instance != null;
-            var lists = Collections(map, null);
+            var lists = Collections(map, null, false);
             foreach (EntityChange change in delta.Entities)
             {
                 IList list;
@@ -286,7 +294,7 @@ namespace FreeWorldMultiplayer
                 {
                     if (previous == null) throw new InvalidOperationException("Updating absent native entity.");
                     NativeWire.Copy(next, previous);
-                    if (visible) RefreshScene(change.Collection, (FWBaseBean)previous);
+                    if (visible) using (NativeMapProjectionGuard.Enter()) RefreshScene(change.Collection, (FWBaseBean)previous);
                 }
                 else throw new InvalidOperationException("Unrecognized entity operation.");
             }
@@ -327,7 +335,10 @@ namespace FreeWorldMultiplayer
                 if (change.Operation == "create" ? previous != null : previous == null)
                 {
                     long current; revisions.TryGetValue(update.MapId, out current);
-                    if (current != update.Revision) throw new InvalidOperationException("Entity mutation baseline mismatch.");
+                    if (current != update.Revision) throw new InvalidOperationException("Entity mutation baseline mismatch: map=" + update.MapId
+                        + ", collection=" + change.Collection + ", identity=uid:" + change.Uid + ", operation=" + change.Operation
+                        + ", present=" + (previous != null) + ", base=" + update.BaseRevision + ", current=" + current
+                        + ", target=" + update.Revision + ", epoch=" + update.AuthorityEpoch + ", commit=" + update.CommitId);
                 }
                 if (change.Operation != "delete" || !string.IsNullOrEmpty(change.Bean))
                 {
@@ -423,9 +434,12 @@ namespace FreeWorldMultiplayer
         }
         private void SceneMutation(string collection, object bean, bool add)
         {
-            string[] spec = Managers[collection];
-            if (collection == "plants" && !add) NativeWire.Call(MapManager.instance.plantManager, "removePlant", bean, false);
-            else NativeWire.Call(NativeWire.Get(MapManager.instance, spec[0]), spec[add ? 1 : 2], bean);
+            using (NativeMapProjectionGuard.Enter())
+            {
+                string[] spec = Managers[collection];
+                if (collection == "plants" && !add) NativeWire.Call(MapManager.instance.plantManager, "removePlant", bean, false);
+                else NativeWire.Call(NativeWire.Get(MapManager.instance, spec[0]), spec[add ? 1 : 2], bean);
+            }
         }
         internal SpriteObject SceneObject(long uid)
         {

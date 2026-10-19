@@ -1,0 +1,229 @@
+diff --git a/src/Game/NativeMapReplicator.cs b/src/Game/NativeMapReplicator.cs
+index b704023..cb17704 100644
+--- a/src/Game/NativeMapReplicator.cs
++++ b/src/Game/NativeMapReplicator.cs
+@@ -222,7 +222,7 @@ namespace FreeWorldMultiplayer
+         {
+             FWStarMapInfo map;
+             if (!bridge.Maps.TryGetValue(mapId, out map)) throw new InvalidOperationException("Unknown shared map " + mapId);
+-            var native = new Checkpoint { Map = NativeWire.Pack(map), Heroes = Heroes(mapId).Select(NativeWire.Pack).ToList(), Animals = Animals(mapId).Select(NativeWire.Pack).ToList() };
++            var native = new Checkpoint { Map = NativeMapPlanBaseline.PackCommittedMap(map, bridge.IsMapReady(mapId)), Heroes = Heroes(mapId).Select(NativeWire.Pack).ToList(), Animals = Animals(mapId).Select(NativeWire.Pack).ToList() };
+             HashSet<long> heroIds, animalIds;
+             if (!knownHeroes.TryGetValue(mapId, out heroIds)) knownHeroes[mapId] = heroIds = new HashSet<long>();
+             if (!knownAnimals.TryGetValue(mapId, out animalIds)) knownAnimals[mapId] = animalIds = new HashSet<long>();
+@@ -262,7 +262,10 @@ namespace FreeWorldMultiplayer
+         private Dictionary<long, string> CaptureOwners(long mapId, FWStarMapInfo map)
+         {
+             var owners = new Dictionary<long, string>();
+-            foreach (FWBaseBean bean in Beans(map.starSpread).Concat<FWBaseBean>(Heroes(mapId)).Concat(Animals(mapId)))
++            IEnumerable<FWBaseBean> mapBeans = Beans(map.starSpread);
++            if (bridge.IsMapReady(mapId) && NativeMapPlanBaseline.HasDraft)
++                mapBeans = mapBeans.Where(bean => !(bean is FWPlanBean)).Concat<FWBaseBean>(NativeMapPlanBaseline.CommittedPlans(map.starSpread));
++            foreach (FWBaseBean bean in mapBeans.Concat<FWBaseBean>(Heroes(mapId)).Concat(Animals(mapId)))
+             {
+                 if (bean is FWThingBean) continue; // Stock follows its map/bag/carrier, never an immutable employee owner.
+                 string owner = bridge.Context.OwnerOfEntity(NativeWire.Uid(bean));
+@@ -287,6 +290,8 @@ namespace FreeWorldMultiplayer
+             {
+                 if (name == "heroes") result.Add(name, checkpoint == null ? Heroes(map.starMapId).ToList() : checkpoint.Heroes.Select(NativeWire.Unpack<FWHeroBean>).ToList());
+                 else if (name == "ownedAnimals") result.Add(name, checkpoint == null ? Animals(map.starMapId).ToList() : checkpoint.Animals.Select(NativeWire.Unpack<FWAnimalBean>).ToList());
++                else if (name == "plans" && checkpoint == null && bridge.IsMapReady(map.starMapId))
++                    result.Add(name, NativeMapPlanBaseline.CommittedPlans(map.starSpread));
+                 else result.Add(name, (IList)NativeWire.Get(map.starSpread, name));
+             }
+             return result;
+@@ -482,6 +487,22 @@ namespace FreeWorldMultiplayer
+             if (prepared == null || !ReferenceEquals(prepared.Update, update) || !ReferenceEquals(prepared.Map, map))
+                 throw new InvalidOperationException("Native delta must use its own immediate validation result.");
+             Delta delta = prepared.Delta;
++            if (bridge.IsMapReady(update.MapId) && prepared.Entities.Any(entity => entity.Change.Collection == "plans"))
++            {
++                NativeMapPlanBaseline.ClearDraft();
++                // Validation used the committed view. CacheClear restores native originals;
++                // bind the application to those real list objects without decoding again.
++                var plans = map.starSpread.plans.ToDictionary(plan => EntityKey("plans", plan));
++                foreach (PreparedEntity entity in prepared.Entities.Where(entity => entity.Change.Collection == "plans"))
++                {
++                    FWPlanBean previous; plans.TryGetValue(EntityKey(entity.Change), out previous);
++                    if (entity.Change.Operation == "create" ? previous != null : previous == null)
++                        throw new InvalidOperationException("Committed native plan changed after validation: " + EntityKey(entity.Change));
++                    if (previous != null && entity.Next != null && previous.GetType() != entity.Next.GetType())
++                        throw new InvalidOperationException("Committed native plan subtype changed after validation.");
++                    entity.List = map.starSpread.plans; entity.Previous = previous;
++                }
++            }
+             captureBaselines.Remove(update.MapId);
+             foreach (var owner in update.EntityOwners) bridge.Context.RegisterEntityOwner(owner.Key, owner.Value);
+             bool visible = bridge.IsMapReady(update.MapId);
+@@ -539,7 +560,7 @@ namespace FreeWorldMultiplayer
+                         if (movedElement) SceneMutation(change.Collection, previous, false);
+                         NativeWire.Copy(next, previous);
+                         if (movedElement) SceneMutation(change.Collection, previous, true);
+-                        if (visible) RefreshScene(change.Collection, (FWBaseBean)previous, equipmentChanged, carryChanged);
++                        if (visible) using (NativeMapProjectionGuard.Enter()) RefreshScene(change.Collection, (FWBaseBean)previous, equipmentChanged, carryChanged);
+                     }
+                 }
+                 else throw new InvalidOperationException("Unrecognized entity operation.");
+@@ -600,7 +621,10 @@ namespace FreeWorldMultiplayer
+                 if (change.Operation == "create" ? previous != null : previous == null)
+                 {
+                     long current; revisions.TryGetValue(update.MapId, out current);
+-                    if (current != update.Revision) throw new InvalidOperationException("Entity mutation baseline mismatch.");
++                    if (current != update.Revision) throw new InvalidOperationException("Entity mutation baseline mismatch: map=" + update.MapId
++                        + ", collection=" + change.Collection + ", identity=" + key + ", operation=" + change.Operation
++                        + ", present=" + (previous != null) + ", base=" + update.BaseRevision + ", current=" + current
++                        + ", target=" + update.Revision + ", epoch=" + update.AuthorityEpoch + ", commit=" + update.CommitId);
+                 }
+                 object decoded = null;
+                 if (change.Operation != "delete" || !string.IsNullOrEmpty(change.Bean))
+@@ -609,7 +633,7 @@ namespace FreeWorldMultiplayer
+                     if (EntityKey(change.Collection, decoded) != key) throw new InvalidOperationException("Entity native identity mismatch.");
+                     if (previous != null && previous.GetType() != decoded.GetType()) throw new InvalidOperationException("Entity subtype changed in-place.");
+                 }
+-                prepared.Entities.Add(new PreparedEntity { Change = change, List = list, Previous = previous, Next = decoded });
++                prepared.Entities.Add(new PreparedEntity { Change = change, List = change.Collection == "plans" ? (IList)map.starSpread.plans : list, Previous = previous, Next = decoded });
+             }
+             foreach (FieldChange change in delta.Fields)
+             {
+@@ -705,12 +729,15 @@ namespace FreeWorldMultiplayer
+         }
+         private void SceneMutation(string collection, object bean, bool add)
+         {
+-            string[] spec = Managers[collection];
+-            if (IsGroundContainer(collection) && !add) RemoveGroundContainerProjection(collection, (FWCellUidItem)bean);
+-            else if (collection == "plants" && !add) NativeWire.Call(MapManager.instance.plantManager, "removePlant", bean, false);
+-            else NativeWire.Call(NativeWire.Get(MapManager.instance, spec[0]), spec[add ? 1 : 2], bean);
+-            if (add && IsGroundContainer(collection) && GroundContainerObject(NativeWire.Uid(bean)) == null)
+-                throw new InvalidOperationException("Native container manager did not project the committed entity: " + NativeWire.Uid(bean));
++            using (NativeMapProjectionGuard.Enter())
++            {
++                string[] spec = Managers[collection];
++                if (IsGroundContainer(collection) && !add) RemoveGroundContainerProjection(collection, (FWCellUidItem)bean);
++                else if (collection == "plants" && !add) NativeWire.Call(MapManager.instance.plantManager, "removePlant", bean, false);
++                else NativeWire.Call(NativeWire.Get(MapManager.instance, spec[0]), spec[add ? 1 : 2], bean);
++                if (add && IsGroundContainer(collection) && GroundContainerObject(NativeWire.Uid(bean)) == null)
++                    throw new InvalidOperationException("Native container manager did not project the committed entity: " + NativeWire.Uid(bean));
++            }
+         }
+         internal SpriteObject SceneObject(long uid)
+         {
+diff --git a/src/Game/NativeMapPlanBaseline.cs b/src/Game/NativeMapPlanBaseline.cs
+new file mode 100644
+index 0000000..9d9594c
+--- /dev/null
++++ b/src/Game/NativeMapPlanBaseline.cs
+@@ -0,0 +1,70 @@
++using System;
++using System.Collections;
++using System.Collections.Generic;
++using System.Linq;
++using System.Reflection;
++
++namespace FreeWorldMultiplayer
++{
++    // Native editing temporarily removes/changes committed plans before the UI submits
++    // its command. Network baselines must describe the committed plans, not that draft.
++    internal static class NativeMapPlanBaseline
++    {
++        private static readonly FieldInfo NewPlans = RequiredCache("newPlans");
++        private static readonly FieldInfo RemovedPlans = RequiredCache("removeOldPlans");
++
++        private static FieldInfo RequiredCache(string name)
++        {
++            FieldInfo field = typeof(LocalCoreHandle).GetField(name, BindingFlags.Static | BindingFlags.NonPublic);
++            if (field == null) throw new MissingFieldException(typeof(LocalCoreHandle).FullName, name);
++            return field;
++        }
++
++        private static IEnumerable<RolePlan> Cached(FieldInfo field)
++        { return ((IEnumerable)field.GetValue(null)).Cast<RolePlan>(); }
++
++        internal static bool HasDraft
++        {
++            get { return Cached(NewPlans).Any() || Cached(RemovedPlans).Any() || LocalCoreHandle.updateOldPlans.Count != 0; }
++        }
++
++        internal static List<FWPlanBean> CommittedPlans(UserFWStarSpread spread)
++        {
++            if (!HasDraft) return spread.plans;
++            var plans = new List<FWPlanBean>(spread.plans);
++            var restored = new HashSet<long>();
++            foreach (RolePlan removed in Cached(RemovedPlans))
++            {
++                FWPlanBean original = removed.planBean;
++                foreach (var changed in LocalCoreHandle.updateOldPlans)
++                    if (ReferenceEquals(changed.Item1, removed)) { original = changed.Item2; break; }
++                plans.RemoveAll(plan => plan.getUID() == original.getUID());
++                plans.Add(original); restored.Add(original.getUID());
++            }
++            foreach (var changed in LocalCoreHandle.updateOldPlans)
++            {
++                FWPlanBean original = changed.Item2;
++                if (restored.Contains(original.getUID())) continue;
++                plans.RemoveAll(plan => plan.getUID() == original.getUID());
++                plans.Add(original);
++            }
++            return plans;
++        }
++
++        internal static string PackCommittedMap(FWStarMapInfo map, bool currentReady)
++        {
++            if (!currentReady || !HasDraft) return NativeWire.Pack(map);
++            List<FWPlanBean> draftPlans = map.starSpread.plans;
++            map.starSpread.plans = CommittedPlans(map.starSpread);
++            try { return NativeWire.Pack(map); }
++            finally { map.starSpread.plans = draftPlans; }
++        }
++
++        internal static void ClearDraft()
++        {
++            // Called only after the whole transaction preflight succeeded. Clearing the
++            // native caches now prevents a later UI cancel from resurrecting an old plan.
++            if (HasDraft) using (NativeMapProjectionGuard.Enter()) LocalCoreHandle.Plan_CacheClear_LN();
++        }
++    }
++}
+diff --git a/src/Game/NativeMapProjectionGuard.cs b/src/Game/NativeMapProjectionGuard.cs
+new file mode 100644
+index 0000000..45acb28
+--- /dev/null
++++ b/src/Game/NativeMapProjectionGuard.cs
+@@ -0,0 +1,38 @@
++using System;
++using System.Reflection;
++using HarmonyLib;
++
++namespace FreeWorldMultiplayer
++{
++    internal static class NativeMapProjectionGuard
++    {
++        [ThreadStatic] private static int depth;
++
++        internal static void Install(Harmony harmony)
++        {
++            MethodInfo removePlan = AccessTools.Method(typeof(PlanManager), "removePlan", new[] { typeof(FWPlanBean), typeof(bool) });
++            if (removePlan == null) throw new MissingMethodException(typeof(PlanManager).FullName, "removePlan(FWPlanBean, bool)");
++            harmony.Patch(removePlan, prefix: new HarmonyMethod(typeof(NativeMapProjectionGuard), nameof(KeepReplicaTasksPassive)));
++            foreach (MethodInfo method in typeof(Stub_PlanRemove).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
++                if (method.ReturnType == typeof(void) && !method.IsGenericMethodDefinition)
++                    harmony.Patch(method, prefix: new HarmonyMethod(typeof(NativeMapProjectionGuard), nameof(AllowPlanSideEffects)));
++        }
++
++        private static bool AllowPlanSideEffects() { return depth == 0; }
++        private static void KeepReplicaTasksPassive(ref bool __1)
++        {
++            // Interrupting a replica's stale AI can return carried materials/create plans.
++            // Those persistent effects arrive in the simulator's transaction instead.
++            if (depth != 0) __1 = false;
++        }
++
++        internal static IDisposable Enter() { return new Scope(); }
++
++        private sealed class Scope : IDisposable
++        {
++            private bool disposed;
++            internal Scope() { depth++; }
++            public void Dispose() { if (!disposed) { disposed = true; depth--; } }
++        }
++    }
++}

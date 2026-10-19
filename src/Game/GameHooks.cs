@@ -24,6 +24,7 @@ namespace FreeWorldMultiplayer
             KnockedOut.Clear();
             NativeGroundPersonnelHooks.Install(harmony);
             NativeGroundInteraction.Install(harmony);
+            NativeMapProjectionGuard.Install(harmony);
             Patch(harmony, typeof(FWGameData), "createUID", "UidPrefix");
             Patch(harmony, typeof(FWUidCounter), "nextUid", "UidPrefix");
             Patch(harmony, typeof(FWUidItem), "createUID", "UidItemPrefix");
