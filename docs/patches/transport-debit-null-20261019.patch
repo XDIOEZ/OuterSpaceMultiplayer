@@ -1,0 +1,20 @@
+diff --git a/src/Game/NativeTransfers.cs b/src/Game/NativeTransfers.cs
+index cea7fdf..5dfa10f 100644
+--- a/src/Game/NativeTransfers.cs
++++ b/src/Game/NativeTransfers.cs
+@@ -85,10 +85,13 @@ namespace FreeWorldMultiplayer
+         private void DebitTransportItem(IList<FWThingBean> inventory, FWThingBean item, int count)
+         {
+             if (count < 1 || item.getSum() < count) throw new InvalidOperationException("运输提交时库存发生变化：" + item.getUID());
++            // Unvisited map metadata can have no starSpread. Only the active inventory
++            // needs native removal to update its runtime objects and map events.
++            UserFWStarSpread currentMap = UserBean.getInstance().curStarMap;
++            bool removeFromCurrentMap = currentMap != null && ReferenceEquals(currentMap.things, inventory) && MapManager.instance != null;
+             item.setSum(item.getSum() - count);
+             if (item.getSum() != 0) return;
+-            FWStarMapInfo map = Maps.Values.FirstOrDefault(m => ReferenceEquals(m.starSpread.things, inventory));
+-            if (map != null && CurrentMapId == map.starMapId && MapManager.instance != null) map.starSpread.removeThing(item);
++            if (removeFromCurrentMap) currentMap.removeThing(item);
+             else inventory.Remove(item);
+         }
+         // The expedition is the only cargo carrier. NativeCargoJson contains references and completion,
