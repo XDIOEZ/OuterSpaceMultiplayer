@@ -228,3 +228,12 @@
 - 首次新玩家首存失败锁定房间，旧记录绑定失败回滚，Steam连接失效直接拒绝不降级。所有源码现冻结；host-airdrop的Tick catch窄改已保留。
 - Git保留历史dirty/untracked：tracked按HEAD等效行为窄暂存，原工作树完整本轮差异另存docs/patches/identity-auto-restore-20261019.patch；原untracked LobbyPages不整份认领。
 - 本轮不安装/测试/游戏，后续统一BuildOnly由最后整合主控执行；本轮窄提交结束即释放源码/版本/CHANGELOG/index/构建。详见docs/reports/Steam账号自动恢复身份-20261019.md。
+
+### host-airdrop-freeze-20261019 / 主控 /root
+- 范围：调查 V1.39 客人落地工作后房主空投卡死；airdrop_logs 子 Agent 只读定位日志，后续功能子 Agent 定点修复。主控负责窄整合、版本与本地提交。
+- 保留所有已有 dirty，尤其 guest-conscript V1.40；不修改本体，不启动游戏或测试。先取本次 Steam/TapTap 诊断证据，再登记精确功能文件；若存在并行版本/构建占用，采用后续统一安装边界。
+
+### host-airdrop-freeze-20261019 / 交付与释放
+- V1.44诊断补丁源码冻结：MultiplayerSession Tick阶段/原异常、Commands运输确认6阶段/关键错误、新SessionFaultDiagnostics独立故障去重与每10秒一次gift等待状态。已保留原始双端日志与备份；调查报告 docs/reports/空投卡停调查与诊断补齐-20261019.md、完整当前工作树patch docs/patches/host-airdrop-freeze-20261019.patch。
+- 本次业务卡停尚未定位，不改变扣源、模拟权、屏障或资产规则。用户明确验证自行执行，本轮不编译、测试、启动或安装；不能引用V1.41等旧构建回执代表当前版本。
+- 历史dirty全部保留，只暂存本轮可分离增量+完整patch；本地提交 fix: preserve transport submission and session fault diagnostics 完成即释放全部源码、版本、index/构建。不push。后续统一更新双方后按原步骤复现，查transport-submit/session-fault/gift-checkpoint-wait。

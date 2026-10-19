@@ -229,6 +229,7 @@ namespace FreeWorldMultiplayer
             }
             if (closing) { TickClosing(seconds); return; }
             if (!IsConnected || World == null || nativeFault != null) return;
+            string tickStage = "session.tick";
             try
             {
                 if (!IsHost && checkpointCommands.Count != 0 && inFlightUpdates.Count == 0 && personalInFlight.Count == 0)
@@ -251,21 +252,26 @@ namespace FreeWorldMultiplayer
                 {
                     if (!Paused)
                     {
+                        tickStage = "world.advance";
                         Require(bridge.AdvanceWorld(seconds, Speed, World.Players.Values.Where(x => x.Online).Select(x => x.PlayerId).ToList()), "房主世界推进");
                         World.WorldTimeMM = bridge.WorldTimeMM;
                         World.RoomRealSeconds += seconds;
+                        tickStage = "transfers.advance";
                         AdvanceTransfers();
                         foreach (MapRecord map in World.Maps.Values) map.RaidCooldownSeconds = Math.Max(0, map.RaidCooldownSeconds - seconds);
+                        tickStage = "attacks.advance";
                         AdvanceAttackTimers(seconds);
                         offlineElapsed += seconds;
                         if (offlineElapsed >= 5)
                         {
                             offlineElapsed = 0;
+                            tickStage = "maps.offline";
                             foreach (MapRecord map in World.Maps.Values.ToList()) if (map.Mode == MapMode.Offline) SettleOffline(map);
                         }
                     }
                     autosaveElapsed += seconds;
-                    if (autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; Save(); }
+                    if (autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; tickStage = "save.autosave"; Save(); }
+                    tickStage = "galaxy.broadcast";
                     galaxyElapsed += seconds;
                     if (galaxyElapsed >= 0.5)
                     {
@@ -277,7 +283,12 @@ namespace FreeWorldMultiplayer
                     }
                 }
                 syncElapsed += seconds;
-                if (syncElapsed >= Math.Max(0.1, World.Options.MapSyncSeconds)) { syncElapsed = 0; PublishLocalMaps(); PublishPersonalUpdates(); }
+                if (syncElapsed >= Math.Max(0.1, World.Options.MapSyncSeconds))
+                {
+                    syncElapsed = 0; tickStage = "maps.publish"; PublishLocalMaps();
+                    tickStage = "personal.publish"; PublishPersonalUpdates();
+                }
+                tickStage = "checkpoint.final";
                 if (finalCheckpointRequested && FinalCheckpointGate.TryPublishAndConfirm(
                     () => inFlightUpdates.Count != 0 || personalInFlight.Count != 0 || checkpointCommands.Count != 0,
                     () => PublishLocalMaps(),
@@ -289,7 +300,7 @@ namespace FreeWorldMultiplayer
                     finalCheckpointRequested = false;
                 }
             }
-            catch (Exception ex) { Paused = true; Error("联机推进已暂停，保留现场：" + ex.Message); }
+            catch (Exception ex) { Paused = true; ReportSessionFault(tickStage, ex); Error("联机推进已暂停，保留现场：" + ex.Message); }
         }
         public void SetClock(bool paused, double speed)
         {

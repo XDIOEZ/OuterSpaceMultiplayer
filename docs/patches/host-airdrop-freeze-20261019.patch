@@ -1,0 +1,213 @@
+--- a/src/Session/MultiplayerSession.cs
++++ b/src/Session/MultiplayerSession.cs
+@@ -368,11 +368,12 @@
+             try
+             {
+                 TickPlayerFleetBattles(seconds);
+-                if (IsConnected && !IsHost && World != null) TickGiftFlushes();
++                if (IsConnected && !IsHost && World != null) { TickGiftFlushes(); TickGiftFlushDiagnostics(seconds); }
+             }
+             catch (Exception error) { Paused = true; ReportInteractionFault("interaction.tick", error); Error("玩家交互推进已暂停，保留现场：" + error); }
+             if (closing) { TickClosing(seconds); return; }
+             if (!IsConnected || World == null || nativeFault != null) return;
++            string tickStage = "session.tick";
+             try
+             {
+                 if (!HasMapLoadingBarrier && checkpointCommands.Count != 0 && inFlightUpdates.Count == 0 && personalInFlight.Count == 0)
+@@ -382,6 +383,7 @@
+                     GameCommand queued = checkpointCommands.Dequeue();
+                     Submit(queued);
+                 }
++                tickStage = "authority.ready";
+                 TickLocalAuthorityReady();
+                 RestoreMapLoadingClock();
+                 heartbeatElapsed += seconds;
+@@ -391,21 +393,26 @@
+                 {
+                     if (!Paused)
+                     {
++                        tickStage = "world.advance";
+                         Require(bridge.AdvanceWorld(seconds, Speed, World.Players.Values.Where(x => x.Online).Select(x => x.PlayerId).ToList()), "房主世界推进");
+                         World.WorldTimeMM = bridge.WorldTimeMM;
+                         World.RoomRealSeconds += seconds;
++                        tickStage = "transfers.advance";
+                         AdvanceTransfers();
+                         foreach (MapRecord map in World.Maps.Values) map.RaidCooldownSeconds = Math.Max(0, map.RaidCooldownSeconds - seconds);
++                        tickStage = "attacks.advance";
+                         AdvanceAttackTimers(seconds);
+                         offlineElapsed += seconds;
+                         if (offlineElapsed >= 5)
+                         {
+                             offlineElapsed = 0;
++                            tickStage = "maps.offline";
+                             foreach (MapRecord map in World.Maps.Values.ToList()) if (map.Mode == MapMode.Offline) SettleOffline(map);
+                         }
+                     }
+                     autosaveElapsed += seconds;
+-                    if (autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; Save(); }
++                    if (autosaveElapsed >= Math.Max(10, World.Options.AutoSaveSeconds)) { autosaveElapsed = 0; tickStage = "save.autosave"; Save(); }
++                    tickStage = "galaxy.broadcast";
+                     galaxyElapsed += seconds;
+                     if (galaxyElapsed >= 0.5)
+                     {
+@@ -428,7 +435,12 @@
+                     }
+                 }
+                 syncElapsed += seconds;
+-                if (syncElapsed >= Math.Max(0.1, World.Options.MapSyncSeconds)) { syncElapsed = 0; PublishLocalMaps(); PublishPersonalUpdates(); }
++                if (syncElapsed >= Math.Max(0.1, World.Options.MapSyncSeconds))
++                {
++                    syncElapsed = 0; tickStage = "maps.publish"; PublishLocalMaps();
++                    tickStage = "personal.publish"; PublishPersonalUpdates();
++                }
++                tickStage = "checkpoint.final";
+                 if (finalCheckpointRequested && FinalCheckpointGate.TryPublishAndConfirm(
+                     () => inFlightUpdates.Count != 0 || personalInFlight.Count != 0 || checkpointCommands.Count != 0,
+                     () => PublishLocalMaps(),
+@@ -440,7 +452,7 @@
+                     finalCheckpointRequested = false;
+                 }
+             }
+-            catch (Exception ex) { Paused = true; Error("联机推进已暂停，保留现场：" + ex.Message); }
++            catch (Exception ex) { Paused = true; ReportSessionFault(tickStage, ex); Error("联机推进已暂停，保留现场：" + ex.Message); }
+         }
+         public void SetClock(bool paused, double speed)
+         {
+--- a/src/Session/Commands.cs
++++ b/src/Session/Commands.cs
+@@ -67,8 +67,10 @@
+                 criticalNativeStarted = false;
+                 if (IsCritical(command.Kind) || command.Kind == CommandKind.EnterMap || command.Kind == CommandKind.LeaveMap)
+                 {
++                    TraceTransportSubmission("checkpoint.begin", command);
+                     PublishLocalMaps(true);
+                     PublishPersonalUpdates(true);
++                    TraceTransportSubmission("checkpoint.end", command);
+                 }
+                 CommandResult result;
+                 switch (command.Kind)
+@@ -100,7 +102,10 @@
+                     case CommandKind.Relation:
+                         ChangeRelation(actor.PlayerId, command.TargetPlayerId, JsonData.Read<RelationRequest>(command.PayloadJson).Relation);
+                         result = CommandResult.Ok(command.CommandId); break;
+-                    case CommandKind.DepartTransfer: result = Depart(command); break;
++                    case CommandKind.DepartTransfer:
++                        TraceTransportSubmission("departure.begin", command);
++                        result = Depart(command);
++                        TraceTransportSubmission("departure.end", command); break;
+                     case CommandKind.ArriveTransfer: result = CompleteTransfer(command, false); break;
+                     case CommandKind.CancelTransfer: result = CompleteTransfer(command, true); break;
+                     case CommandKind.StartRaid: result = StartAttack(command); break;
+@@ -118,13 +123,15 @@
+                 World.Transactions[key] = result;
+                 if (result.Applied && IsCritical(command.Kind))
+                 {
+-                    try { SaveOrThrow(); }
++                    TraceTransportSubmission("save.begin", command);
++                    try { SaveOrThrow(); TraceTransportSubmission("save.end", command); }
+                     catch (Exception ex) { return PendingSave(result, ex); }
+                 }
+                 return result;
+             }
+             catch (Exception ex)
+             {
++                if (IsCritical(command.Kind)) ReportSessionFault("command.execute", ex, command);
+                 if (criticalNativeStarted && IsCritical(command.Kind) && nativeFault == null) LockNativeFault(ex.Message);
+                 return CommandResult.Fail(command.CommandId, ex.Message);
+             }
+@@ -135,6 +142,7 @@
+         }
+         private CommandResult PendingSave(CommandResult applied, Exception error)
+         {
++            ReportSessionFault("command.save", error);
+             Error("关键事务已应用但保存失败，保留同一事务等待重试：" + error.Message);
+             return new CommandResult { CommandId = applied.CommandId, Applied = true, Success = false, Saved = false, Error = "已应用、未保存；请重试同一请求或保存，禁止重复发放：" + error.Message };
+         }
+--- /dev/null
++++ b/src/Session/SessionFaultDiagnostics.cs
+@@ -0,0 +1,85 @@
++using System;
++using System.Collections.Generic;
++
++namespace FreeWorldMultiplayer
++{
++    public sealed partial class MultiplayerSession
++    {
++        private double giftWaitDiagnosticElapsed;
++        private readonly HashSet<string> loggedSessionFaults = new HashSet<string>();
++
++        // Tick and local structural commands have no receiving envelope. Record their
++        // original exception without borrowing a stale network-message identity.
++        private void ReportSessionFault(string stage, Exception error, GameCommand command = null)
++        {
++            if (error == null || error is NativeRejectionException || error is MessageRejectionException) return;
++            var bridgeError = error as BridgeOperationException;
++            if (bridgeError != null && bridgeError.NativeUnchanged) return;
++            try
++            {
++                string reason = error.Message ?? error.GetType().FullName;
++                int newline = reason.IndexOfAny(new[] { '\r', '\n' });
++                if (newline >= 0) reason = reason.Substring(0, newline);
++                if (reason.Length > 1024) reason = reason.Substring(0, 1024);
++                string signature = "session|" + stage + "|" + error.GetType().FullName + "|" + reason;
++                if (loggedSessionFaults.Contains(signature) || loggedSessionFaults.Count >= 64) return;
++                loggedSessionFaults.Add(signature);
++                long mapId = command == null ? DiagnosticMapId() : command.MapId;
++                MapRecord map = null;
++                bool hasMap = World != null && World.Maps.TryGetValue(mapId, out map);
++                string context = "stage=" + stage + " role=" + (IsHost ? "host" : "guest")
++                    + " map=" + mapId + " paused=" + Paused + " nativeFault=" + (nativeFault != null)
++                    + " mapLoading=" + HasMapLoadingBarrier + " mapInFlight=" + inFlightUpdates.Count
++                    + " personalInFlight=" + personalInFlight.Count + " giftFlushes=" + giftFlushes.Count
++                    + " giftBarriers=" + giftBarriers.Count + " giftPaused=" + giftPausedMaps.Count;
++                if (hasMap) context += " epoch=" + map.AuthorityEpoch + " revision=" + map.Revision;
++                if (command != null) context += " command=" + command.Kind;
++                MessageFaulted?.Invoke("[session-fault] " + context + Environment.NewLine + error.ToString());
++            }
++            catch { /* Diagnostic observers must not replace the original failure. */ }
++        }
++
++        private void TraceTransportSubmission(string stage, GameCommand command)
++        {
++            if (command == null || command.Kind != CommandKind.DepartTransfer) return;
++            try
++            {
++                TransferRequest request = JsonData.Read<TransferRequest>(command.PayloadJson);
++                if (request == null) return;
++                Logger.LogEngine("[FreeWorldMultiplayer][transport-submit] stage=" + stage
++                    + " role=" + (IsHost ? "host" : "guest") + " sourceMap=" + request.SourceMapId
++                    + " sourceFleet=" + request.SourceFleetId + " destinationMap=" + request.DestinationMapId
++                    + " destinationFleet=" + request.DestinationFleetId);
++            }
++            catch { /* Trace parsing/logging never authorizes or changes a transport. */ }
++        }
++
++        private void TickGiftFlushDiagnostics(double seconds)
++        {
++            if (giftPausedMaps.Count == 0) { giftWaitDiagnosticElapsed = 0; return; }
++            giftWaitDiagnosticElapsed += seconds;
++            if (giftWaitDiagnosticElapsed < 10) return;
++            giftWaitDiagnosticElapsed = 0;
++            try
++            {
++                // Only numeric transaction state is recorded. Never dump manifests,
++                // player identities, peer tokens or the request's transfer capability.
++                GiftCheckpointRequest request = null;
++                foreach (GiftCheckpointRequest candidate in pausedGiftRequests.Values) { request = candidate; break; }
++                MapRecord map;
++                if (request == null || World == null || !World.Maps.TryGetValue(request.MapId, out map)) return;
++                MapUpdate pending;
++                bool hasPending = inFlightUpdates.TryGetValue(request.MapId, out pending);
++                // End enumeration before Logger can invoke arbitrary observers.
++                Logger.LogWarningEngine("[FreeWorldMultiplayer][gift-checkpoint-wait] phase="
++                    + (giftFlushes.ContainsKey(request.MapId) ? "flush" : "resume") + " map=" + request.MapId
++                    + " epoch=" + map.AuthorityEpoch + " revision=" + map.Revision
++                    + " frozenMaps=" + giftPausedMaps.Count + " mapInFlight=" + inFlightUpdates.Count
++                    + " personalInFlight=" + personalInFlight.Count
++                    + " pendingMapRevision=" + (hasPending ? pending.Revision : -1)
++                    + " mapLoading=" + HasMapLoadingBarrier + " paused=" + Paused);
++            }
++            catch { /* This probe must not change checkpoint or resume behavior. */ }
++        }
++    }
++}

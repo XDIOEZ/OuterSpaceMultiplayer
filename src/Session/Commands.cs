@@ -92,7 +92,10 @@ namespace FreeWorldMultiplayer
                     case CommandKind.Relation:
                         ChangeRelation(actor.PlayerId, command.TargetPlayerId, JsonData.Read<RelationRequest>(command.PayloadJson).Relation);
                         result = CommandResult.Ok(command.CommandId); break;
-                    case CommandKind.DepartTransfer: result = Depart(command); break;
+                    case CommandKind.DepartTransfer:
+                        TraceTransportSubmission("departure.begin", command);
+                        result = Depart(command);
+                        TraceTransportSubmission("departure.end", command); break;
                     case CommandKind.ArriveTransfer: result = CompleteTransfer(command, false); break;
                     case CommandKind.CancelTransfer: result = CompleteTransfer(command, true); break;
                     case CommandKind.StartRaid: result = StartAttack(command); break;
@@ -110,13 +113,15 @@ namespace FreeWorldMultiplayer
                 World.Transactions[key] = result;
                 if (result.Applied && IsCritical(command.Kind))
                 {
-                    try { SaveOrThrow(); }
+                    TraceTransportSubmission("save.begin", command);
+                    try { SaveOrThrow(); TraceTransportSubmission("save.end", command); }
                     catch (Exception ex) { return PendingSave(result, ex); }
                 }
                 return result;
             }
             catch (Exception ex)
             {
+                if (IsCritical(command.Kind)) ReportSessionFault("command.execute", ex, command);
                 if (criticalNativeStarted && IsCritical(command.Kind) && nativeFault == null) LockNativeFault(ex.Message);
                 return CommandResult.Fail(command.CommandId, ex.Message);
             }
@@ -127,6 +132,7 @@ namespace FreeWorldMultiplayer
         }
         private CommandResult PendingSave(CommandResult applied, Exception error)
         {
+            ReportSessionFault("command.save", error);
             Error("关键事务已应用但保存失败，保留同一事务等待重试：" + error.Message);
             return new CommandResult { CommandId = applied.CommandId, Applied = true, Success = false, Saved = false, Error = "已应用、未保存；请重试同一请求或保存，禁止重复发放：" + error.Message };
         }
