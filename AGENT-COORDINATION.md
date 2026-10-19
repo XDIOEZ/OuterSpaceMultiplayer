@@ -206,3 +206,5 @@
 - V1.40：恢复 Manual=false 的解除语义，并补齐 Pose 的 FightActive/FightManual 非模拟端显示投影；只字段赋值，不激活AI。功能仅 GameBridge.cs / NativeMapReplicator.cs，旧dirty保留；完整本轮补丁与运行验收说明见 docs/reports/客机解除征召修复-20261019.md。
 - 用户要求后续统一安装。本轮BuildOnly的P3编译完成；Steam编译后因并行Entry源码变化被保护性停止，TapTap未完成，无三端一致包、不安装、不测试或启动游戏。交由后续功能闭合后统一构建。
 - 本轮本地窄提交完成后释放源码、VERSION/CHANGELOG、构建与Git index；feedback-errors 可接续下一版本。未push，实机由用户验收。
+
+- guest-conscript 最终结果：本地窄提交 `dd5575f` 已完成；未push。版本/index/源码/构建占用在本交接提交结束后全部释放；后续按用户安排统一构建安装。

@@ -273,3 +273,5 @@
 ### guest-conscript-20261019 — 源码交付与后续统一构建
 - V1.40完成征召执行参数与非模拟端显示投影；两个旧dirty源码仅HEAD等效窄提交，工作树特有SamePose比较接线见 docs/patches/guest-conscript-20261019.patch。说明 docs/reports/客机解除征召修复-20261019.md。
 - 已读反馈UI的VisualTheme未闭合依赖。P3编译完成、Steam编译后被SourceRevision保护停止，未到TapTap，不安装/测试/运行。后续统一构建须包含当前完整工作树，保留历史dirty。本轮提交完成后释放版本/index/构建，feedback-errors接续下一版本。
+
+- guest-conscript 已完成本地窄提交 `dd5575f`，旧dirty保留、未push；此交接提交结束后VERSION/index/构建/源码全部释放。feedback-errors可读取最新VERSION并递增，连同其完整依赖统一BuildOnly；安装仍待用户后续统一安排。
