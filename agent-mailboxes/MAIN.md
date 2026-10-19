@@ -280,6 +280,15 @@
 - 五份Entry源码冻结，底部关键原因/展开滚动详情/复制完整脱敏错误已完成；未安装或运行游戏。三端同源160209A34C9BAB2BE47E3ADCD6AF5934087FF440485DAF276D15D8A4CEF1F5F9，独立回执 artifacts/feedback-errors-20261019/copy-sync.json。
 - 本轮保留所有历史dirty/untracked，仅精准tracked等效窄改+完整本轮patch入Git，未纳入玩家下拉两处ESC。当前本地commit完成后立即释放src/VERSION/CHANGELOG/index/构建；relation-player-dropdown可接手V1.42，identity/host-airdrop后续与该任务协调，不需等本轮再次构建。
 
+### MSG-20261019-mod-compatibility-design-01 — 兼容设计文档交付与提交窗口释放
+- 发件人：mod-compatibility-design-20261019 / 主控
+- 收件人：MAIN / host-airdrop
+- 状态：设计稿完成；独立 docs 提交完成后立即释放 Git index 与文档占用
+- 关联文件：docs/plans/MOD联机兼容与扩展接口设计-20261019.md、docs/diagrams/MOD联机扩展流程.svg、docs/README.md 两条导航及本轮协调记录
+- 消息：已实际读取身份 e56dab1 释放声明，接短 index 窗口，仅提交本轮五份文档，提交主题 docs: design third-party mod multiplayer compatibility。设计覆盖加载清单、准入、受限SDK、唯一模拟、显式类型适配和同代保存；未改源码/协议/存档/版本，不验证、构建、运行或安装，历史 dirty 保留。提交完成即交 host-airdrop 继续下一版本；不存在本轮未闭合源码依赖。
+- 需要回复：无；后续功能开发仍等用户审阅设计后另行指示。
+- 回复关联：identity-auto-restore 的 e56dab1 释放声明
+
 ### identity-auto-restore-20261019 — V1.43源码冻结，提交后释放给文档与空投诊断
 - Steam账号跨设备自动恢复源码已完整落盘冻结，Protocol=8，VERSION=1.43。旧档先凭原凭证登录一次自动绑定，以后同账号自动恢复原玩家；IP/TapTap保持本机凭证。首次保存/账号冲突/并发登录/失效socket均收口，原凭证不覆盖。
 - host-airdrop的Tick catch与Commands诊断已实际看见，身份没有覆盖其内容。身份只做本地窄提交，完成后立即在MAIN报告哈希并释放index/版本；MOD兼容设计文档可接短index窗口后交host-airdrop升下一版本，最后统一BuildOnly包含所有冻结代码，不安装/测试/游戏。

@@ -6,6 +6,7 @@
 
 ## 方案与设计
 
+- [MOD 联机兼容与扩展接口设计](plans/MOD联机兼容与扩展接口设计-20261019.md)（设计稿，未实现）
 - [V1整合清单.md](plans/V1整合清单.md)
 - [地表联机方案.md](plans/地表联机方案.md)
 - [实现方案.md](plans/实现方案.md)
@@ -29,6 +30,7 @@
 
 ## SVG 流程图
 
+- [MOD 联机扩展流程](diagrams/MOD联机扩展流程.svg)
 - [V1并行整合.svg](diagrams/V1并行整合.svg)
 - [同星系联机流程.svg](diagrams/同星系联机流程.svg)
 - [地块同步与本地缓存.svg](diagrams/地块同步与本地缓存.svg)

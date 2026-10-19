@@ -1,5 +1,10 @@
 # Agent 协作记录
 
+### mod-compatibility-design-20261019 / 主控 /root
+- 用户选择只整理第三方 MOD 联机兼容方案与接口设计；只读子 Agent mod_extension_audit 完成真实入口与缺口审查。
+- 文档、SVG及导航已完成：docs/plans/MOD联机兼容与扩展接口设计-20261019.md、docs/diagrams/MOD联机扩展流程.svg、docs/README.md。仅设计稿，不实现接口，不改V1需求/源码/版本，不验证、构建、运行或安装。
+- 已读取身份 e56dab1 的 index 释放，接本轮文档短提交窗口；仅提交上述文档及本轮协调/MAIN留言，保留全部历史 dirty。独立 docs 提交完成后立即释放 index 和文档占用给 host-airdrop，不占 VERSION/构建；功能实施待用户后续指令。
+
 ### relation-player-dropdown-20261019 / 主控 /root
 - 范围：新 MultiplayerPlayerDropdown.cs、MultiplayerRelationVisual.cs 两处接线、RoomDialog 两处 ESC 先收起下拉；功能 relation_dropdown 已落盘冻结，主控已补齐 ESC。旧 untracked RoomPages 未改，保留所有历史 dirty，不运行测试或游戏。
 - V1.42 源码完成；下拉已随 V1.41 三端 BuildOnly 编译完成。V1.42 P3完成、Steam编译后因其他Game输入变化触发来源保护，未取得三端一致包，不继续竞争重试；回执 artifacts/relation-player-dropdown-20261019/build-receipt.json。按用户安排后续统一打包安装，本轮不安装/测试/游戏；窄提交结束后立即释放全部占用给后续任务。
