@@ -117,7 +117,15 @@ namespace FreeWorldMultiplayer
             { ReleaseSession(); return; }
             var scene = GalaxyFieldScene.Instance;
             bool visible = visual != null && visual.IsFleetVisualVisible && scene != null && scene.CurState == State.GalaxyScene;
-            if (!visible) { ReleasePresentation(); wasVisible = false; return; }
+            if (!visible)
+            {
+                // Most off-screen fleets stay hidden for many frames. Their
+                // presentation was already released on the first hidden frame.
+                if (wasVisible || label != null || npcHud != null || ownsNpcHud || subscribed || suppressedNative)
+                    ReleasePresentation();
+                wasVisible = false;
+                return;
+            }
 
             // Proactively create the real native HUD. Its normal visibility never
             // depends on hovered/pinned, and its text already includes NPC identity.
@@ -199,10 +207,10 @@ namespace FreeWorldMultiplayer
             bool visible = bridge != null && ReferenceEquals(GameBridge.Active, bridge) && visual != null && visual.IsFleetVisualVisible
                 && isActiveAndEnabled && scene != null && scene.CurState == State.GalaxyScene;
             Camera camera = visible ? scene.MainCamera : null;
-            if (camera == null || !camera.isActiveAndEnabled) { label.gameObject.SetActive(false); return; }
+            if (camera == null || !camera.isActiveAndEnabled) { SetLabelVisible(false); return; }
             Vector3 screen = camera.WorldToScreenPoint(transform.position);
             if (screen.z <= 0 || screen.x < 0 || screen.x > Screen.width || screen.y < 0 || screen.y > Screen.height)
-            { label.gameObject.SetActive(false); return; }
+            { SetLabelVisible(false); return; }
             float scale = NativeFleetNameplates.ScaleFactor;
             float radiusPixels = 0;
             if (outline != null)
@@ -221,13 +229,22 @@ namespace FreeWorldMultiplayer
             var parent = label.rectTransform.parent as RectTransform;
             bool projected = parent != null && RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, null, out point);
             if (projected) label.rectTransform.anchoredPosition = point;
-            label.gameObject.SetActive(projected);
+            SetLabelVisible(projected);
+        }
+
+        private void SetLabelVisible(bool visible)
+        {
+            if (label == null) return;
+            GameObject target = label.gameObject;
+            // Canvas rendering callbacks can run more than once per frame.
+            // Avoid redundant native SetActive calls for a stable label.
+            if (target.activeSelf != visible) target.SetActive(visible);
         }
 
         private void ReleaseLabel()
         {
             if (subscribed) { Canvas.willRenderCanvases -= RefreshScreenPosition; subscribed = false; }
-            if (label != null) { label.gameObject.SetActive(false); UnityEngine.Object.Destroy(label.gameObject); }
+            if (label != null) { SetLabelVisible(false); UnityEngine.Object.Destroy(label.gameObject); }
             label = null; outline = null;
             if (suppressedNative && visual != null) visual.SetNameplateVisible(nativeNameplateVisible);
             suppressedNative = false;

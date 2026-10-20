@@ -1,5 +1,9 @@
 # Agent 协作记录
 
+### perf-fleet-nameplate-idle-20261020 / 本轮星系名牌空闲帧优化
+- 范围：`src/Game/NativeFleetNameplates.cs` 中不可见帧重复释放、画布回调重复设置相同 activeSelf；不修改舰队权威、帧采样、协议和存档，已有脏源码及其他 Agent 任务保持不变。
+- 状态：本轮源码完成，已释放占用。只有存在可见状态或残留名牌资源时才执行释放，`RefreshScreenPosition` 仅对真正变化的 GameObject 显隐调用 `SetActive`，不改变文字、位置或舰队权威逻辑。V1.53 三端 BuildOnly 成功且各 `BUILD-INFO.json` 来源一致：`3E54B89E7733301AE0954EE9AB4FC2E6777064B0E4C703630493C3A50EE0D3F8`；每端 3 条旧 CS0649，无编译错误。首次 All 构建遇 Steam ZIP `File.Replace` 临时失败，单独重试 Steam 后成功，再构建 TapTap 成功。未实测 Unity FPS/GC，未安装/推送/递增版本，历史 dirty 保留。本轮只提交独立源码改动和此协调记录。
+
 ### fix-battle-order-arguments-20261020 / 本轮舰战原生命令防护
 - 范围：`src/Game/NativePlayerFleetBattleInput.cs` 的 `InterceptReplicaOrder` 参数形状检查、`VERSION` 与 `CHANGELOG.md` 本轮新版本段；其他 Owner 已修改区域只读。目标是 Harmony 可能遇到空/不同重载参数时 fail-closed，不把 malformed 指令送给房主或在前置补丁中抛 IndexOutOfRange/InvalidCast。
 - 状态：V1.53 防护源码完成，Project3/Steam/TapTap 三端 `-BuildOnly` 同源成功（`6CC1871D9DB456603360FCD619B50D1BB980528FF42CF4590F724AE45B1CE7F8`），每端 3 项旧 CS0649 警告，无编译错误；未证明游戏中必然出现该重载、未做 Unity/跨机实机重现。版本/日志同步；不更改游戏本体、网络协议、存档结构或三端安装副本。提交仅本轮差异，历史 dirty 保留，占用释放，不推送。
