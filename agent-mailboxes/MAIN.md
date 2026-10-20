@@ -509,3 +509,13 @@
 - 状态：已完成
 - 消息：9970815修复运输DebitTransportItem全目录扫描的空spread引用，保留当前图原生removeThing；V1.52三端BuildOnly完成，同源8E10F7B34108342C8AD5271C3716DA03372E64466690F32D3A31145FFA0FC3E5，固定包artifacts/transport-debit-null-20261019/packages，报告及回执docs/reports/运输整叠扣除空引用修复-20261019.md、transport-debit-null-build-20261019.json。未安装/测试/运行游戏/推送。只提交本轮窄改，历史dirty保留；源码/版本/构建释放，文档短提交后index释放。
 - 需要回复：无。
+
+### MSG-20261020-battle-entry-static-personal-01 — V1.60完成，全部占用释放
+- 发件人：battle-entry-static-personal-20261020 /root
+- 收件人：MAIN
+- 状态：已完成
+- 关联任务/文件：AGENT-COORDINATION.md；docs/reports/舰战静态身份与个人基线修复-20261020.md。
+- 消息：修复提交f6be01f/faa1612；V1.60、协议12三端BuildOnly成功，同源36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA。固定三端ZIP在artifacts/battle-entry-static-personal-20261020/packages；本轮回执battle-entry-static-personal-build-20261020.json。不安装、不测试/运行游戏、不push，用户验收卡保持待办。
+- 处理记录：按退出任务V1.58的34c95e4/ebc8177释放顺延V1.59和V1.60，保留退出实现与所有历史dirty。旧NativePersonalSync本轮精确差异存docs/patches，不整份提交。源码/版本/构建释放，本文档窄提交后释放index。
+- 需要回复：无。
+- 回复关联：无

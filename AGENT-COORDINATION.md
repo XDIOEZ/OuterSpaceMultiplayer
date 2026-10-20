@@ -448,3 +448,10 @@
 ### transport-three-install-20261020 / 主控 /root
 - 用户明确要求安装三端。只执行统一Sync-ModCopies.ps1当前V1.54构建并安装Project3/Steam/TapTap；不改源码/版本，不启动测试或游戏，不覆盖玩家数据/其它MOD/共享依赖。占用统一构建安装窗口，完成后释放。
 - 完成：V1.54三端统一构建安装成功，SourceRevision=DB885D7F0F239BE11FFC4F42617996D2BD81081744C68F0DD1AF3C1C4C82881F。回执docs/reports/transport-three-install-20261020.json；各端已有文件均留独立备份，玩家数据/其他MOD/共享依赖保留；未运行游戏或测试。本轮无源码/版本变动，构建安装占用释放。
+
+### battle-entry-static-personal-20261020 / 主控 /root
+- 用户日志：舰战 CapturePlayerBattleScene 重复层级身份，以及 guest 收到另一玩家 ET_LuaRecords 的 personal baseline mismatch。battle_identity 和 personal_baseline 子 Agent 分别实现，主控协调、协议/版本整合、窄提交和三端只打包。
+- 已完成并释放：V1.59 静态身份 f6be01f（协议12），V1.60 个人基线 faa1612。捕获/校验/投影/真实模板恢复统一同名兄弟和组件地址；个人影子仅限同owner同版本的guest被动远端投影，本机/host/模拟者继续严格校验，旧消息不倒退版本。
+- V1.60 / 1.60.0.0 三端 BuildOnly 成功，同源36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA；各端三条既有CS0649，无编译错误。固定包artifacts/battle-entry-static-personal-20261020/packages，回执docs/reports/battle-entry-static-personal-build-20261020.json。
+- 保留全部历史dirty/untracked；旧NativePersonalSync仅将本轮精确增量存docs/patches，不整份暂存；GameBridge/Networking/Protocol仅提交等效窄接线，退出任务实现保留。不宣称Git历史依赖闭包已干净。
+- Installations=[] / RuntimeTested=false：未安装、测试或运行游戏、未推送。ET_LuaRecords当时的具体原生漂移来源未由旧日志证明；用户双端任务卡保持待办。源码/版本/构建释放，本文档窄提交后释放index。

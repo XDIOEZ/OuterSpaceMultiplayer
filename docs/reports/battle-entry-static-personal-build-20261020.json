@@ -1,0 +1,41 @@
+{
+  "StartedAtUtc": "2026-10-20T19:50:24.7472291+08:00",
+  "SourceRoot": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer",
+  "Target": "All",
+  "BuildOnly": true,
+  "Completed": true,
+  "Installations": [],
+  "RuntimeTested": false,
+  "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+  "ModVersion": "V1.60",
+  "AssemblyVersion": "1.60.0.0",
+  "FinishedAtUtc": "2026-10-20T19:52:30.1778753+08:00",
+  "ProtocolVersion": 12,
+  "SourceCommits": [
+    "f6be01f",
+    "faa1612"
+  ],
+  "Packages": [
+    {
+      "Target": "p3-development-reference",
+      "Zip": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\battle-entry-static-personal-20261020\\packages\\FreeWorldMultiplayer-p3-development-reference.zip",
+      "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+      "ModVersion": "V1.60",
+      "AssemblyVersion": "1.60.0.0"
+    },
+    {
+      "Target": "steam-target",
+      "Zip": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\battle-entry-static-personal-20261020\\packages\\FreeWorldMultiplayer-steam-target.zip",
+      "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+      "ModVersion": "V1.60",
+      "AssemblyVersion": "1.60.0.0"
+    },
+    {
+      "Target": "taptap-target",
+      "Zip": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\battle-entry-static-personal-20261020\\packages\\FreeWorldMultiplayer-taptap-target.zip",
+      "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+      "ModVersion": "V1.60",
+      "AssemblyVersion": "1.60.0.0"
+    }
+  ]
+}
