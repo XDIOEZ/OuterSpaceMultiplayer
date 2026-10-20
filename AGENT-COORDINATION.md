@@ -26,6 +26,7 @@
 - 分工：exit_lifecycle 子 Agent 负责退出/原生上下文清理的证据链及最小修复；hover_audit 子 Agent 只读核对 UI 空引用共同依赖及富文本缺键原因。主控协调、版本/文档、精确提交和三端 BuildOnly。
 - 占用预留 GameBridge.cs Reset/NativeSceneRouter.cs 与 Entry/ModPluginLauncher.cs 退出链路（实施前子 Agent 明确范围）；所有旧 dirty 保留，修改前备份。子 Agent 不操作 index/版本/构建，不测试或启动游戏，不安装、不推送。
 - 本轮源码已冻结：新增 NativeRoomExit.cs，GameBridge.Dispose 单行与 Launcher 退出/切房间窄接线；接 V1.58 BuildOnly/index 窗口。已读并行 battle-entry-static-personal 源码及协议12冻结：当前构建包含其工作树输入，本轮不改其源码/协议，个人基线/BOM变化不计入本轮提交。构建后释放给其 V1.59/V1.60；不安装、不测试/运行游戏。
+- 完成并释放：退出修复窄提交 34c95e4；V1.58 三端 BuildOnly 成功，同源 AE41E8B9B50A1837132C23714DD399AED4708014971079E8BB071FB8B96FFDDE，各端三条既有 CS0649、无编译错误。固定包 artifacts/room-exit-lifecycle-20261020/packages，回执 docs/reports/room-exit-lifecycle-build-20261020.json；Installations=[] / RuntimeTested=false。未安装/测试/运行游戏/推送。源码/版本/构建释放给 battle-entry-static-personal，本轮报告窄提交完成即释放 index；保留其它 Owner 全部 dirty。
 
 # Agent 协作记录
 
