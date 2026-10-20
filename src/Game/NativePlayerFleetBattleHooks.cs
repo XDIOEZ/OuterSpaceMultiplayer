@@ -79,6 +79,7 @@ namespace FreeWorldMultiplayer
         internal static void Install(Harmony harmony)
         {
             NativePlayerFleetBattlePreparationHooks.Install(harmony);
+            Patch(harmony, typeof(BattleSpawner), "SpawnAllFleets", "SpawnerPrefix");
             Patch(harmony, typeof(BattleManager), "Update", "ManagerPrefix");
             Patch(harmony, typeof(BattleManager), "FixedUpdate", "SimulationPrefix");
             Patch(harmony, typeof(BattleManager), "StartBattle", "StartPrefix");
@@ -133,6 +134,8 @@ namespace FreeWorldMultiplayer
             h.Patch(method, pre == null ? null : new HarmonyMethod(typeof(NativePlayerFleetBattleHooks), pre), post == null ? null : new HarmonyMethod(typeof(NativePlayerFleetBattleHooks), post));
         }
         private static bool ManagerPrefix() { return Bridge == null || Bridge.UpdatePlayerBattleManager(); }
+        private static bool SpawnerPrefix(BattleSpawner __instance)
+        { return Bridge == null || !Bridge.InitializePlayerBattleFleets(__instance); }
         private static bool SimulationPrefix() { return Bridge == null || !Bridge.HasNativePlayerBattle || Bridge.CanRunNativePlayerBattle; }
         private static bool StartPrefix() { return Bridge == null || Bridge.TryStartNativePlayerBattle(); }
         private static bool SettlementPrefix() { return Bridge == null || !Bridge.HasNativePlayerBattle || Bridge.CanFinishNativePlayerBattle; }

@@ -38,6 +38,7 @@ namespace FreeWorldMultiplayer
         private readonly HashSet<string> committedPlayerBattles = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, HashSet<long>> playerBattleRosters = new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
         private bool applyingBattleInput, finishingPlayerBattle, nativeBattleEnded, nativeBattleStarted;
+        private bool tracedNativeBattleReady;
         private string nativeBattleOutcome;
         internal bool HasNativePlayerBattle { get { return nativePlayerBattle != null && BattleContext.BattleUid == nativePlayerBattle.NativeBattleUid; } }
         internal bool IsPlayerBattleReplica { get { return HasNativePlayerBattle && nativePlayerBattle.SimulatorPlayerId != Context.LocalPlayerId; } }
@@ -77,53 +78,89 @@ namespace FreeWorldMultiplayer
         {
             return Run(() =>
             {
-                if (battle == null || string.IsNullOrEmpty(battle.BattleId) || battle.NativeBattleUid < 0)
-                    throw new InvalidOperationException("玩家舰战缺少房主战斗身份。");
-                bool attacker = Context.LocalPlayerId == battle.AttackerPlayerId;
-                if (!attacker && Context.LocalPlayerId != battle.DefenderPlayerId) throw new InvalidOperationException("非参战者不能进入玩家舰战。");
-                if (nativePlayerBattle != null)
-                { if (nativePlayerBattle.BattleId == battle.BattleId && nativePlayerBattle.AuthorityEpoch == battle.AuthorityEpoch) return; throw new InvalidOperationException("本机已有另一场玩家舰战。"); }
-                if (BattleManager.Instance != null) throw new NativeRejectionException("本机仍有尚未释放的原生战场。");
-                if (!battle.SceneAuthorized || battle.AttackerConfiguration == null || battle.DefenderConfiguration == null)
-                    throw new NativeRejectionException("双方原版战前配置尚未确认，不能创建战场。");
-                // Validate both authoritative selections before allocating a native battle.
-                ReadPlayerBattleConfiguration(battle, battle.AttackerConfiguration);
-                ReadPlayerBattleConfiguration(battle, battle.DefenderConfiguration);
-                ClosePlayerBattlePreparation(battle);
-                var pairs = BattleFleets(battle).ToList();
-                if (pairs.Any(p => p.Item2.ships.Count == 0)) throw new NativeRejectionException("参战舰队没有可部署舰船。");
-                nativeBattleShips.Clear(); ClearPlayerBattleEffects(); ClearPlayerBattleFighters();
-                foreach (var p in pairs) foreach (FWAirShip ship in p.Item2.ships) nativeBattleShips.Add(ship.getUID(), ArchiveBattleShip(ship, p.Item2.getUID()));
-                nativePlayerBattle = battle; nativeBattleEnded = false; nativeBattleStarted = false; nativeBattleOutcome = null;
-                string own = attacker ? battle.AttackerPlayerId : battle.DefenderPlayerId, enemy = attacker ? battle.DefenderPlayerId : battle.AttackerPlayerId;
-                long ownUid = attacker ? battle.AttackerFleetId : battle.DefenderFleetId, enemyUid = attacker ? battle.DefenderFleetId : battle.AttackerFleetId;
-                using (EnterPlayer(own))
+                string entryStep = "identity";
+                try
                 {
-                    AirShipFleetInfoBean ownFleet = FleetView(own, TransferFleet(own, ownUid)), enemyFleet = FleetView(enemy, TransferFleet(enemy, enemyUid));
-                    GalaxyStar galaxy = GalaxyMapData.getInstance().getGalaxyStar(ownFleet.getGalaxyId());
-                    if (galaxy == null) throw new InvalidOperationException("玩家舰战物理星系尚未完成原生初始化。");
-                    // Both are detached battle views of the same real fleet/ship identities.
-                    // Persistent ships are touched only by the host's final per-ship commit.
-                    BattleEncounterEnvironmentSnapshot environment = CreatePlayerBattleEnvironment(battle, galaxy);
-                    battleEnvironment = DescribeBattleEnvironment(environment); appliedBattleEnvironment = null;
-                    // This is the same standard two-fleet entry used by the original
-                    // StartCustomBattleWithDeployment, now only after both original pages confirm.
-                    BattleContext.EnterBattleTest(battle.NativeBattleUid, galaxy, PreparedPlayerBattleFleet(battle, own, ownFleet.bean), PreparedPlayerBattleFleet(battle, enemy, enemyFleet.bean), null, environment);
+                    if (battle == null || string.IsNullOrEmpty(battle.BattleId) || battle.NativeBattleUid < 0)
+                        throw new InvalidOperationException("玩家舰战缺少房主战斗身份。");
+                    bool attacker = Context.LocalPlayerId == battle.AttackerPlayerId;
+                    if (!attacker && Context.LocalPlayerId != battle.DefenderPlayerId) throw new InvalidOperationException("非参战者不能进入玩家舰战。");
+                    if (nativePlayerBattle != null)
+                    { if (nativePlayerBattle.BattleId == battle.BattleId && nativePlayerBattle.AuthorityEpoch == battle.AuthorityEpoch) return; throw new InvalidOperationException("本机已有另一场玩家舰战。"); }
+                    PlayerFleetBattleTrace.Emit("entry.request", battle, "local=" + Context.LocalPlayerId + ";nativeUid=" + battle.NativeBattleUid);
+                    entryStep = "configuration";
+                    if (BattleManager.Instance != null) throw new NativeRejectionException("本机仍有尚未释放的原生战场。");
+                    if (!battle.SceneAuthorized || battle.AttackerConfiguration == null || battle.DefenderConfiguration == null)
+                        throw new NativeRejectionException("双方原版战前配置尚未确认，不能创建战场。");
+                    // Validate both authoritative selections before allocating a native battle.
+                    ReadPlayerBattleConfiguration(battle, battle.AttackerConfiguration);
+                    ReadPlayerBattleConfiguration(battle, battle.DefenderConfiguration);
+                    entryStep = "field";
+                    ResolvePlayerBattleField(battle);
+                    entryStep = "fleet-archive";
+                    ClosePlayerBattlePreparation(battle);
+                    var pairs = BattleFleets(battle).ToList();
+                    if (pairs.Any(p => p.Item2.ships.Count == 0)) throw new NativeRejectionException("参战舰队没有可部署舰船。");
+                    nativeBattleShips.Clear(); ClearPlayerBattleEffects(); ClearPlayerBattleFighters();
+                    foreach (var p in pairs) foreach (FWAirShip ship in p.Item2.ships) nativeBattleShips.Add(ship.getUID(), ArchiveBattleShip(ship, p.Item2.getUID()));
+                    nativePlayerBattle = battle; nativeBattleEnded = false; nativeBattleStarted = false; nativeBattleOutcome = null; tracedNativeBattleReady = false;
+                    string own = attacker ? battle.AttackerPlayerId : battle.DefenderPlayerId, enemy = attacker ? battle.DefenderPlayerId : battle.AttackerPlayerId;
+                    long ownUid = attacker ? battle.AttackerFleetId : battle.DefenderFleetId, enemyUid = attacker ? battle.DefenderFleetId : battle.AttackerFleetId;
+                    using (EnterPlayer(own))
+                    {
+                        entryStep = "galaxy";
+                        AirShipFleetInfoBean ownFleet = FleetView(own, TransferFleet(own, ownUid)), enemyFleet = FleetView(enemy, TransferFleet(enemy, enemyUid));
+                        GalaxyStar galaxy = GalaxyMapData.getInstance().getGalaxyStar(ownFleet.getGalaxyId());
+                        if (galaxy == null) throw new InvalidOperationException("玩家舰战物理星系尚未完成原生初始化。");
+                        // Both are detached battle views of the same real fleet/ship identities.
+                        // Persistent ships are touched only by the host's final per-ship commit.
+                        entryStep = "environment";
+                        BattleEncounterEnvironmentSnapshot environment = CreatePlayerBattleEnvironment(battle, galaxy);
+                        battleEnvironment = DescribeBattleEnvironment(environment); appliedBattleEnvironment = null;
+                        // This is the same standard two-fleet entry used by the original
+                        // StartCustomBattleWithDeployment, now only after both original pages confirm.
+                        entryStep = "native-entry";
+                        BattleContext.EnterBattleTest(battle.NativeBattleUid, galaxy, PreparedPlayerBattleFleet(battle, own, ownFleet.bean), PreparedPlayerBattleFleet(battle, enemy, enemyFleet.bean), null, environment);
+                        PlayerFleetBattleTrace.Emit("entry.scene-loading", battle, "local=" + Context.LocalPlayerId + ";replica=" + IsPlayerBattleReplica);
+                    }
+                }
+                catch (Exception error)
+                {
+                    PlayerFleetBattleTrace.Emit("entry.failed", battle, "step=" + entryStep + ";exception=" + error.GetType().Name, true);
+                    throw;
                 }
             });
         }
         public bool IsPlayerFleetBattleReady(PlayerFleetBattleRecord battle)
         {
-            if (!HasNativePlayerBattle || nativePlayerBattle.BattleId != battle.BattleId || BattleManager.Instance == null || FleetManager.Instance == null) return false;
-            if (BattleManager.Instance.GetCurrentState() == BattleManager.BattleState.None) return false;
-            SetPlayerBattleEnvironment(battleEnvironment);
-            foreach (BaseShip ship in FleetManager.Instance.GetAllShips().Values)
+            string readyStep = "managers";
+            try
             {
-                if (ship == null || ship.GetShipData() == null) return false;
-                if (!nativeBattleShips.ContainsKey(BattleSourceUid(ship))) throw new InvalidOperationException("原生部署生成了不属于本场双方的舰船。");
-                if (IsPlayerBattleReplica) ConfigurePlayerBattleReplica(ship);
+                if (!HasNativePlayerBattle || nativePlayerBattle.BattleId != battle.BattleId || BattleManager.Instance == null || FleetManager.Instance == null) return false;
+                if (BattleManager.Instance.GetCurrentState() == BattleManager.BattleState.None) return false;
+                readyStep = "environment";
+                SetPlayerBattleEnvironment(battleEnvironment);
+                readyStep = "ship-roster";
+                foreach (BaseShip ship in FleetManager.Instance.GetAllShips().Values)
+                {
+                    if (ship == null || ship.GetShipData() == null) return false;
+                    if (!nativeBattleShips.ContainsKey(BattleSourceUid(ship))) throw new InvalidOperationException("原生部署生成了不属于本场双方的舰船。");
+                    if (IsPlayerBattleReplica) ConfigurePlayerBattleReplica(ship);
+                }
+                bool ready = FleetManager.Instance.GetAllShips().Count != 0;
+                if (ready && !tracedNativeBattleReady)
+                {
+                    tracedNativeBattleReady = true;
+                    PlayerFleetBattleTrace.Emit("entry.ready", battle, "local=" + Context.LocalPlayerId
+                        + ";replica=" + IsPlayerBattleReplica + ";ships=" + FleetManager.Instance.GetAllShips().Count);
+                }
+                return ready;
             }
-            return FleetManager.Instance.GetAllShips().Count != 0;
+            catch (Exception error)
+            {
+                PlayerFleetBattleTrace.Emit("entry.readiness-failed", battle, "step=" + readyStep + ";exception=" + error.GetType().Name, true);
+                throw;
+            }
         }
         private FleetBattleShip CaptureBattleShip(BaseShip ship, bool dead = false, bool retreated = false)
         {
@@ -427,7 +464,7 @@ namespace FreeWorldMultiplayer
         {
             nativePlayerBattle = null; nativeBattleShips.Clear(); battlePilotControls.Clear(); battlePilotSendTimes.Clear();
             replicaManualPilots.Clear(); preparingBattleShips.Clear(); playerBattlePoses.Clear(); appliedNativeBattleRevision = 0;
-            battleEnvironment = null; appliedBattleEnvironment = null; nativeBattleStarted = false;
+            battleEnvironment = null; appliedBattleEnvironment = null; nativeBattleStarted = false; tracedNativeBattleReady = false;
         }
     }
 }

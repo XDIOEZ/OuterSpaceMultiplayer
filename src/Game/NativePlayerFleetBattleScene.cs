@@ -5,6 +5,8 @@ using SmartAI;
 using SmartAI.Data;
 using SmartAI.Managers;
 using SmartAI.Gameplay;
+using SmartAI.Rules;
+using SmartAI.Utils;
 using UnityEngine;
 
 namespace FreeWorldMultiplayer
@@ -29,6 +31,65 @@ namespace FreeWorldMultiplayer
         private string appliedBattleEnvironment;
         private bool applyingBattleClock;
         internal bool IsApplyingPlayerBattleClock { get { return applyingBattleClock; } }
+        private static G_BattleField ResolvePlayerBattleField(PlayerFleetBattleRecord battle)
+        {
+            // Use the same real configuration as the rule that BattleManager creates.
+            // The legacy Bean spawner separately looks up ID 1, while the standard
+            // rule/environment use ID 0; missing ID 1 otherwise leaves both fleets null.
+            G_BattleField field = new StandardBattleRule(null, null).GetFieldConfig();
+            if (field == null)
+            {
+                PlayerFleetBattleTrace.Emit("field.preflight", battle, "reason=standard-rule-field-missing", true);
+                throw new NativeRejectionException("原版标准舰战的战场配置尚未加载，不能进入战场。");
+            }
+            if (float.IsNaN(field.FieldWidth) || float.IsInfinity(field.FieldWidth) || field.FieldWidth <= 1f ||
+                float.IsNaN(field.FieldHeight) || float.IsInfinity(field.FieldHeight) || field.FieldHeight <= 1f)
+            {
+                PlayerFleetBattleTrace.Emit("field.preflight", battle, "fieldId=" + field.ID + ";reason=invalid-dimensions", true);
+                throw new NativeRejectionException("原版标准舰战的战场尺寸无效，不能进入战场。");
+            }
+            PlayerFleetBattleTrace.Emit("field.preflight", battle, "fieldId=" + field.ID + ";width=" + field.FieldWidth + ";height=" + field.FieldHeight);
+            return field;
+        }
+        internal bool InitializePlayerBattleFleets(BattleSpawner spawner)
+        {
+            if (!HasNativePlayerBattle) return false;
+            string spawnStep = "context";
+            try
+            {
+                PlayerFleetBattleTrace.Emit("spawner.initialize", nativePlayerBattle, "local=" + Context.LocalPlayerId);
+                if (BattleContext.WorldSiteBean != null || BattleContext.CurrentAiIntervention != null)
+                    throw new InvalidOperationException("玩家舰战的原生战斗上下文与标准双舰队入口不一致。");
+                spawnStep = "field";
+                G_BattleField field = ResolvePlayerBattleField(nativePlayerBattle);
+                spawnStep = "fleet-data";
+                FleetData self = BattleSpawner.CreateFleetDataFromBean(BattleContext.SelfFleetInfo);
+                FleetData enemy = BattleSpawner.CreateFleetDataFromBean(BattleContext.EnemyFleetInfo);
+                if (self == null || enemy == null || self.ships.Count == 0 || enemy.ships.Count == 0)
+                {
+                    PlayerFleetBattleTrace.Emit("spawner.fleet-data-missing", nativePlayerBattle,
+                        "selfPresent=" + (self != null) + ";enemyPresent=" + (enemy != null)
+                        + ";selfShips=" + (self == null ? -1 : self.ships.Count)
+                        + ";enemyShips=" + (enemy == null ? -1 : enemy.ships.Count), true);
+                    throw new InvalidOperationException("双方已确认的真实舰队未完整传入原生战场。");
+                }
+                spawnStep = "fleet-positions";
+                self.fleetPos = BattleUtils.GetPosByArea(field.GetSelfPosVec(), field);
+                enemy.fleetPos = BattleUtils.GetPosByArea(field.GetEnemyPosVec(), field);
+                // Only replace the legacy fleet-data setup. The original standard rule
+                // retains environment building, deployment, ship spawning and simulation.
+                NativeWire.Set(spawner, "SelfFleetData", self);
+                NativeWire.Set(spawner, "EnemyFleetData", enemy);
+                PlayerFleetBattleTrace.Emit("spawner.complete", nativePlayerBattle, "fieldId=" + field.ID
+                    + ";selfShips=" + self.ships.Count + ";enemyShips=" + enemy.ships.Count);
+                return true;
+            }
+            catch (Exception error)
+            {
+                PlayerFleetBattleTrace.Emit("spawner.failed", nativePlayerBattle, "step=" + spawnStep + ";exception=" + error.GetType().Name, true);
+                throw;
+            }
+        }
         private BattleEncounterEnvironmentSnapshot CreatePlayerBattleEnvironment(PlayerFleetBattleRecord battle, GalaxyStar galaxy)
         {
             BattleEncounterEnvironmentSnapshot environment; string error;
