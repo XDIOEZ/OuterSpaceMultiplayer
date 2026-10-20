@@ -1,0 +1,87 @@
+--- a/src/Game/NativePersonalSync.cs
++++ b/src/Game/NativePersonalSync.cs
+@@ -20,6 +20,7 @@
+         {
+             internal PlayerUpdate Update;
+             internal FWGameData Player;
++            internal PersonalProjectionBaseline ProjectionBaseline;
+             internal readonly List<PreparedPersonalField> Fields = new List<PreparedPersonalField>();
+         }
+         private readonly Dictionary<string, Dictionary<string, string>> personalBaselines = new Dictionary<string, Dictionary<string, string>>();
+@@ -45,6 +46,7 @@
+             var baseline = new Dictionary<string, string>();
+             foreach (string name in PersonalFields) baseline.Add(name, CapturePersonalField(playerId, name).Encoded);
+             personalBaselines[playerId] = baseline;
++            RememberPersonalProjection(playerId, Context.GetPlayerRevision(playerId));
+         }
+         internal List<PlayerUpdate> CapturePersonalDeltas(bool localPlayerOnly = false)
+         {
+@@ -62,6 +64,9 @@
+                 }
+                 if (delta.Fields.Count > 0)
+                 {
++                    // Captured local simulation is not yet acknowledged. It cannot
++                    // authorize a later projection recovery against this shadow.
++                    personalProjectionBaselines.Remove(pair.Key);
+                     long revision = Context.GetPlayerRevision(pair.Key);
+                     updates.Add(new PlayerUpdate { PlayerId = pair.Key, BaseRevision = revision, Revision = revision + 1, NativeDeltaJson = NativeWire.Json(delta) });
+                 }
+@@ -74,6 +79,7 @@
+         {
+             FWGameData player;
+             if (update == null || !Players.TryGetValue(update.PlayerId, out player)) throw new InvalidOperationException("Unknown personal delta owner.");
++            RequirePersonalRevision(update);
+             PersonalDelta delta = NativeWire.Parse<PersonalDelta>(update.NativeDeltaJson);
+             if (delta == null || delta.NativePlayerDelta != 1 || delta.Fields == null) throw new InvalidOperationException("Unknown personal delta schema.");
+             var prepared = new PreparedPersonalDelta { Update = update, Player = player };
+@@ -87,7 +93,13 @@
+                 if (!String.Equals(current, change.Before, StringComparison.Ordinal) && !String.Equals(current, change.After, StringComparison.Ordinal)
+                     && !MatchesPersonalValue(current, change.Before, field.FieldType)
+                     && !String.Equals(current, NativeWire.Pack(after), StringComparison.Ordinal))
+-                    throw new InvalidOperationException("Personal field baseline mismatch: " + change.Name);
++                {
++                    PersonalProjectionBaseline projection;
++                    if (!MatchesPersonalProjectionBefore(update, change, field.FieldType, out projection))
++                        throw new InvalidOperationException("Personal field baseline mismatch: " + change.Name
++                            + " (owner=" + update.PlayerId + ", base=" + update.BaseRevision + ", next=" + update.Revision + ")");
++                    prepared.ProjectionBaseline = projection;
++                }
+                 prepared.Fields.Add(new PreparedPersonalField { Change = change, Field = field, After = after, Current = current });
+             }
+             return prepared;
+@@ -98,6 +110,8 @@
+             FWGameData player;
+             if (prepared == null || !ReferenceEquals(prepared.Update, update) || !Players.TryGetValue(update.PlayerId, out player)
+                 || !ReferenceEquals(prepared.Player, player)) throw new InvalidOperationException("Personal delta must use its own immediate validation result.");
++            RequirePersonalRevision(update);
++            RequirePersonalProjectionUnchanged(prepared);
+             // Map application can run native callbacks. Check every baseline again before any
+             // personal write, while retaining the already decoded detached After values.
+             foreach (PreparedPersonalField field in prepared.Fields)
+@@ -110,11 +124,17 @@
+             }
+             foreach (PreparedPersonalField field in prepared.Fields) field.Field.SetValue(player, field.After);
+             Dictionary<string, string> baseline;
+-            if (!personalBaselines.TryGetValue(update.PlayerId, out baseline)) { ResetPersonalBaseline(update.PlayerId); return; }
++            if (!personalBaselines.TryGetValue(update.PlayerId, out baseline))
++            {
++                ResetPersonalBaseline(update.PlayerId); baseline = personalBaselines[update.PlayerId];
++                // This late live sampling is not a complete authoritative reset.
++                personalProjectionBaselines.Remove(update.PlayerId);
++            }
+             // Receiving one changed field does not repack all inventories, missions and schemes,
+             // nor consume unrelated local changes before their own authoritative transaction.
+             foreach (PreparedPersonalField field in prepared.Fields)
+                 baseline[field.Change.Name] = CapturePersonalField(update.PlayerId, field.Change.Name).Encoded;
++            AdvancePersonalProjection(update, prepared);
+         }
+         public BridgeResult ApplyPlayerUpdate(PlayerUpdate update) { return Run(() => ApplyPersonal(update)); }
+         public PlayerFieldState CapturePlayerFields(string playerId)
+@@ -132,6 +152,7 @@
+                 var decoded = fields.ToDictionary(pair => pair.Key, pair => NativeWire.Unpack(pair.Value, NativeWire.Field(typeof(FWGameData), pair.Key).FieldType));
+                 foreach (var pair in decoded) NativeWire.Set(Players[state.PlayerId], pair.Key, pair.Value);
+                 ResetPersonalBaseline(state.PlayerId);
++                RememberPersonalProjection(state.PlayerId, state.PersonalRevision);
+             });
+         }
+ 

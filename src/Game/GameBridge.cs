@@ -252,6 +252,8 @@ namespace FreeWorldMultiplayer
                     if (!Players.ContainsKey(localPlayer.PlayerId)) Players.Add(localPlayer.PlayerId, NativeWire.Unpack<FWGameData>(localPlayer.NativeJson));
                     foreach (FWGameData data in Players.Values) { if (data != World) RebindSharedGalaxies(data); IndexMaps(data); }
                     foreach (var group in saved.Landings.GroupBy(l => l.MapId)) RestoreNativeLandings(group.Key, group.ToList());
+                    // Preserve confirmed personal state before native activation callbacks run.
+                    ResetLoadedPersonalBaselines();
                     ActivateLocal(localPlayer.PlayerId);
                 }
                 finally { Applying = false; }
@@ -614,7 +616,7 @@ namespace FreeWorldMultiplayer
                 }
             }
             catch (Exception error) { failures.Add(error); }
-            finally { replicator.Dispose(); Players.Clear(); Maps.Clear(); Access.Clear(); }
+            finally { replicator.Dispose(); Players.Clear(); Maps.Clear(); Access.Clear(); personalProjectionBaselines.Clear(); }
             if (failures.Count != 0) throw new AggregateException("联机会话释放失败；请查看各阶段原始异常。", failures);
         }
     }

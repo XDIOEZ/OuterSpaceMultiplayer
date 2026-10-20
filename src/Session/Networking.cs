@@ -266,8 +266,7 @@ namespace FreeWorldMultiplayer
                 case "uids": ReceiveUidRenewal(message); break;
                 case "personal":
                     PlayerUpdate personal = JsonData.Payload<PlayerUpdate>(message.Payload);
-                    Require(bridge.ApplyPlayerUpdate(personal), "同步个人进度字段差量");
-                    World.Players[personal.PlayerId].PersonalRevision = personal.Revision; break;
+                    ReceiveCommittedPersonal(personal); break;
                 case "personalAck":
                     PlayerUpdate personalAck = JsonData.Payload<PlayerUpdate>(message.Payload);
                     ReceivePersonalAcknowledgement(personalAck); break;
