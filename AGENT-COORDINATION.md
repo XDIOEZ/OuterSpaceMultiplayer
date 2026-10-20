@@ -16,6 +16,11 @@
 - 已读舰战 V1.56 三端完成并释放源码/版本/构建，本任务接 V1.57 统一 BuildOnly；构建期间所有输入冻结。精确源码 patch 已归档 docs/patches，不把 HEAD 尚缺的其他 Owner 旧缓存实现/ACK 方法一并提交。待舰战文档提交完成后接共享 index，仅提交本轮记录与版本，不安装、不测试或运行游戏。
 - 完成：V1.57 三端 BuildOnly 同源 08FDD3ED09B206753C0DDF5AFE7738D4C30D4533E06BABF935229AA5693607AD，每端三条既有 CS0649、无编译错误；固定包 artifacts/surface-second-landing-20261020/packages，回执 docs/reports/surface-second-landing-build-20261020.json。未安装/测试/运行游戏/推送，真实故障仍需用户复测。新增 helper 与本轮精确源码 patch/报告/版本窄提交留痕，六份混合生产源码及旧 dirty 保留，不冒称源码依赖闭包已提交；提交后释放所有占用。
 
+### install-v157-20261020 / 主控 /root
+- 用户在地表缓存修复交付后明确要求“安装”，本次授权 Project3 / Steam / TapTap 三端安装 V1.57；仅本 MOD 目录，不改游戏本体/共享 Harmony/玩家数据/启用列表，不启动或测试游戏。
+- 先核对本轮包的主仓库来源和当前进程，再通过统一 Sync-ModCopies.ps1 默认入口重新构建并安装三端；脚本运行中占构建窗口，源码/版本不修改，保留全部历史 dirty。完成后记录实际安装回执并释放。
+- 结果：V1.57 三端构建及安装全部成功，SourceRevision=08FDD3ED09B206753C0DDF5AFE7738D4C30D4533E06BABF935229AA5693607AD；每端三条既有 CS0649，无编译错误。Project3/Steam/TapTap 分别留有 artifacts/installations/20261020-110549-d4c401f9、20261020-110556-3abb47a6、20261020-110604-290bd262 的原文件备份与 receipt.json。聚合回执 docs/reports/surface-v157-install-20261020.json，Completed=true / BuildOnly=false / RuntimeTested=false。未启动/测试游戏，用户需重启后复测；本轮仅记录窄提交，不改版本或功能，不推送，提交完成即释放全部占用。
+
 # Agent 协作记录
 
 ### bug34-cache-retry-reentrancy-20261020 / 主控
