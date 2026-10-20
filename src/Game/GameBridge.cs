@@ -585,6 +585,7 @@ namespace FreeWorldMultiplayer
         {
             if (IsCreatingWorld) throw new InvalidOperationException("原生世界生成仍持有上下文，请等待PollCreateWorld完成后再释放联机会话。");
             var failures = new List<Exception>();
+            try { if (Active == this) StopNativeRoomPresentation(); } catch (Exception error) { failures.Add(error); }
             try { if (harmony != null) harmony.UnpatchAll(harmony.Id); }
             catch (Exception error) { failures.Add(error); }
             try { DisposeGalaxy(); }

@@ -21,6 +21,12 @@
 - 先核对本轮包的主仓库来源和当前进程，再通过统一 Sync-ModCopies.ps1 默认入口重新构建并安装三端；脚本运行中占构建窗口，源码/版本不修改，保留全部历史 dirty。完成后记录实际安装回执并释放。
 - 结果：V1.57 三端构建及安装全部成功，SourceRevision=08FDD3ED09B206753C0DDF5AFE7738D4C30D4533E06BABF935229AA5693607AD；每端三条既有 CS0649，无编译错误。Project3/Steam/TapTap 分别留有 artifacts/installations/20261020-110549-d4c401f9、20261020-110556-3abb47a6、20261020-110604-290bd262 的原文件备份与 receipt.json。聚合回执 docs/reports/surface-v157-install-20261020.json，Completed=true / BuildOnly=false / RuntimeTested=false。未启动/测试游戏，用户需重启后复测；本轮仅记录窄提交，不改版本或功能，不推送，提交完成即释放全部占用。
 
+### room-exit-lifecycle-20261020 / 主控 /root
+- 用户目标：退出房间时 GameRoot、远征、人员列表、任务与通知大量空引用，以及悬停文本重复翻译警告；仅改本 MOD，Project3 只读。
+- 分工：exit_lifecycle 子 Agent 负责退出/原生上下文清理的证据链及最小修复；hover_audit 子 Agent 只读核对 UI 空引用共同依赖及富文本缺键原因。主控协调、版本/文档、精确提交和三端 BuildOnly。
+- 占用预留 GameBridge.cs Reset/NativeSceneRouter.cs 与 Entry/ModPluginLauncher.cs 退出链路（实施前子 Agent 明确范围）；所有旧 dirty 保留，修改前备份。子 Agent 不操作 index/版本/构建，不测试或启动游戏，不安装、不推送。
+- 本轮源码已冻结：新增 NativeRoomExit.cs，GameBridge.Dispose 单行与 Launcher 退出/切房间窄接线；接 V1.58 BuildOnly/index 窗口。已读并行 battle-entry-static-personal 源码及协议12冻结：当前构建包含其工作树输入，本轮不改其源码/协议，个人基线/BOM变化不计入本轮提交。构建后释放给其 V1.59/V1.60；不安装、不测试/运行游戏。
+
 # Agent 协作记录
 
 ### bug34-cache-retry-reentrancy-20261020 / 主控

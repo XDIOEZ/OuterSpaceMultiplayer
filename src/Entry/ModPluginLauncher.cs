@@ -91,7 +91,15 @@ namespace FreeWorldMultiplayer
             if (awaitingClose && Session != null && !Session.IsConnected && !Session.IsStarting)
             {
                 Action next = pendingStart; pendingStart = null;
-                try { FinalizeSession(); if (next != null && !awaitingMenuReturn) Perform(next, "切换联机房间失败。"); }
+                try
+                {
+                    FinalizeSession();
+                    if (next != null)
+                    {
+                        if (awaitingMenuReturn) pendingStart = next;
+                        else Perform(next, "切换联机房间失败。");
+                    }
+                }
                 catch (Exception error) { ShowError("结束联机会话时释放资源失败。", error); }
             }
             if (awaitingMenuReturn) CompleteMenuReturn();
@@ -258,7 +266,12 @@ namespace FreeWorldMultiplayer
             if (!closing.IsConnected && !closing.IsStarting)
             {
                 Action next = pendingStart; pendingStart = null;
-                FinalizeSession(); if (next != null && !awaitingMenuReturn) next();
+                FinalizeSession();
+                if (next != null)
+                {
+                    if (awaitingMenuReturn) pendingStart = next;
+                    else next();
+                }
             }
         }
         internal bool TryQueueNativeReturn(callbackInt callback)
@@ -292,6 +305,7 @@ namespace FreeWorldMultiplayer
             closing.CommandProjectionRequired -= ProjectCommandResult;
             closing.CommandCompleted -= CommandCompleted;
             bool hostLeft = closing.HostLeft && !quitting && !unloading;
+            GameBridge closingBridge = Bridge;
             try
             {
                 closing.Dispose();
@@ -300,11 +314,11 @@ namespace FreeWorldMultiplayer
             finally
             {
                 Session = null; Bridge = null; Transport = null; tickFailed = false; awaitingClose = false; awaitingStartupCompletion = false;
-                if (hostLeft || nativeReturnQueued)
+                if (!quitting && !unloading && (hostLeft || nativeReturnQueued || (closingBridge != null && closingBridge.RequiresMenuReturn)))
                 {
                     // CompleteDisconnect/Dispose has already released the transport and native
                     // world bindings. Only now may the game's own return-to-cover cleanup run.
-                    pendingStart = null;
+                    if (hostLeft || nativeReturnQueued) pendingStart = null;
                     nativeReturnQueued = false; showHostLeftNotice = hostLeft;
                     awaitingMenuReturn = true; menuReturnRequested = false; menuReturnCover = null;
                 }
@@ -342,15 +356,18 @@ namespace FreeWorldMultiplayer
                 }
                 if (Time.frameCount <= menuReturnReadyFrame) return;
                 bool notify = showHostLeftNotice;
+                Action next = pendingStart; pendingStart = null;
                 CancelMenuReturn();
                 if (notify)
                 {
                     FairyUIDispatcher.showTip("房主已经离开游戏", "确定", null, null);
                     Feedback = "房主已经离开游戏。";
                 }
+                if (next != null) Perform(next, "切换联机房间失败。");
             }
             catch (Exception error)
             {
+                pendingStart = null;
                 CancelMenuReturn();
                 ShowError("退出联机后返回主界面失败。", error);
             }
