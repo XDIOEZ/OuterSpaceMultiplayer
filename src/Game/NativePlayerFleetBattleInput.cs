@@ -115,6 +115,15 @@ namespace FreeWorldMultiplayer
         {
             BaseShip ship = brain.GetComponent<BaseShip>();
             if (!IsLocalReplicaShip(ship) || applyingBattleInput) return false;
+            // Harmony also patches overloads of these native methods. Never
+            // index or unbox an argument based only on the method name: an
+            // unexpected signature must not crash the replica's input hook.
+            // Consume the unsupported local order instead of allowing it to
+            // mutate a non-authoritative replica.
+            if (args == null
+                || operation == "IssueCaptureOrder" && (args.Length < 2 || !(args[1] is bool))
+                || operation == "IssueAttackOrder" && args.Length > 2 && !(args[2] is bool))
+                return true;
             var data = new FleetBattleControl();
             if (args.Length != 0)
             {

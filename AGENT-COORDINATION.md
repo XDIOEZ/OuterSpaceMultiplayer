@@ -1,5 +1,9 @@
 # Agent 协作记录
 
+### fix-battle-order-arguments-20261020 / 本轮舰战原生命令防护
+- 范围：`src/Game/NativePlayerFleetBattleInput.cs` 的 `InterceptReplicaOrder` 参数形状检查、`VERSION` 与 `CHANGELOG.md` 本轮新版本段；其他 Owner 已修改区域只读。目标是 Harmony 可能遇到空/不同重载参数时 fail-closed，不把 malformed 指令送给房主或在前置补丁中抛 IndexOutOfRange/InvalidCast。
+- 状态：V1.53 防护源码完成，Project3/Steam/TapTap 三端 `-BuildOnly` 同源成功（`6CC1871D9DB456603360FCD619B50D1BB980528FF42CF4590F724AE45B1CE7F8`），每端 3 项旧 CS0649 警告，无编译错误；未证明游戏中必然出现该重载、未做 Unity/跨机实机重现。版本/日志同步；不更改游戏本体、网络协议、存档结构或三端安装副本。提交仅本轮差异，历史 dirty 保留，占用释放，不推送。
+
 ### perf-battle-pose-rigidbody-20261020 / 本轮性能优化
 - 范围：仅 `src/Game/NativePlayerFleetBattlePose.cs` 中远程舰战插值的 Rigidbody2D 组件缓存；独立性能验证记录；不占用其它 Game/Session/Transport 脏文件、VERSION、构建安装目录。
 - 状态：代码完成、占用释放。首次绑定时查找 Rigidbody2D，后续插值帧复用；同 UID 的舰船实例替换、Unity 组件销毁或初次无组件时重新查找，保持原插值/暂停/物理冻结语义。Project3 / Steam / TapTap 统一 `-BuildOnly` 成功，来源修订 `0187590FC264928E121758D19FEF2521FB604F56277D101CB32F77E14C834DFC`，各端仅 3 个既有 CS0649 警告；未安装、运行游戏或测量实际帧时。未修改 VERSION，保留全部其它历史 dirty/untracked，提交仅包含本轮窄改，不推送。
