@@ -1,3 +1,13 @@
+### fleet-ready-field-20261020 / 主控 /root
+- 用户目标：修复战前部署后进入战场报 battleField Id 0 is null；原版开始战斗按钮改为准备，双方明确准备后共同进入战场。
+- 分工：battle_field 子 Agent 负责 Game 战场配置解析、创建与生命周期；battle_ready 子 Agent 负责原版部署按钮、配置确认与 Session 双方门禁。主控协调接口、版本、窄提交与统一三端 BuildOnly。子 Agent 不构建、测试、运行游戏或操作 Git index。
+- 预留 src/Game/NativePlayerFleetBattle.cs/Scene.cs 给 battle_field，NativePlayerFleetBattlePreparation.cs 与 Session/PlayerFleetBattlePreparation.cs/PlayerFleetBattles.cs 给 battle_ready；其它文件跨界先沟通。基线 artifacts/fleet-ready-field-20261020/baseline，所有原有 dirty 保留。
+- 三端默认只打包，不安装；游戏验证由用户执行。本轮占版本/CHANGELOG/本轮报告与短 index 窗口，完成后释放。
+- 静态调查：原生 Spawner 查询战场 1，而 StandardBattleRule 使用战场 0，报错却写 0；battle_field 可额外占干净的 NativePlayerFleetBattleHooks.cs（先备份），只在本 MOD 当前战斗初始化作用域修正。battle_ready 确认现有双配置门禁有效，优先只改原生部署适配文件，不新增协议或重复 Ready 状态。
+- 用户追加要求修改时增加 Debug：battle_field 新增 Session/PlayerFleetBattleTrace.cs 统一关键日志，并在场景创建、配置选择和刷船处接线；battle_ready 在准备 UI 及 Session/PlayerFleetBattlePreparation.cs 的房主确认/授权处接线。只在操作或状态变化记录，保留原异常/回执，不记录整帧/完整 NativeJson，不运行测试或游戏。
+- 两 Agent 源码已冻结，主控完成接口整合与本轮源码窄提交：V1.55 场景初始化/共用日志，V1.56 准备 UI/房主配置日志。协议仍 11、存档格式不变；现在接统一 Sync-ModCopies.ps1 -BuildOnly 三端构建窗口，禁止修改构建输入，不安装、不跑测试或游戏。
+- 完成并释放：源码提交 c492fbe / 3704dd4，V1.56 三端 BuildOnly 成功，SourceRevision=BD3FA16C1B1AECB5FCD9194B1AD4D2E448EDC1FFF35CEB4731CC13C9F3AFF061；每端三条既有 CS0649，无编译错误。固定包 artifacts/fleet-ready-field-20261020/packages，回执 docs/reports/fleet-ready-field-build-20261020.json。Installations=[] / RuntimeTested=false，未安装/测试/运行游戏/推送；用户验收卡保持待办。源码、版本、构建窗口释放，本轮文档窄提交后释放 index，历史 dirty 保留。
+
 # Agent 协作记录
 
 ### bug34-cache-retry-reentrancy-20261020 / 主控

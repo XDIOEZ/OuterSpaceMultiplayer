@@ -1,5 +1,14 @@
 # MAIN · 主控 / 集成 Agent 邮箱
 
+### MSG-20261020-fleet-ready-field-01 — 舰战配置与双方准备源码冻结
+- 发件人：fleet-ready-field-20261020 /root
+- 收件人：MAIN / GAME / SESSION
+- 状态：三端 BuildOnly 完成，源码/版本/构建窗口释放
+- 消息：V1.55 c492fbe 修复当前玩家舰战 Spawner 查询缺失 ID1，而标准规则/真实配置使用 ID0 的不一致；V1.56 3704dd4 将原生按钮改为准备，本方确认后保留等待页，双配置 SceneAuthorized 后才进入。新增统一 fleet-battle 关键流程 Debug，不逐帧刷屏。仅本MOD六份代码文件，未改本体、FWR、协议或存档；原有 dirty 保留。
+- 关联：docs/reports/舰战入场配置与双方准备-20261020.md、agent-tasks/待办/舰战入场与双方准备-用户验收.md。
+- 结果：V1.56 三端同源 BD3FA16C1B1AECB5FCD9194B1AD4D2E448EDC1FFF35CEB4731CC13C9F3AFF061，Completed=true / BuildOnly=true / Installations=[] / RuntimeTested=false；固定包 artifacts/fleet-ready-field-20261020/packages，回执 docs/reports/fleet-ready-field-build-20261020.json。每端三条既有 CS0649，无编译错误。
+- 需要回复：无；不安装、不测试/启动游戏，游戏验收由用户执行。源码/版本/构建窗口已释放，文档窄提交后释放 index，未推送，历史 dirty 保留。
+
 > 用于跨模块任务协调、交接、构建/发布依赖与范围冲突。实际主控身份以 `../AGENT-COORDINATION.md` 为准。
 
 ## 消息
