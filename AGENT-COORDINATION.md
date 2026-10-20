@@ -8,6 +8,14 @@
 - 两 Agent 源码已冻结，主控完成接口整合与本轮源码窄提交：V1.55 场景初始化/共用日志，V1.56 准备 UI/房主配置日志。协议仍 11、存档格式不变；现在接统一 Sync-ModCopies.ps1 -BuildOnly 三端构建窗口，禁止修改构建输入，不安装、不跑测试或游戏。
 - 完成并释放：源码提交 c492fbe / 3704dd4，V1.56 三端 BuildOnly 成功，SourceRevision=BD3FA16C1B1AECB5FCD9194B1AD4D2E448EDC1FFF35CEB4731CC13C9F3AFF061；每端三条既有 CS0649，无编译错误。固定包 artifacts/fleet-ready-field-20261020/packages，回执 docs/reports/fleet-ready-field-build-20261020.json。Installations=[] / RuntimeTested=false，未安装/测试/运行游戏/推送；用户验收卡保持待办。源码、版本、构建窗口释放，本轮文档窄提交后释放 index，历史 dirty 保留。
 
+### surface-second-landing-20261020 / 主控 /root
+- 用户目标：房主 A 先降落，客人 B 随后降落到另一张地表时，触发 Native delta cache revision is unavailable 并保护性暂停；追加要求补有用 Debug。
+- 分工：surface_cache 子 Agent 负责 Game NativeMapReplicator 缓存/基线链路调查及最小修复；surface_session 子 Agent 负责 Session 地图接入、ACK 与任期调查，批准新 SurfaceMapDiagnostics.cs 及 Authority/MapViewLoading/MapSnapshotCache 的状态转折诊断窄接线。主控只协调、整合、文档、窄提交及统一 BuildOnly；不测试或运行游戏、不安装、不推送。
+- 保留全部历史 dirty；避让 fleet-ready-field 的舰战文件、VERSION/CHANGELOG 占用。基线 artifacts/surface-second-landing-20261020/baseline；版本/构建窗口待双方源码冻结后协调。
+- 源码已冻结：NativeMapReplicator 在同任期精确领先一代时保留真实待确认缓存，GameBridge 唯一 SetRevision 接线；SurfaceMapDiagnostics 与四个 Session 入口记录加载/缓存协商/冻结/真实 ACK/恢复。无协议或存档改动。静态机制明确，但旧日志不足以确认当次唯一诱因；真实双端验收留用户。等待舰战释放版本/构建/index窗口；本轮源码独立 index 预览不占共享 index。
+- 已读舰战 V1.56 三端完成并释放源码/版本/构建，本任务接 V1.57 统一 BuildOnly；构建期间所有输入冻结。精确源码 patch 已归档 docs/patches，不把 HEAD 尚缺的其他 Owner 旧缓存实现/ACK 方法一并提交。待舰战文档提交完成后接共享 index，仅提交本轮记录与版本，不安装、不测试或运行游戏。
+- 完成：V1.57 三端 BuildOnly 同源 08FDD3ED09B206753C0DDF5AFE7738D4C30D4533E06BABF935229AA5693607AD，每端三条既有 CS0649、无编译错误；固定包 artifacts/surface-second-landing-20261020/packages，回执 docs/reports/surface-second-landing-build-20261020.json。未安装/测试/运行游戏/推送，真实故障仍需用户复测。新增 helper 与本轮精确源码 patch/报告/版本窄提交留痕，六份混合生产源码及旧 dirty 保留，不冒称源码依赖闭包已提交；提交后释放所有占用。
+
 # Agent 协作记录
 
 ### bug34-cache-retry-reentrancy-20261020 / 主控

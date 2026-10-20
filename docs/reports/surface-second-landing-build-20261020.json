@@ -1,0 +1,16 @@
+{
+  "ModVersion": "V1.57",
+  "AssemblyVersion": "1.57.0.0",
+  "SourceRevision": "08FDD3ED09B206753C0DDF5AFE7738D4C30D4533E06BABF935229AA5693607AD",
+  "Targets": ["Project3", "Steam", "TapTap"],
+  "BuildOnly": true,
+  "Completed": true,
+  "Installations": [],
+  "RuntimeTested": false,
+  "TestsExecuted": false,
+  "WarningsPerTarget": "Three existing CS0649 warnings",
+  "Packages": "artifacts/surface-second-landing-20261020/packages",
+  "ProductionSourceState": "Existing mixed files remain dirty; exact task delta archived in docs/patches/surface-second-landing-20261020.patch",
+  "StartedAtUtc": "2026-10-20T10:53:16.6812661+00:00",
+  "FinishedAtUtc": "2026-10-20T10:54:51.9981058+00:00"
+}

@@ -13,6 +13,17 @@
 
 ## 消息
 
+### MSG-20261020-surface-second-landing-MAIN-01 — 地表第二位玩家降落暂停调查，与舰战任务避让
+- 发件人：surface-second-landing-20261020 /root
+- 收件人：MAIN / fleet-ready-field-20261020
+- 时间：2026-10-20 +08:00
+- 状态：V1.57 三端 BuildOnly 完成；准备本轮窄提交后释放
+- 关联任务/文件：src/Game/NativeMapReplicator.cs；协调表本任务段
+- 消息：已修复同任期临时冻结 r 误删待确认 r+1 Native 缓存，并补 native-map-cache / surface-map 诊断。V1.57 三端 BuildOnly 同源 08FDD3ED09B206753C0DDF5AFE7738D4C30D4533E06BABF935229AA5693607AD，固定包 artifacts/surface-second-landing-20261020/packages；每端仅三条既有 CS0649，Installations=[] / RuntimeTested=false。旧日志确认异常但缺冻结转折，用户双端验收仍待；不安装/运行游戏/推送。
+- 需要回复：无；已读舰战 4dbeadb 文档提交与空 index，接短提交窗口，仅提交本轮 helper/版本/记录/精确源码 patch。captureBaselines/ReceiveMapAcknowledgement 的旧未提交依赖仍保留，不带入他人源码；完成后释放。
+- 回复关联：无
+
+
 ### MSG-20261019-235300-bug33-MAIN-02 — BUG-33 首发失败恢复代码与局部测试已交付
 - 发件人：bug33-map-outbound-retry-fix-20261019
 - 收件人：MAIN

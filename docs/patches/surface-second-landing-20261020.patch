@@ -1,0 +1,211 @@
+--- a/src/Game/NativeMapReplicator.cs
++++ b/src/Game/NativeMapReplicator.cs
+@@ -98,0 +99,2 @@
++        private long captureLogWindowStarted;
++        private int captureLogEvents;
+@@ -131 +133 @@
+-        internal void SetRevision(long mapId, long revision)
++        internal void SetRevision(long mapId, long revision, bool authorityChanged)
+@@ -134 +136,17 @@
+-            if (!revisions.TryGetValue(mapId, out previous) || previous != revision) captureBaselines.Remove(mapId);
++            bool hasPrevious = revisions.TryGetValue(mapId, out previous);
++            CaptureBaseline captured;
++            // A same-lease temporary freeze carries the last ACKed revision, while native
++            // capture already owns the next immutable generation awaiting that ACK. Keep
++            // that exact generation: rewinding it discards the only data behind its marker.
++            // Session still requires the matching transaction receipt before publishing again.
++            if (!authorityChanged && hasPrevious && previous > 0 && revision >= 0 && revision == previous - 1
++                && captureBaselines.TryGetValue(mapId, out captured) && captured.Revision == previous)
++            {
++                TraceCaptureBaseline("authority.keep-captured", mapId, null, revision, true);
++                return;
++            }
++            if (authorityChanged || !hasPrevious || previous != revision)
++            {
++                TraceCaptureBaseline(authorityChanged ? "authority.reset" : "revision.reset", mapId, null, revision, true);
++                captureBaselines.Remove(mapId);
++            }
+@@ -135,0 +154,24 @@
++        }
++        private void TraceCaptureBaseline(string stage, long mapId, MapSnapshot snapshot = null,
++            long requestedRevision = -1, bool important = false)
++        {
++            // Only lifecycle boundaries and cache faults are recorded, never every delta/pose.
++            // Bound routine full-checkpoint diagnostics; faults and invalidations stay visible.
++            try
++            {
++                long now = System.Diagnostics.Stopwatch.GetTimestamp();
++                if (captureLogWindowStarted == 0 || (now - captureLogWindowStarted) / (double)System.Diagnostics.Stopwatch.Frequency >= 60)
++                { captureLogWindowStarted = now; captureLogEvents = 0; }
++                if (!important && captureLogEvents >= 96) return;
++                captureLogEvents++;
++                long revision;
++                CaptureBaseline cache;
++                Logger.LogEngine("[FreeWorldMultiplayer][native-map-cache] stage=" + stage + " map=" + mapId
++                    + " nativeRevision=" + (revisions.TryGetValue(mapId, out revision) ? revision.ToString() : "missing")
++                    + " cacheRevision=" + (captureBaselines.TryGetValue(mapId, out cache) ? cache.Revision.ToString() : "missing")
++                    + " previousRevision=" + (snapshot == null ? "none" : snapshot.Revision.ToString())
++                    + " requestedRevision=" + requestedRevision + " marker=" + (snapshot != null && snapshot.IsDeltaBaseline)
++                    + " fullChars=" + (snapshot == null || snapshot.NativeJson == null ? 0 : snapshot.NativeJson.Length)
++                    + " currentMap=" + bridge.CurrentMapId + " role=" + (bridge.Context.IsHost ? "host" : "guest"));
++            }
++            catch { /* Diagnostic output must not change native transaction results. */ }
+@@ -237,0 +280 @@
++            TraceCaptureBaseline("checkpoint.capture", mapId, result);
+@@ -259,0 +303 @@
++            TraceCaptureBaseline("checkpoint.network", snapshot.MapId, snapshot);
+@@ -306 +350,9 @@
+-                if (previous.IsDeltaBaseline || string.IsNullOrEmpty(previous.NativeJson)) throw new InvalidOperationException("Native delta cache revision is unavailable; require a complete acknowledged checkpoint.");
++                if (previous.IsDeltaBaseline || string.IsNullOrEmpty(previous.NativeJson))
++                {
++                    TraceCaptureBaseline("delta.cache-unavailable", mapId, previous, -1, true);
++                    throw new InvalidOperationException("Native delta cache revision is unavailable; require a complete acknowledged checkpoint."
++                        + " map=" + mapId + " acknowledgedRevision=" + previous.Revision
++                        + " cacheRevision=" + (baseline == null ? "missing" : baseline.Revision.ToString())
++                        + " marker=" + previous.IsDeltaBaseline);
++                }
++                TraceCaptureBaseline("delta.build-full-baseline", mapId, previous);
+@@ -444,0 +497 @@
++            TraceCaptureBaseline("checkpoint.restore", snapshot.MapId, snapshot, -1, true);
+@@ -505,0 +559 @@
++            if (captureBaselines.ContainsKey(update.MapId)) TraceCaptureBaseline("delta.apply-discard", update.MapId, null, update.Revision, true);
+--- a/src/Game/GameBridge.cs
++++ b/src/Game/GameBridge.cs
+@@ -412 +412 @@
+-                replicator.SetRevision(access.MapId, access.Revision);
++                replicator.SetRevision(access.MapId, access.Revision, authorityChanged);
+--- a/src/Session/Authority.cs
++++ b/src/Session/Authority.cs
+@@ -195,0 +196 @@
++                TraceSurfaceMap(captureLive ? "checkpoint.capture-live" : "checkpoint.capture-required", map.MapId);
+@@ -200,0 +202 @@
++                TraceSurfaceMap("checkpoint.captured", map.MapId);
+@@ -206,0 +209 @@
++            TraceSurfaceMap("enter.request", mapId);
+@@ -228,0 +232 @@
++            TraceSurfaceMap("authority.reassign-begin", map.MapId);
+@@ -247,0 +252 @@
++                TraceSurfaceMap("authority.frozen", map.MapId);
+@@ -252,0 +258 @@
++            TraceSurfaceMap("authority.reassigned", map.MapId);
+@@ -305 +311,5 @@
+-            if (!World.Maps.TryGetValue(ready.MapId, out map) || map.SimulatorPlayerId != playerId || map.AuthorityEpoch != ready.AuthorityEpoch || map.Revision != ready.Revision) throw new MessageRejectionException("模拟权确认版本已经失效。");
++            if (!World.Maps.TryGetValue(ready.MapId, out map) || map.SimulatorPlayerId != playerId || map.AuthorityEpoch != ready.AuthorityEpoch || map.Revision != ready.Revision)
++            {
++                TraceSurfaceMap("authority.ready-mismatch", ready.MapId, ready.AuthorityEpoch, ready.Revision, true);
++                throw new MessageRejectionException("模拟权确认版本已经失效。");
++            }
+@@ -307,0 +318 @@
++            TraceSurfaceMap("authority.ready", ready.MapId, ready.AuthorityEpoch, ready.Revision);
+@@ -370 +381,7 @@
+-                MapUpdate update = bridge.CaptureMapUpdate(map.MapId, baseline);
++                MapUpdate update;
++                try { update = bridge.CaptureMapUpdate(map.MapId, baseline); }
++                catch
++                {
++                    TraceSurfaceMap("delta.capture-failed", map.MapId, mismatch: true);
++                    throw;
++                }
+@@ -552,0 +570 @@
++                TraceSurfaceMap("ack.missing-pending", map.MapId, acknowledgement.AuthorityEpoch, acknowledgement.Revision, true);
+@@ -559,0 +578 @@
++                TraceSurfaceMap("ack.transaction-mismatch", map.MapId, acknowledgement.AuthorityEpoch, acknowledgement.Revision, true);
+@@ -563,0 +583,2 @@
++            {
++                TraceSurfaceMap("ack.checkpoint-mismatch", map.MapId, acknowledgement.AuthorityEpoch, acknowledgement.Revision, true);
+@@ -564,0 +586 @@
++            }
+@@ -574,0 +597,2 @@
++            if (giftPausedMaps.Contains(map.MapId))
++                TraceSurfaceMap("gift.ack-confirmed", map.MapId, acknowledgement.AuthorityEpoch, acknowledgement.Revision);
+--- a/src/Session/MapViewLoading.cs
++++ b/src/Session/MapViewLoading.cs
+@@ -109,0 +110 @@
++            TraceSurfaceMap("view.apply-begin", view.Access.MapId, view.Access.AuthorityEpoch, view.Access.Revision);
+@@ -113,0 +115 @@
++            TraceSurfaceMap("load.begin", view.Access.MapId, view.Access.AuthorityEpoch, view.Access.Revision);
+@@ -120,0 +123 @@
++            TraceSurfaceMap("view.applied", view.Access.MapId, view.Access.AuthorityEpoch, view.Access.Revision);
+@@ -241,0 +245 @@
++                    TraceSurfaceMap("load.ready", nativeMapLoad.MapId, nativeMapLoad.Epoch, nativeMapLoad.Revision);
+@@ -363,0 +368 @@
++            TraceSurfaceMap("load.failed", nativeMapLoad == null ? receivingMapId : nativeMapLoad.MapId, mismatch: true);
+--- a/src/Session/MapSnapshotCache.cs
++++ b/src/Session/MapSnapshotCache.cs
+@@ -74,0 +75 @@
++            TraceSurfaceMap("checkpoint.query-send", query.MapId, query.AuthorityEpoch, query.Revision);
+@@ -111,0 +113 @@
++            TraceSurfaceMap("checkpoint.query-received", query.MapId, query.AuthorityEpoch, query.Revision);
+@@ -155,0 +158 @@
++            TraceSurfaceMap("checkpoint.offer-received", pending.Query.MapId, pending.Query.AuthorityEpoch, pending.Query.Revision);
+@@ -179,0 +183 @@
++            TraceSurfaceMap("checkpoint.view-sent", pending.Query.MapId, pending.Query.AuthorityEpoch, pending.Query.Revision);
+--- a/src/Session/PlayerGiftCheckpoint.cs
++++ b/src/Session/PlayerGiftCheckpoint.cs
+@@ -63,0 +64 @@
++            TraceSurfaceMap("gift.freeze-request", request.MapId, request.AuthorityEpoch, map.Revision);
+@@ -91,0 +93 @@
++                    TraceSurfaceMap("gift.flushed-sent", request.MapId, request.AuthorityEpoch, map.Revision);
+@@ -106,0 +109 @@
++            TraceSurfaceMap("gift.flushed-confirmed", request.MapId, request.AuthorityEpoch, map.Revision);
+@@ -158,0 +162 @@
++            TraceSurfaceMap("gift.resume-request", request.MapId, request.AuthorityEpoch, map.Revision);
+@@ -161,0 +166 @@
++            TraceSurfaceMap("gift.resumed", request.MapId, request.AuthorityEpoch, map.Revision);
+--- /dev/null
++++ b/src/Session/SurfaceMapDiagnostics.cs
+@@ -0,0 +1,54 @@
++using System;
++using System.Collections.Generic;
++using System.Diagnostics;
++
++namespace FreeWorldMultiplayer
++{
++    public sealed partial class MultiplayerSession
++    {
++        private readonly Dictionary<string, long> surfaceMapDiagnosticTimes = new Dictionary<string, long>();
++
++        // Boundary events only. Repeated rejected receipts are throttled; payloads,
++        // player/peer identities and capability identifiers must never enter this trace.
++        private void TraceSurfaceMap(string stage, long mapId, long incomingEpoch = -1, long incomingRevision = -1, bool mismatch = false)
++        {
++            try
++            {
++                if (mismatch)
++                {
++                    string key = stage + ":" + mapId;
++                    long now = Stopwatch.GetTimestamp(), previous;
++                    if (surfaceMapDiagnosticTimes.TryGetValue(key, out previous)
++                        && (now - previous) / (double)Stopwatch.Frequency < 5) return;
++                    if (surfaceMapDiagnosticTimes.Count >= 128 && !surfaceMapDiagnosticTimes.ContainsKey(key)) return;
++                    surfaceMapDiagnosticTimes[key] = now;
++                }
++                MapRecord map = null;
++                if (World != null) World.Maps.TryGetValue(mapId, out map);
++                MapSnapshot baseline;
++                localBaselines.TryGetValue(mapId, out baseline);
++                MapUpdate pending;
++                inFlightUpdates.TryGetValue(mapId, out pending);
++                string state = "[FreeWorldMultiplayer][surface-map] stage=" + stage
++                    + " role=" + (IsHost ? "host" : "guest") + " map=" + mapId
++                    + " epoch=" + (map == null ? -1 : map.AuthorityEpoch)
++                    + " revision=" + (map == null ? -1 : map.Revision)
++                    + " incomingEpoch=" + incomingEpoch + " incomingRevision=" + incomingRevision
++                    + " localSimulator=" + (map != null && map.SimulatorPlayerId == LocalPlayerId)
++                    + " awaitingReady=" + (map != null && map.AwaitingAuthorityReady)
++                    + " visitors=" + (map == null ? 0 : map.Visitors.Count)
++                    + " checkpointRevision=" + (map == null || map.Checkpoint == null ? -1 : map.Checkpoint.Revision)
++                    + " checkpointDelta=" + (map != null && map.Checkpoint != null && map.Checkpoint.IsDeltaBaseline)
++                    + " baselineRevision=" + (baseline == null ? -1 : baseline.Revision)
++                    + " baselineDelta=" + (baseline != null && baseline.IsDeltaBaseline)
++                    + " pendingBase=" + (pending == null ? -1 : pending.BaseRevision)
++                    + " pendingRevision=" + (pending == null ? -1 : pending.Revision)
++                    + " mapInFlight=" + inFlightUpdates.Count + " personalInFlight=" + personalInFlight.Count
++                    + " loading=" + HasMapLoadingBarrier + " loadingQueue=" + loadingMessages.Count
++                    + " paused=" + Paused + " giftPaused=" + giftPausedMaps.Contains(mapId);
++                if (mismatch) Logger.LogWarningEngine(state); else Logger.LogEngine(state);
++            }
++            catch { /* A diagnostic must never change native or acknowledgement state. */ }
++        }
++    }
++}
