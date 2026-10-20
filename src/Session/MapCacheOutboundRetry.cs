@@ -21,6 +21,7 @@ namespace FreeWorldMultiplayer
             internal long MapId, Epoch, Revision;
             internal byte[] Bytes;
             internal double Remaining;
+            internal bool Sending;
         }
 
         private readonly Dictionary<string, Pending> pending = new Dictionary<string, Pending>();
@@ -100,7 +101,8 @@ namespace FreeWorldMultiplayer
                 foreach (Pending entry in snapshot)
                 {
                     Pending current;
-                    if (!pending.TryGetValue(entry.Key, out current) || !ReferenceEquals(current, entry)) continue;
+                    if (!pending.TryGetValue(entry.Key, out current) || !ReferenceEquals(current, entry)
+                        || entry.Sending) continue;
                     bool valid = stillCurrent(entry.Kind, entry.ViewId, entry.MapId, entry.Epoch, entry.Revision);
                     // Recheck after the callback: a replacement must not be
                     // sent or erased by this old lease, even if it has the key.
@@ -108,6 +110,10 @@ namespace FreeWorldMultiplayer
                     if (!valid) { pending.Remove(entry.Key); continue; }
                     entry.Remaining = Math.Max(0, entry.Remaining - seconds);
                     if (entry.Remaining > 0) continue;
+                    // A transport callback can synchronously reenter Advance.
+                    // Keep the exact pending lease reserved until that send
+                    // returns, even when the retry timer is already at zero.
+                    entry.Sending = true;
                     try
                     {
                         enqueue(entry.Bytes);
@@ -116,6 +122,7 @@ namespace FreeWorldMultiplayer
                     }
                     catch (IOException) { entry.Remaining = RetrySeconds; }
                     catch (InvalidOperationException) { entry.Remaining = RetrySeconds; }
+                    finally { entry.Sending = false; }
                 }
             }
             finally { retrySnapshot.Release(snapshot); }

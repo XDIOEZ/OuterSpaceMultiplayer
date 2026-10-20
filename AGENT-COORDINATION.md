@@ -1,5 +1,9 @@
 # Agent 协作记录
 
+### bug34-cache-retry-reentrancy-20261020 / 主控
+- 范围：独占 `src/Session/MapCacheOutboundRetry.cs` 及 `tools/MapCacheNegotiationChecks/Program.cs` 的二次发送重入防护；`VERSION` 和 `CHANGELOG.md` 的本轮 V1.54 新段，协调表只记录本任务新增段落；其它 Agent 历史脏文件只读。
+- 状态：V1.54 修复完成，占用释放。本轮生产源码链接检查先红后绿：原版 `reentrant room Tick cannot send the same accepted retry twice` 失败，新增加标记后 60,090 项通过（包括失败后两秒退避）。Project3/Steam/TapTap `-BuildOnly` 成功，三个 `BUILD-INFO.json` 均为源码 `DB885D7F0F239BE11FFC4F42617996D2BD81081744C68F0DD1AF3C1C4C82881F`；每端只有 3 条既有 CS0649 编译警告。无真实跨机运行验收、不安装或推送；未改协议、存档或其他 Agent 历史脏改动。
+
 ### perf-fleet-nameplate-idle-20261020 / 本轮星系名牌空闲帧优化
 - 范围：`src/Game/NativeFleetNameplates.cs` 中不可见帧重复释放、画布回调重复设置相同 activeSelf；不修改舰队权威、帧采样、协议和存档，已有脏源码及其他 Agent 任务保持不变。
 - 状态：本轮源码完成，已释放占用。只有存在可见状态或残留名牌资源时才执行释放，`RefreshScreenPosition` 仅对真正变化的 GameObject 显隐调用 `SetActive`，不改变文字、位置或舰队权威逻辑。V1.53 三端 BuildOnly 成功且各 `BUILD-INFO.json` 来源一致：`3E54B89E7733301AE0954EE9AB4FC2E6777064B0E4C703630493C3A50EE0D3F8`；每端 3 条旧 CS0649，无编译错误。首次 All 构建遇 Steam ZIP `File.Replace` 临时失败，单独重试 Steam 后成功，再构建 TapTap 成功。未实测 Unity FPS/GC，未安装/推送/递增版本，历史 dirty 保留。本轮只提交独立源码改动和此协调记录。

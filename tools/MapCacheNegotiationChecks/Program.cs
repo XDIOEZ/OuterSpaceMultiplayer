@@ -114,6 +114,43 @@ internal static class Program
             "old success cannot erase a new session's queued lease");
         reentered.Clear();
 
+        // A deferred retry is still in pending while its send callback runs.
+        // A synchronous transport callback that advances the room again must
+        // not enqueue the same lease twice (nor consume an extra retry clock).
+        var inlineRetry = new MapCacheOutboundRetry();
+        Check(!inlineRetry.TrySend(MapCacheOutboundKind.Offer, "nested-retry", 7, 1, 1,
+            offer, _ => throw new IOException("initial queue full")), "nested retry setup");
+        int retrySendCalls = 0;
+        inlineRetry.Advance(2, (_, __, ___, ____, _____) => true, bytes =>
+        {
+            retrySendCalls++;
+            inlineRetry.Advance(2, (_, __, ___, ____, _____) => true,
+                _ => retrySendCalls++);
+        });
+        Check(retrySendCalls == 1 && inlineRetry.Count == 0,
+            "reentrant room Tick cannot send the same accepted retry twice");
+
+        var inlineFailure = new MapCacheOutboundRetry();
+        Check(!inlineFailure.TrySend(MapCacheOutboundKind.CacheRetry, "nested-fail", 7, 1, 1,
+            offer, _ => throw new IOException("initial queue full")), "nested failure setup");
+        int attemptsDuringFailure = 0;
+        inlineFailure.Advance(2, (_, __, ___, ____, _____) => true, bytes =>
+        {
+            attemptsDuringFailure++;
+            inlineFailure.Advance(2, (_, __, ___, ____, _____) => true,
+                _ => attemptsDuringFailure++);
+            throw new IOException("still congested");
+        });
+        Check(attemptsDuringFailure == 1 && inlineFailure.Count == 1,
+            "reentrant failed retry retains one outstanding lease");
+        inlineFailure.Advance(1.999, (_, __, ___, ____, _____) => true,
+            _ => throw new Exception("failed retry was sent before backoff"));
+        Check(inlineFailure.Count == 1, "failed inline retry maintains two-second backoff");
+        inlineFailure.Advance(0.001, (_, __, ___, ____, _____) => true,
+            _ => attemptsDuringFailure++);
+        Check(attemptsDuringFailure == 2 && inlineFailure.Count == 0,
+            "failed inline retry is admitted once at its next deadline");
+
         // C27-09: the very first enqueue may synchronously reenter the same
         // map query (e.g. a fake immediate transport callback). Even before
         // an IOException creates a deferred entry, it is the SAME request
