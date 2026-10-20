@@ -12,6 +12,10 @@ namespace FreeWorldMultiplayer
         {
             internal Vector3 From, To;
             internal float FromAngle, ToAngle, Receipt, Duration, Progress;
+            // A replica's rigidbody is stable across interpolation frames.
+            // Rebind when the native ship instance for this UID is replaced.
+            internal BaseShip Ship;
+            internal Rigidbody2D Body;
         }
         private readonly Dictionary<long, PlayerBattlePose> playerBattlePoses = new Dictionary<long, PlayerBattlePose>();
         private long appliedNativeBattleRevision;
@@ -20,6 +24,12 @@ namespace FreeWorldMultiplayer
             PlayerBattlePose pose; float now = Time.unscaledTime;
             if (!playerBattlePoses.TryGetValue(target.Uid, out pose))
             { playerBattlePoses.Add(target.Uid, pose = new PlayerBattlePose()); reset = true; }
+            if (!ReferenceEquals(pose.Ship, ship))
+            {
+                pose.Ship = ship;
+                pose.Body = null;
+                reset = true;
+            }
             float interval = pose.Receipt <= 0 ? 0.1f : Mathf.Clamp(now - pose.Receipt, 0.025f, 0.25f);
             pose.From = reset ? new Vector3(target.X, target.Y, ship.transform.position.z) : ship.transform.position;
             pose.To = new Vector3(target.X, target.Y, ship.transform.position.z);
@@ -30,7 +40,8 @@ namespace FreeWorldMultiplayer
         private void UpdatePlayerBattlePose(BaseShip ship)
         {
             PlayerBattlePose pose;
-            if (!playerBattlePoses.TryGetValue(BattleSourceUid(ship), out pose) || Context.IsPaused()) return;
+            if (!playerBattlePoses.TryGetValue(BattleSourceUid(ship), out pose)
+                || !ReferenceEquals(pose.Ship, ship) || Context.IsPaused()) return;
             pose.Progress = Mathf.Min(1, pose.Progress + Time.unscaledDeltaTime / pose.Duration);
             ApplyPlayerBattlePose(ship, pose);
         }
@@ -39,7 +50,11 @@ namespace FreeWorldMultiplayer
             Vector3 p = Vector3.Lerp(pose.From, pose.To, pose.Progress);
             float angle = Mathf.LerpAngle(pose.FromAngle, pose.ToAngle, pose.Progress);
             ship.transform.SetPositionAndRotation(p, Quaternion.Euler(0, 0, angle));
-            Rigidbody2D body = ship.GetComponent<Rigidbody2D>();
+            // Unity GetComponent crosses into the engine; don't repeat it for
+            // every replica ship on every rendered frame. Unity's null check
+            // also detects a destroyed component so it can be rebound.
+            Rigidbody2D body = pose.Body;
+            if (body == null) pose.Body = body = ship.GetComponent<Rigidbody2D>();
             if (body != null) { body.simulated = false; body.position = p; body.rotation = angle; }
         }
         internal bool UpdateRemotePlayerBattleShieldAim(ShieldManager manager)

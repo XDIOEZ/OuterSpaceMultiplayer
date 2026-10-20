@@ -1,5 +1,9 @@
 # Agent 协作记录
 
+### perf-battle-pose-rigidbody-20261020 / 本轮性能优化
+- 范围：仅 `src/Game/NativePlayerFleetBattlePose.cs` 中远程舰战插值的 Rigidbody2D 组件缓存；独立性能验证记录；不占用其它 Game/Session/Transport 脏文件、VERSION、构建安装目录。
+- 状态：代码完成、占用释放。首次绑定时查找 Rigidbody2D，后续插值帧复用；同 UID 的舰船实例替换、Unity 组件销毁或初次无组件时重新查找，保持原插值/暂停/物理冻结语义。Project3 / Steam / TapTap 统一 `-BuildOnly` 成功，来源修订 `0187590FC264928E121758D19FEF2521FB604F56277D101CB32F77E14C834DFC`，各端仅 3 个既有 CS0649 警告；未安装、运行游戏或测量实际帧时。未修改 VERSION，保留全部其它历史 dirty/untracked，提交仅包含本轮窄改，不推送。
+
 ### mod-compatibility-design-20261019 / 主控 /root
 - 用户选择只整理第三方 MOD 联机兼容方案与接口设计；只读子 Agent mod_extension_audit 完成真实入口与缺口审查。
 - 文档、SVG及导航已完成：docs/plans/MOD联机兼容与扩展接口设计-20261019.md、docs/diagrams/MOD联机扩展流程.svg、docs/README.md。仅设计稿，不实现接口，不改V1需求/源码/版本，不验证、构建、运行或安装。
