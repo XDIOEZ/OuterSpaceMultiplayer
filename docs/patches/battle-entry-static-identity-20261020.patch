@@ -1,0 +1,200 @@
+diff --git a/src/Game/NativePlayerFleetBattleScene.cs b/src/Game/NativePlayerFleetBattleScene.cs
+index 6071c38..ae1187e 100644
+--- a/src/Game/NativePlayerFleetBattleScene.cs
++++ b/src/Game/NativePlayerFleetBattleScene.cs
+@@ -25,8 +25,61 @@ namespace FreeWorldMultiplayer
+             public string Path, Kind;
+             public bool Active, Contested;
+             public float X, Y, Z, Rotation, Sx, Sy, Sz, Progress;
+-            public int Owner, Capturing;
++            public int Owner, Capturing, ComponentIndex;
+         }
++        // Names alone are not Unity hierarchy identities: native environment prefabs
++        // contain several equally named siblings. Keep addresses for this root's life,
++        // including removed slots, so later removals cannot renumber surviving nodes.
++        private sealed class BattleEnvironmentNodes
++        {
++            public Transform Root;
++            public readonly Dictionary<Transform, string> Paths = new Dictionary<Transform, string>();
++            public readonly Dictionary<string, Transform> Nodes = new Dictionary<string, Transform>(StringComparer.Ordinal);
++            public BattleEnvironmentNodes(Transform root) { Root = root; Index(root, "@2", false); }
++            public void Refresh() { Index(Root, "@2", false); }
++            public void Index(Transform node, string path, bool restoring)
++            {
++                Transform existing;
++                if (restoring && Nodes.TryGetValue(path, out existing) && existing != null && existing != node)
++                    throw new InvalidOperationException("战场静态节点恢复身份已被占用：" + path);
++                Paths[node] = path; Nodes[path] = node;
++                for (int i = 0; i < node.childCount; i++)
++                {
++                    Transform child = node.GetChild(i); string childPath;
++                    if (!restoring && Paths.TryGetValue(child, out childPath)) { Index(child, childPath, false); continue; }
++                    string name = Uri.EscapeDataString(child.name); int ordinal = 0;
++                    // Restored descendants retain the template's sibling ordering too.
++                    for (int sibling = 0; restoring && sibling < i; sibling++)
++                        if (node.GetChild(sibling).name == child.name) ordinal++;
++                    do { childPath = path + "/" + name + "~" + (ordinal++).ToString(System.Globalization.CultureInfo.InvariantCulture); }
++                    while (!restoring && Nodes.ContainsKey(childPath));
++                    Index(child, childPath, restoring);
++                }
++            }
++            public Transform Resolve(string path)
++            {
++                Transform node;
++                if (path == "@2" || path.StartsWith("@2/", StringComparison.Ordinal))
++                    return Nodes.TryGetValue(path, out node) ? node : null;
++                // Old checkpoints are readable only when each name is unambiguous.
++                node = Root;
++                foreach (string name in path.Split('/'))
++                {
++                    Transform match = null;
++                    for (int i = 0; i < node.childCount; i++)
++                    {
++                        Transform child = node.GetChild(i);
++                        if (child.name != name) continue;
++                        if (match != null) throw new InvalidOperationException("旧战场检查点含歧义层级：" + path);
++                        match = child;
++                    }
++                    if (match == null) return null;
++                    node = match;
++                }
++                return node;
++            }
++        }
++        private BattleEnvironmentNodes battleEnvironmentNodes;
+         private FleetBattleEnvironment battleEnvironment;
+         private string appliedBattleEnvironment;
+         private bool applyingBattleClock;
+@@ -156,65 +209,116 @@ namespace FreeWorldMultiplayer
+             foreach (BattleEnvironmentProfile profile in root.GetComponentsInChildren<BattleEnvironmentProfile>(true)) profile.ApplyEncounterEnvironment(environment);
+             appliedBattleEnvironment = encoded; battleEnvironment = description;
+         }
+-        private static string BattleEnvironmentPath(Transform value, Transform root)
++        private BattleEnvironmentNodes PlayerBattleEnvironmentNodes(GameObject root)
+         {
+-            var parts = new List<string>();
+-            while (value != null && value != root) { parts.Add(value.name); value = value.parent; }
+-            if (value == null || parts.Count == 0) throw new InvalidOperationException("战场静态对象不属于原生战场环境。");
+-            parts.Reverse(); return string.Join("/", parts.ToArray());
++            if (battleEnvironmentNodes == null || battleEnvironmentNodes.Root != root.transform)
++                battleEnvironmentNodes = new BattleEnvironmentNodes(root.transform);
++            else battleEnvironmentNodes.Refresh();
++            return battleEnvironmentNodes;
++        }
++        private static int BattleSceneComponentIndex(Component component)
++        {
++            Component[] peers = component is StrategicPoint
++                ? component.GetComponents<StrategicPoint>().Cast<Component>().ToArray()
++                : component.GetComponents<StaticObstacle>().Cast<Component>().ToArray();
++            return Array.IndexOf(peers, component);
++        }
++        private static Component BattleSceneComponent(Transform node, FleetBattleSceneItem item)
++        {
++            if (node == null) return null;
++            Component[] peers = item.Kind == "Point"
++                ? node.GetComponents<StrategicPoint>().Cast<Component>().ToArray()
++                : node.GetComponents<StaticObstacle>().Cast<Component>().ToArray();
++            return item.ComponentIndex < peers.Length ? peers[item.ComponentIndex] : null;
++        }
++        private static bool ValidBattleScenePath(string path)
++        {
++            if (string.IsNullOrEmpty(path) || path.Length > 512) return false;
++            string[] parts = path.Split('/');
++            if (parts.Any(p => p.Length == 0 || p == "." || p == "..")) return false;
++            if (parts[0] != "@2") return true;
++            for (int i = 1; i < parts.Length; i++)
++            {
++                string part = parts[i]; int split = part.LastIndexOf('~'), ordinal;
++                if (split < 0 || !int.TryParse(part.Substring(split + 1), System.Globalization.NumberStyles.None,
++                    System.Globalization.CultureInfo.InvariantCulture, out ordinal) || ordinal < 0
++                    || ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture) != part.Substring(split + 1)) return false;
++                string name = part.Substring(0, split);
++                if (Uri.EscapeDataString(Uri.UnescapeDataString(name)) != name) return false;
++            }
++            return true;
+         }
+         private List<FleetBattleSceneItem> CapturePlayerBattleScene()
+         {
+             GameObject root = PlayerBattleEnvironmentRoot(); var items = new List<FleetBattleSceneItem>();
++            BattleEnvironmentNodes nodes = PlayerBattleEnvironmentNodes(root);
+             foreach (Component component in root.GetComponentsInChildren<StaticObstacle>(true).Cast<Component>()
+                 .Concat(root.GetComponentsInChildren<StrategicPoint>(true).Cast<Component>()))
+             {
+                 Transform t = component.transform; StrategicPoint point = component as StrategicPoint;
+-                items.Add(new FleetBattleSceneItem { Path = BattleEnvironmentPath(t, root.transform), Kind = point == null ? "Obstacle" : "Point",
++                items.Add(new FleetBattleSceneItem { Path = nodes.Paths[t], Kind = point == null ? "Obstacle" : "Point", ComponentIndex = BattleSceneComponentIndex(component),
+                     Active = component.gameObject.activeSelf, X = t.localPosition.x, Y = t.localPosition.y, Z = t.localPosition.z,
+                     Rotation = t.localEulerAngles.z, Sx = t.localScale.x, Sy = t.localScale.y, Sz = t.localScale.z,
+                     Owner = point == null ? 0 : (int)point.OwnerTeam, Capturing = point == null ? 0 : (int)point.CapturingTeam,
+                     Progress = point == null ? 0 : point.CaptureProgress, Contested = point != null && point.IsContested });
+             }
+-            if (items.Select(i => i.Path).Distinct().Count() != items.Count) throw new InvalidOperationException("原生战场静态对象存在重复层级身份，不能生成歧义联机布局。");
++            if (items.Select(i => Tuple.Create(i.Path, i.Kind, i.ComponentIndex)).Distinct().Count() != items.Count)
++                throw new InvalidOperationException("原生战场静态对象存在重复组件身份，不能生成歧义联机布局。");
+             return items;
+         }
+         private static void ValidatePlayerBattleScene(FleetBattleState state)
+         {
+             if (state.Environment == null || state.Scene == null || state.Scene.Count > 10000) throw new InvalidOperationException("玩家战场缺少同一环境或静态布局。");
+             string error; if (!RestoreBattleEnvironment(state.Environment).TryValidate(out error)) throw new InvalidOperationException("玩家战场环境字段无效：" + error);
+-            if (state.Scene.Select(i => i.Path).Distinct().Count() != state.Scene.Count) throw new InvalidOperationException("玩家战场静态层级重复。");
+             foreach (FleetBattleSceneItem item in state.Scene)
+-                if (item == null || string.IsNullOrEmpty(item.Path) || item.Path.Length > 512 || item.Path.Split('/').Any(p => p.Length == 0 || p == "." || p == "..")
++                if (item == null || !ValidBattleScenePath(item.Path) || item.ComponentIndex < 0 || item.ComponentIndex > 1023
+                     || item.Kind != "Obstacle" && item.Kind != "Point" || new[] { item.X, item.Y, item.Z, item.Rotation, item.Sx, item.Sy, item.Sz, item.Progress }.Any(v => float.IsNaN(v) || float.IsInfinity(v))
+                     || item.Progress < 0 || item.Progress > 1 || item.Owner < 0 || item.Owner > 2 || item.Capturing < 0 || item.Capturing > 2)
+                     throw new InvalidOperationException("玩家战场静态布局含非法字段。");
++            if (state.Scene.Select(i => Tuple.Create(i.Path, i.Kind, i.ComponentIndex)).Distinct().Count() != state.Scene.Count)
++                throw new InvalidOperationException("玩家战场静态组件身份重复。");
++            foreach (var group in state.Scene.GroupBy(i => i.Path, StringComparer.Ordinal))
++            {
++                FleetBattleSceneItem first = group.First();
++                if (group.Any(i => i.Active != first.Active || i.X != first.X || i.Y != first.Y || i.Z != first.Z || i.Rotation != first.Rotation
++                    || i.Sx != first.Sx || i.Sy != first.Sy || i.Sz != first.Sz))
++                    throw new InvalidOperationException("同一战场静态节点的组件布局不一致。");
++            }
+         }
+         private void ApplyPlayerBattleScene(FleetBattleState state)
+         {
+             SetPlayerBattleEnvironment(state.Environment);
+             GameObject root = PlayerBattleEnvironmentRoot();
+-            var known = new HashSet<string>(state.Scene.Select(i => i.Path), StringComparer.Ordinal);
++            BattleEnvironmentNodes nodes = PlayerBattleEnvironmentNodes(root);
++            var known = new HashSet<Transform>(state.Scene.Select(i => nodes.Resolve(i.Path)).Where(t => t != null));
+             foreach (Component component in root.GetComponentsInChildren<StaticObstacle>(true).Cast<Component>().Concat(root.GetComponentsInChildren<StrategicPoint>(true).Cast<Component>()))
+-                if (!known.Contains(BattleEnvironmentPath(component.transform, root.transform))) component.gameObject.SetActive(false);
++                if (!known.Contains(component.transform)) component.gameObject.SetActive(false);
++            BattleEnvironmentNodes templateNodes = null;
+             foreach (FleetBattleSceneItem item in state.Scene)
+             {
+-                Transform t = root.transform.Find(item.Path);
++                Transform t = nodes.Resolve(item.Path);
+                 if (t == null)
+                 {
+                     object builder = NativeWire.Get(BattleManager.Instance, "_envBuilder");
+                     GameObject template = NativeWire.Get(builder, "_environmentTemplate") as GameObject;
+-                    Transform original = template == null ? null : template.transform.Find(item.Path);
+-                    int split = item.Path.LastIndexOf('/'); Transform parent = split < 0 ? root.transform : root.transform.Find(item.Path.Substring(0, split));
+-                    if (original == null || parent == null || (item.Kind == "Point" ? original.GetComponent<StrategicPoint>() == null : original.GetComponent<StaticObstacle>() == null))
++                    if (templateNodes == null && template != null) templateNodes = new BattleEnvironmentNodes(template.transform);
++                    Transform original = templateNodes == null ? null : templateNodes.Resolve(item.Path);
++                    int split = item.Path.LastIndexOf('/'); Transform parent = split < 0 ? root.transform : nodes.Resolve(item.Path.Substring(0, split));
++                    if (original == null || parent == null || BattleSceneComponent(original, item) == null)
+                         throw new InvalidOperationException("本机原生战场模板无法恢复同一静态节点：" + item.Path);
+                     GameObject clone = UnityEngine.Object.Instantiate(original.gameObject, parent, false); clone.name = original.name; t = clone.transform;
++                    // Register the copied subtree with its original reserved addresses;
++                    // appending it must not change identities of same-name siblings.
++                    if (item.Path == "@2" || item.Path.StartsWith("@2/", StringComparison.Ordinal)) nodes.Index(t, item.Path, true);
++                    else nodes.Refresh();
+                 }
++                Component native = BattleSceneComponent(t, item);
++                if (native == null) throw new InvalidOperationException("玩家战场静态节点的原生组件类型或序号不一致：" + item.Path);
+                 t.localPosition = new Vector3(item.X, item.Y, item.Z); t.localRotation = Quaternion.Euler(0, 0, item.Rotation); t.localScale = new Vector3(item.Sx, item.Sy, item.Sz);
+                 t.gameObject.SetActive(item.Active);
+                 if (item.Kind == "Point")
+                 {
+-                    StrategicPoint point = t.GetComponent<StrategicPoint>();
++                    StrategicPoint point = (StrategicPoint)native;
+                     if (point == null) throw new InvalidOperationException("玩家战术据点的原生节点类型不一致。");
+                     // Replica's native self/enemy teams are reversed relative to the simulator.
+                     Func<int, TeamType> team = n => n == (int)TeamType.Player ? TeamType.Robot : n == (int)TeamType.Robot ? TeamType.Player : (TeamType)n;
