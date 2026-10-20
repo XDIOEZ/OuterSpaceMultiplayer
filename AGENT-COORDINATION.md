@@ -414,3 +414,7 @@
 - 本地修复提交9970815，仅6文件：运输扣除5+/2-、V1.52版本/发布说明、本轮独立patch/报告/回执；NativeTransfers既有混合dirty原样保留。
 - 三端BuildOnly全部成功，V1.52/1.52.0.0，同源8E10F7B34108342C8AD5271C3716DA03372E64466690F32D3A31145FFA0FC3E5；固定包artifacts/transport-debit-null-20261019/packages，回执docs/reports/transport-debit-null-build-20261019.json。Installations=[]、RuntimeTested=false；不安装、不运行测试/游戏、不push，故障会话由用户重开最后完整存档验收。
 - 源码/VERSION/CHANGELOG/构建冻结并释放；本条文档短提交后释放index，其它任务及旧dirty保留。
+
+### transport-three-install-20261020 / 主控 /root
+- 用户明确要求安装三端。只执行统一Sync-ModCopies.ps1当前V1.54构建并安装Project3/Steam/TapTap；不改源码/版本，不启动测试或游戏，不覆盖玩家数据/其它MOD/共享依赖。占用统一构建安装窗口，完成后释放。
+- 完成：V1.54三端统一构建安装成功，SourceRevision=DB885D7F0F239BE11FFC4F42617996D2BD81081744C68F0DD1AF3C1C4C82881F。回执docs/reports/transport-three-install-20261020.json；各端已有文件均留独立备份，玩家数据/其他MOD/共享依赖保留；未运行游戏或测试。本轮无源码/版本变动，构建安装占用释放。
