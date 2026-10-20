@@ -50,10 +50,33 @@ namespace FreeWorldMultiplayer
         private void TickFleetConfiguration(PlayerFleetBattleRecord record)
         {
             string reason = FleetConfigurationInvalidReason(record);
-            if (reason != null) InterruptBattle(record, reason);
+            if (reason != null)
+            {
+                PlayerFleetBattleTrace.Emit("preparation.host.expired-or-invalid", record,
+                    "expired=" + (record.PreparationExpiresAtRoomSeconds <= World.RoomRealSeconds)
+                    + " closing=" + (closing || shutdown) + " nativeFault=" + (nativeFault != null), true);
+                InterruptBattle(record, reason);
+            }
         }
 
         private void HostBattleConfiguration(string actor, PlayerFleetBattleConfiguration configuration)
+        {
+            PlayerFleetBattleRecord traceRecord = null;
+            if (configuration != null && configuration.BattleId != null && World != null && World.FleetBattles != null)
+                World.FleetBattles.TryGetValue(configuration.BattleId, out traceRecord);
+            PlayerFleetBattleTrace.Emit("preparation.host.configuration-received", traceRecord,
+                "actor=" + actor + " requestEpoch=" + (configuration == null ? 0 : configuration.AuthorityEpoch)
+                + " jsonChars=" + (configuration == null || configuration.NativeJson == null ? 0 : configuration.NativeJson.Length));
+            try { HostBattleConfigurationCore(actor, configuration); }
+            catch (Exception error)
+            {
+                PlayerFleetBattleTrace.Emit("preparation.host.configuration-rejected", traceRecord,
+                    "actor=" + actor + " paused=" + Paused + " error=" + error.GetType().Name, true);
+                throw;
+            }
+        }
+
+        private void HostBattleConfigurationCore(string actor, PlayerFleetBattleConfiguration configuration)
         {
             PlayerFleetBattleRecord record;
             if (configuration == null || !CommunicationId(configuration.BattleId)
@@ -71,15 +94,26 @@ namespace FreeWorldMultiplayer
             if (previous != null)
             {
                 if (!string.Equals(previous.NativeJson, configuration.NativeJson, StringComparison.Ordinal))
+                {
+                    PlayerFleetBattleTrace.Emit("preparation.host.configuration-replacement-rejected", record, "actor=" + actor, true);
                     throw new MessageRejectionException("本方已确认战前配置，不能在本次战斗中替换。");
+                }
                 if (record.Stage == PlayerFleetBattleStage.Preparing || record.Stage == PlayerFleetBattleStage.Active)
-                { SendBattleState(record); return; }
+                {
+                    PlayerFleetBattleTrace.Emit("preparation.host.configuration-duplicate", record, "actor=" + actor);
+                    SendBattleState(record); return;
+                }
             }
             if (record.Stage != PlayerFleetBattleStage.Preparing || !record.PreparationAuthorized
                 || record.SceneAuthorized || record.Interrupted)
                 throw new MessageRejectionException("本次原版战前配置已失效。");
             string reason = FleetConfigurationInvalidReason(record);
-            if (reason != null) { InterruptBattle(record, reason); return; }
+            if (reason != null)
+            {
+                PlayerFleetBattleTrace.Emit("preparation.host.configuration-invalidated", record,
+                    "actor=" + actor + " expired=" + (record.PreparationExpiresAtRoomSeconds <= World.RoomRealSeconds), true);
+                InterruptBattle(record, reason); return;
+            }
             if (Paused) throw new MessageRejectionException("房间已暂停，请恢复后再确认战前配置。");
             if (World.Players[record.AttackerPlayerId].CurrentMapId >= 0 || World.Players[record.DefenderPlayerId].CurrentMapId >= 0)
                 throw new MessageRejectionException("双方尚未完成地表离图，不能确认战前配置。");
@@ -87,6 +121,7 @@ namespace FreeWorldMultiplayer
             // The bridge parses a fixed deployment DTO and checks every ship against
             // this fleet's actual native roster; ownership tags alone are insufficient.
             Require(bridge.ValidatePlayerFleetBattleConfiguration(record, configuration), "校验本方原版舰队战前配置");
+            PlayerFleetBattleTrace.Emit("preparation.host.configuration-validated", record, "actor=" + actor);
             if (actor == record.AttackerPlayerId) record.AttackerConfiguration = JsonData.Clone(configuration);
             else record.DefenderConfiguration = JsonData.Clone(configuration);
             try
@@ -100,9 +135,16 @@ namespace FreeWorldMultiplayer
                     battleDeadlines[record.BattleId] = 45;
                 }
                 SaveOrThrow();
+                PlayerFleetBattleTrace.Emit(record.SceneAuthorized ? "preparation.host.scene-authorized" : "preparation.host.waiting-opponent",
+                    record, "actor=" + actor);
                 SendBattleState(record);
             }
-            catch (Exception error) { BlockBattle(record, error); }
+            catch (Exception error)
+            {
+                PlayerFleetBattleTrace.Emit("preparation.host.configuration-failed", record,
+                    "actor=" + actor + " error=" + error.GetType().Name, true);
+                BlockBattle(record, error);
+            }
         }
 
         private void HostCancelBattlePreparation(string actor, PlayerFleetBattleReference reference)
@@ -115,6 +157,7 @@ namespace FreeWorldMultiplayer
             if (record.Stage == PlayerFleetBattleStage.Finished) { SendBattleState(record); return; }
             if (record.Stage != PlayerFleetBattleStage.Preparing)
                 throw new MessageRejectionException("本场已开战，不能再取消战前配置。");
+            PlayerFleetBattleTrace.Emit("preparation.host.cancel-accepted", record, "actor=" + actor);
             InterruptBattle(record, "参战玩家已取消战前配置，双方可继续航行。");
         }
     }

@@ -26,7 +26,11 @@ namespace FreeWorldMultiplayer
             public PlayerFleetBattleRecord Battle;
             public AirShipFleetInfoBean Fleet;
             public PageBattleDeployment Page;
+            public TMPro.TMP_Text ReadyCaption;
+            public PlayerFleetBattleConfiguration PendingConfiguration;
             public bool Submitted;
+            public int ConfirmAttempts;
+            public string DiagnosticPhase;
         }
         private NativeBattlePreparation nativeBattlePreparation;
         private bool resolvingPlayerBattleScale;
@@ -108,17 +112,26 @@ namespace FreeWorldMultiplayer
                 if (!attacker && Context.LocalPlayerId != battle.DefenderPlayerId)
                     throw new NativeRejectionException("非参战者不能打开战前配置。");
                 if (battle.SceneAuthorized && battle.AttackerConfiguration != null && battle.DefenderConfiguration != null)
-                { ClosePlayerBattlePreparation(battle); return; }
+                {
+                    // The battle entry validates its native field before it closes
+                    // this page; keep the preparation visible until that handoff.
+                    if (nativeBattlePreparation != null) RefreshPlayerBattlePreparation(nativeBattlePreparation.Page);
+                    return;
+                }
                 if (battle.Stage != PlayerFleetBattleStage.Preparing || !battle.PreparationAuthorized || battle.SceneAuthorized)
                     throw new NativeRejectionException("房主尚未授权本场原版战前配置。");
-                if ((attacker ? battle.AttackerConfiguration : battle.DefenderConfiguration) != null)
-                { ClosePlayerBattlePreparation(battle); return; }
                 if (nativeBattlePreparation != null)
                 {
                     if (nativeBattlePreparation.Battle.BattleId == battle.BattleId &&
-                        nativeBattlePreparation.Battle.AuthorityEpoch == battle.AuthorityEpoch) return;
+                        nativeBattlePreparation.Battle.AuthorityEpoch == battle.AuthorityEpoch)
+                    {
+                        nativeBattlePreparation.Battle = battle;
+                        RefreshPlayerBattlePreparation(nativeBattlePreparation.Page);
+                        return;
+                    }
                     throw new NativeRejectionException("本机已有另一场战前配置。");
                 }
+                if ((attacker ? battle.AttackerConfiguration : battle.DefenderConfiguration) != null) return;
                 if (nativePlayerBattle != null || BattleManager.Instance != null)
                     throw new NativeRejectionException("本机原生战场尚未释放。");
                 string own = Context.LocalPlayerId, enemy = attacker ? battle.DefenderPlayerId : battle.AttackerPlayerId;
@@ -137,20 +150,49 @@ namespace FreeWorldMultiplayer
                         PageBattleDeployment page = preparation.Page = UIHelp.showPageBattleDeployment();
                         page.setCloseCallBack(() =>
                         {
-                            if (nativeBattlePreparation != preparation || preparation.Submitted) return;
+                            if (nativeBattlePreparation != preparation) return;
+                            PlayerFleetBattleTrace.Emit("preparation.ui.cancel-request", preparation.Battle,
+                                "submitted=" + preparation.Submitted);
                             nativeBattlePreparation = null;
-                            Context.CancelBattlePreparation(new PlayerFleetBattleReference { BattleId = battle.BattleId, AuthorityEpoch = battle.AuthorityEpoch });
+                            try { Context.CancelBattlePreparation(new PlayerFleetBattleReference { BattleId = battle.BattleId, AuthorityEpoch = battle.AuthorityEpoch }); }
+                            catch (Exception error)
+                            {
+                                PlayerFleetBattleTrace.Emit("preparation.ui.cancel-failed", preparation.Battle,
+                                    "error=" + error.GetType().Name, true);
+                                throw;
+                            }
                         });
+                        PlayerFleetBattleTrace.Emit("preparation.ui.open", battle,
+                            "local=" + own + " ships=" + ownFleet.bean.ships.Count
+                            + " quota=" + (attacker ? allocation.PlayerQuotaDp : allocation.RobotQuotaDp));
                         page.InitSession(ownFleet.getListAirShipBeans().Where(s => s.bean.getHP() > 0).ToList(),
                             enemyFleet.getListAirShipBeans().Where(s => s.bean.getHP() > 0).ToList(), new List<AirShipDataBean>(),
                             enemyFleet.getName(), enemyFleet.bean.taskLv, attacker ? allocation.PlayerQuotaDp : allocation.RobotQuotaDp,
                             (vanguard, formation) =>
                             {
+                                preparation.ConfirmAttempts++;
+                                PlayerFleetBattleTrace.Emit("preparation.ui.confirm-click", preparation.Battle,
+                                    "attempt=" + preparation.ConfirmAttempts + " vanguard=" + (vanguard == null ? 0 : vanguard.Count));
                                 BridgeResult result = Run(() => ConfirmPlayerBattlePreparation(preparation, vanguard, formation));
-                                if (!result.Success) FairyUIDispatcher.showToast(result.Error);
+                                if (!result.Success)
+                                {
+                                    PlayerFleetBattleTrace.Emit("preparation.ui.confirm-failed", preparation.Battle,
+                                        "attempt=" + preparation.ConfirmAttempts, true);
+                                    FairyUIDispatcher.showToast(result.Error);
+                                }
+                                RefreshPlayerBattlePreparation(page);
                             });
+                        if (page.btnEngage == null) throw new NativeRejectionException("原版战前配置缺少准备按钮。");
+                        preparation.ReadyCaption = OfficialModUi.Caption(page.btnEngage);
+                        MutiLanguage localization = preparation.ReadyCaption.GetComponent<MutiLanguage>();
+                        if (localization != null) localization.forbid = true;
+                        RefreshPlayerBattlePreparation(page);
                     }
-                    catch { ClosePlayerBattlePreparation(battle); throw; }
+                    catch (Exception error)
+                    {
+                        PlayerFleetBattleTrace.Emit("preparation.ui.open-failed", battle, "error=" + error.GetType().Name, true);
+                        ClosePlayerBattlePreparation(battle); throw;
+                    }
                 }
             });
         }
@@ -163,7 +205,16 @@ namespace FreeWorldMultiplayer
                 battle.Stage != PlayerFleetBattleStage.Preparing || !battle.PreparationAuthorized || battle.SceneAuthorized)
                 throw new NativeRejectionException("本场战前配置已取消或授权已失效。");
             if ((Context.LocalPlayerId == battle.AttackerPlayerId ? battle.AttackerConfiguration : battle.DefenderConfiguration) != null)
-            { ClosePlayerBattlePreparation(battle); return; }
+            { preparation.Submitted = true; RefreshPlayerBattlePreparation(preparation.Page); return; }
+            if (preparation.PendingConfiguration != null)
+            {
+                // A retry must confirm the same immutable deployment: its first send
+                // may already have been accepted while the state reply is in flight.
+                PlayerFleetBattleTrace.Emit("preparation.ui.retry", battle, "attempt=" + preparation.ConfirmAttempts);
+                Context.SubmitBattleConfiguration(preparation.PendingConfiguration);
+                RefreshPlayerBattlePreparation(preparation.Page);
+                return;
+            }
             var deployment = new FleetDeployment { Formation = (int)formation };
             foreach (DeploymentShipState state in vanguard)
                 deployment.Ships.Add(new FleetDeploymentShip { Uid = state.ShipData.getUid(), Reserve = false,
@@ -177,17 +228,71 @@ namespace FreeWorldMultiplayer
             var configuration = new PlayerFleetBattleConfiguration { BattleId = battle.BattleId, AuthorityEpoch = battle.AuthorityEpoch,
                 PlayerId = Context.LocalPlayerId, FleetId = preparation.Fleet.getUid(), NativeJson = NativeWire.Json(deployment) };
             ReadPlayerBattleConfiguration(battle, configuration);
-            // Reliable enqueue is not host acceptance. Retain the original page until its
-            // authoritative record contains this player's configuration, allowing rejection retry.
+            PlayerFleetBattleTrace.Emit("preparation.ui.configuration-validated", battle,
+                "ships=" + deployment.Ships.Count + " vanguard=" + vanguard.Count + " formation=" + deployment.Formation);
+            // Keep the page and exact choices until BOTH players are authorized to enter.
+            // Reliable enqueue alone is not acceptance, so a user can retry this snapshot.
+            preparation.PendingConfiguration = configuration;
             Context.SubmitBattleConfiguration(configuration);
-            if ((Context.LocalPlayerId == battle.AttackerPlayerId ? battle.AttackerConfiguration : battle.DefenderConfiguration) != null)
-            { preparation.Submitted = true; ClosePlayerBattlePreparation(battle); }
+            RefreshPlayerBattlePreparation(preparation.Page);
+        }
+
+        internal void RefreshPlayerBattlePreparation(PageBattleDeployment page)
+        {
+            NativeBattlePreparation preparation = nativeBattlePreparation;
+            if (preparation == null || preparation.Page != page || page == null || page.btnEngage == null) return;
+            PlayerFleetBattleRecord battle = Context.GetFleetBattleLock(preparation.Fleet.getUid());
+            bool current = battle != null && battle.BattleId == preparation.Battle.BattleId
+                && battle.AuthorityEpoch == preparation.Battle.AuthorityEpoch;
+            bool available = current && battle.Stage == PlayerFleetBattleStage.Preparing
+                && battle.PreparationAuthorized && !battle.SceneAuthorized && !battle.Interrupted;
+            bool ownReady = current && (Context.LocalPlayerId == battle.AttackerPlayerId
+                ? battle.AttackerConfiguration : battle.DefenderConfiguration) != null;
+            bool otherReady = current && (Context.LocalPlayerId == battle.AttackerPlayerId
+                ? battle.DefenderConfiguration : battle.AttackerConfiguration) != null;
+            preparation.Submitted = ownReady;
+            string caption;
+            string phase;
+            if (!available)
+            {
+                if (current && battle.Stage == PlayerFleetBattleStage.Blocked)
+                { caption = "战斗已暂停"; phase = "preparation.ui.paused"; }
+                else if (current && battle.SceneAuthorized && !battle.Interrupted)
+                { caption = "双方已准备，正在进入战场"; phase = "preparation.ui.entering"; }
+                else { caption = "准备已取消"; phase = "preparation.ui.cancelled"; }
+            }
+            else if (ownReady) { caption = "已准备，等待对方"; phase = "preparation.ui.waiting-opponent"; }
+            else if (preparation.PendingConfiguration != null)
+            { caption = "准备确认中（点击重试）"; phase = "preparation.ui.waiting-confirmation"; }
+            else if (otherReady) { caption = "准备（对方已准备）"; phase = "preparation.ui.opponent-ready"; }
+            else { caption = "准备"; phase = "preparation.ui.ready"; }
+            if (preparation.DiagnosticPhase != phase)
+            {
+                preparation.DiagnosticPhase = phase;
+                PlayerFleetBattleTrace.Emit(phase, current ? battle : preparation.Battle, "local=" + Context.LocalPlayerId);
+            }
+            if (preparation.ReadyCaption != null && preparation.ReadyCaption.text != caption)
+                preparation.ReadyCaption.text = caption;
+            bool interactable = available && !ownReady
+                && (preparation.PendingConfiguration != null || page.GetShipsForPanel(PanelRole.DeploymentVanguard).Count > 0);
+            if (page.btnEngage.interactable != interactable) page.btnEngage.interactable = interactable;
+        }
+
+        internal bool CanEditPlayerBattlePreparation(PageBattleDeployment page)
+        {
+            NativeBattlePreparation preparation = nativeBattlePreparation;
+            if (preparation == null || preparation.Page != page) return true;
+            if (!preparation.Submitted && preparation.PendingConfiguration == null) return true;
+            FairyUIDispatcher.showToast("本方已提交准备，请等待对方；如需调整，可关闭并取消本次战斗。");
+            return false;
         }
 
         private void ClosePlayerBattlePreparation(PlayerFleetBattleRecord battle)
         {
             NativeBattlePreparation preparation = nativeBattlePreparation;
             if (preparation == null || battle != null && preparation.Battle.BattleId != battle.BattleId) return;
+            PlayerFleetBattleTrace.Emit("preparation.ui.closed", battle ?? preparation.Battle,
+                "sceneHandoff=" + (battle != null && battle.SceneAuthorized && !battle.Interrupted));
             nativeBattlePreparation = null;
             if (preparation.Page != null)
             {
@@ -237,6 +342,12 @@ namespace FreeWorldMultiplayer
     {
         internal static void Install(Harmony harmony)
         {
+            harmony.Patch(AccessTools.Method(typeof(PageBattleDeployment), "UpdateDeploymentInfo"),
+                postfix: new HarmonyMethod(typeof(NativePlayerFleetBattlePreparationHooks), "PreparationUiPostfix"));
+            harmony.Patch(AccessTools.Method(typeof(PageBattleDeployment), "HandleShipTransfer"),
+                prefix: new HarmonyMethod(typeof(NativePlayerFleetBattlePreparationHooks), "PreparationEditPrefix"));
+            harmony.Patch(AccessTools.Method(typeof(PageBattleDeployment), "HandleSetShipSeat"),
+                prefix: new HarmonyMethod(typeof(NativePlayerFleetBattlePreparationHooks), "PreparationEditPrefix"));
             harmony.Patch(AccessTools.Method(typeof(BattleReinforcementCoordinator), "BuildInitialPlans"),
                 prefix: new HarmonyMethod(typeof(NativePlayerFleetBattlePreparationHooks), "DeploymentPlanPrefix"));
             harmony.Patch(AccessTools.Method(typeof(BattleReinforcementCoordinator), "SelectParticipantForWave"),
@@ -245,6 +356,16 @@ namespace FreeWorldMultiplayer
                 postfix: new HarmonyMethod(typeof(NativePlayerFleetBattlePreparationHooks), "WaveDemandPostfix"));
             harmony.Patch(AccessTools.Method(typeof(BattleScaleRules), "TryAllocate"),
                 postfix: new HarmonyMethod(typeof(NativePlayerFleetBattlePreparationHooks), "AllocationPostfix"));
+        }
+        private static void PreparationUiPostfix(PageBattleDeployment __instance)
+        {
+            GameBridge bridge = GameBridge.Active;
+            if (bridge != null) bridge.RefreshPlayerBattlePreparation(__instance);
+        }
+        private static bool PreparationEditPrefix(PageBattleDeployment __instance)
+        {
+            GameBridge bridge = GameBridge.Active;
+            return bridge == null || bridge.CanEditPlayerBattlePreparation(__instance);
         }
         private static bool DeploymentPlanPrefix(BattleSideDeploymentPlan __0)
         {
