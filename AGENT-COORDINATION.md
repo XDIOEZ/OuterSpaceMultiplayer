@@ -473,3 +473,5 @@
 - 主控负责契约协调、文档SVG、版本、增量提交与统一三端BuildOnly；ground_slot负责Core/Session；ground_native负责Game；ground_ui负责Entry侧边UI。各Agent不得构建/测试/运行游戏/安装/操作Git index或改其它分区；跨区契约先沟通。P3及运行副本只读。
 - 保留全部历史dirty；修改前完整src基线已保存artifacts/ground-operation-slot-20261021/baseline。核心实现期间占用上述相关地面文件，既有舰战/运输修复保持；不安装、不推送、不运行测试。
 - Core/Session、Game、UI三方已完成源码冻结，接口OperatorPlayerId/CanOperateMap/HasGroundPlayerHeroes/生命周期泵一致；V1.62、协议13，当前主控接统一三端BuildOnly窗口。全部构建输入冻结，禁止安装/测试/运行游戏/推送；历史dirty仍保留。
+
+- 完成并释放：本轮功能及增量档案提交426a867，V1.62/协议13三端BuildOnly最终成功，同源8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00；每端3条既有CS0649、无编译错误。固定三端ZIP与BUILD-INFO在artifacts/ground-operation-slot-20261021/packages，回执docs/reports/ground-operation-slot-build-20261021.json，Installations=[]/RuntimeTested=false。首次输入变动保护中止后已冻结重建，无安装/测试/游戏/push。历史dirty及原未跟踪文件保留；混合源码本轮完整增量在docs/patches/ground-operation-slot-20261021.patch，不宣称干净HEAD依赖闭包。功能源码、版本、构建释放；本条文档提交后释放index，用户验收卡仍待办。

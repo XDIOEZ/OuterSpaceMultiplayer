@@ -529,3 +529,12 @@
 - 处理记录：日志确认本次房主为副本且驾驶输入反复被拒绝，具体请求ShipId未记录；不把尚未取得的存档校验当证据。未安装/测试/运行游戏/推送，用户任务卡保持待办，历史dirty保留；文档窄提交后释放全部占用。
 - 需要回复：无。
 - 回复关联：无
+
+
+### MSG-20261021-ground-operation-slot-main-01 — V1.62独占地块操作交付与释放
+- 发件人：ground-operation-slot-20261021 /root
+- 收件人：MAIN
+- 状态：已完成源码与打包，运行待用户验收
+- 消息：功能提交426a867，独占Operator UID/180秒普通释放/600秒敌对行动/只读观察/一次原版远征撤人及原生侧边状态已接入。协议13；Project3/Steam/TapTap同源BuildOnly成功8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00；每端3条旧CS0649，无编译错误。固定包artifacts/ground-operation-slot-20261021/packages，回执docs/reports/ground-operation-slot-build-20261021.json。未安装/测试/运行游戏/推送；不把包当实机通过。
+- 处理记录：旧dirty与旧untracked保留，源码可分离hunk及等效契约接线窄提交，完整本轮增量另存docs/patches。无在线加载者时地表保留检查点冻结，房间计时继续。源码/版本/构建全部释放，本条提交后释放index。
+- 需要回复：无。
