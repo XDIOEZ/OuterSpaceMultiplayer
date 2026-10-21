@@ -1,0 +1,35 @@
+{
+  "StartedAtUtc": "2026-10-21T15:37:06.480094+08:00",
+  "SourceRoot": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer",
+  "Target": "All",
+  "BuildOnly": true,
+  "Completed": true,
+  "Installations": [],
+  "RuntimeTested": false,
+  "SourceRevision": "FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1",
+  "ModVersion": "V1.61",
+  "AssemblyVersion": "1.61.0.0",
+  "FinishedAtUtc": "2026-10-21T15:38:36.365157+08:00",
+  "ProtocolVersion": 12,
+  "SourceCommit": "d7d2dd9",
+  "Packages": [
+    {
+      "Target": "p3-development-reference",
+      "Zip": "artifacts\\battle-host-manual-20261021\\packages\\FreeWorldMultiplayer-p3-development-reference.zip",
+      "SourceRevision": "FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1",
+      "ModVersion": "V1.61"
+    },
+    {
+      "Target": "steam-target",
+      "Zip": "artifacts\\battle-host-manual-20261021\\packages\\FreeWorldMultiplayer-steam-target.zip",
+      "SourceRevision": "FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1",
+      "ModVersion": "V1.61"
+    },
+    {
+      "Target": "taptap-target",
+      "Zip": "artifacts\\battle-host-manual-20261021\\packages\\FreeWorldMultiplayer-taptap-target.zip",
+      "SourceRevision": "FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1",
+      "ModVersion": "V1.61"
+    }
+  ]
+}

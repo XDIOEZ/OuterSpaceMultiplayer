@@ -460,3 +460,10 @@
 - 用户明确要求“覆盖一下三端”，本次授权 Project3 / Steam / TapTap 安装 V1.60，仅写本 MOD 安装目录并保留备份；不改游戏本体、共享 Harmony、玩家数据或启用列表，不启动游戏或测试。
 - 完成并释放：统一Sync-ModCopies.ps1三端构建安装成功，V1.60 / 1.60.0.0、协议12，同源36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA；每端三条既有CS0649、无编译错误。聚合回执docs/reports/battle-entry-v160-install-20261021.json，Completed=true / BuildOnly=false / RuntimeTested=false。
 - 三端原文件备份与安装回执分别在artifacts/installations/20261021-071208-a12e6869、20261021-071212-e172e02d、20261021-071215-1db4558c。未改源码或版本，未运行游戏/测试/推送，历史dirty保留；本轮回执窄提交后释放index及全部占用。
+
+### battle-host-manual-20261021 / 主控 /root
+- 用户确认V1.60能开战，但房主界面切手动后无法操控。TapTap运行日志3041手动Toast，3044起HostBattleInput每约50ms拒绝；房主本场是防守方/副本。battle_identity实现、personal_baseline只读审查，主控协调整合。
+- 已完成源码d7d2dd9：Input.cs新增房主真实参战舰船校验；Contracts单签名；Session保留已有异主拒绝，未知全局船主也须本人真实参战fleet.ships唯一UID证明，验证成功后才推进sequence，原任期/操作/速率与模拟端检查保留。不改Hooks/AI/采样/协议12/存档。
+- 直接代码证据：原版舰船入队从仓库移除，旧登记只遍历仓库。旧日志未写具体request.ShipId，未取得存档逐字段结果，不将复合谓词的确切命中字段声称为实测；用户双端验收卡保持待办。
+- V1.61 / 1.61.0.0 三端BuildOnly成功，同源FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1，各端三条既有CS0649、无编译错误。固定包artifacts/battle-host-manual-20261021/packages，回执docs/reports/battle-host-manual-build-20261021.json。
+- Installations=[] / RuntimeTested=false。未安装、测试或运行游戏、未推送；旧dirty完整保留，Contracts只提交等效新签名，本轮精确增量docs/patches/battle-host-manual-20261021.patch。不宣称历史源码依赖闭包已干净；源码/版本/构建释放，本文档窄提交后释放index。

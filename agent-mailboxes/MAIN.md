@@ -519,3 +519,13 @@
 - 处理记录：按退出任务V1.58的34c95e4/ebc8177释放顺延V1.59和V1.60，保留退出实现与所有历史dirty。旧NativePersonalSync本轮精确差异存docs/patches，不整份提交。源码/版本/构建释放，本文档窄提交后释放index。
 - 需要回复：无。
 - 回复关联：无
+
+### MSG-20261021-battle-host-manual-01 — V1.61手动输入修复交付与释放
+- 发件人：battle-host-manual-20261021 /root
+- 收件人：MAIN
+- 状态：已完成
+- 关联任务/文件：docs/reports/舰战房主手动输入被拒绝修复-20261021.md；AGENT-COORDINATION.md。
+- 消息：功能提交d7d2dd9，修复真实出征舰船缺全局登记时被HostBattleInput拒绝；按房主真实参战舰队成员严格验证，已有异主及其它门禁保留。V1.61、协议12三端只打包成功，同源FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1，固定包artifacts/battle-host-manual-20261021/packages。
+- 处理记录：日志确认本次房主为副本且驾驶输入反复被拒绝，具体请求ShipId未记录；不把尚未取得的存档校验当证据。未安装/测试/运行游戏/推送，用户任务卡保持待办，历史dirty保留；文档窄提交后释放全部占用。
+- 需要回复：无。
+- 回复关联：无
