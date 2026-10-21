@@ -32,10 +32,10 @@ namespace FreeWorldMultiplayer
             long mapId = CurrentMapId;
             string current = Context.OperatorOfMap(mapId);
             if (observedOperationMap == mapId && observedOperationOwner == Context.LocalPlayerId
-                && current != Context.LocalPlayerId && MapManager.instance != null)
+                && current != Context.LocalPlayerId && IsNativeMapReady(mapId))
                 LocalCoreHandle.Plan_CacheClear_LN();
             observedOperationMap = mapId; observedOperationOwner = current;
-            if (current == null && !Context.CanSimulateMap(mapId)) UnloadReleasedGround();
+            if (current == null) UnloadReleasedGround();
         }
 
         private void UnloadReleasedGround()
@@ -44,6 +44,15 @@ namespace FreeWorldMultiplayer
             if (World == null || Seeding || Applying || IsCreatingWorld || GameRoot.isObservingGround()
                 || !Maps.TryGetValue(CurrentMapId, out map) || map.starSpread == null || map.starSpread.isAirMap()
                 || GameRoot.instance == null || MapManager.instance == null) return;
+            // Input ownership and simulation readiness are not scene lifetime. In particular,
+            // a scout has no operator and CanSimulateMap stays false until native initEnd is
+            // acknowledged. gameType can still be space while MainGame loads asynchronously.
+            // Keep the formal local view and its loader alive across that whole transition.
+            if (Context.IsLocalGroundViewActive == null || Context.IsLocalGroundViewActive(map.starMapId)
+                || !IsNativeMapReady(map.starMapId)) return;
+            MapAccess access = Context.GetMapAccess(map.starMapId);
+            if (access == null || access.Access == MapAccessMode.Simulator
+                || !string.IsNullOrEmpty(Context.OperatorOfMap(map.starMapId))) return;
             // Session has already saved/revoked this map before releasing the slot.
             // Use the native destruction lifecycle; keep the canonical saved beans.
             MethodInfo destroy = AccessTools.DeclaredMethod(typeof(GameRoot), "destroyMapManager");

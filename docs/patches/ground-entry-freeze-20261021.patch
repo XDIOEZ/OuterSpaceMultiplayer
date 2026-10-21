@@ -1,0 +1,104 @@
+--- a/AGENT-COORDINATION.md
++++ b/AGENT-COORDINATION.md
+@@ -604,3 +604,8 @@
+ - Core/Entry源码均已冻结；V1.63/协议13，主控接统一三端BuildOnly及短Git index窗口。UI后台目录/选中校验、删除令牌/回收移动及Runtime启动门禁已真实接线。不安装、不跑测试/游戏、不删除任何真实存档。
+ 
+ - 完成并释放：V1.63/协议13三端BuildOnly成功，同源6589FCA0C094D63EDBD0795D62764AAA49573844F6C360C8A34690078624896A，每端3条旧CS0649，无编译错误。固定ZIP/BUILD-INFO位于artifacts/save-browser-20261021/packages；聚合回执docs/reports/save-browser-build-20261021.json（Completed=true/BuildOnly=true/Installations=[]/RuntimeTested=false）。未安装/测试/游戏/删除真实世界/push。Core原Load/备份校验保留，BUG-18卡继续待用户性能及原生UI验收。旧dirty/untracked保留，本轮混合Entry增量档案docs/patches/save-browser-20261021.patch，不声称干净HEAD闭包。源码/版本/构建释放，本条窄提交完成即释放index。
++
++### ground-entry-freeze-20261021 / 主控 /root
++- 用户更正故障：是进入地块时卡死，非进入世界。当前运行日志及TapTap安装包均V1.62，V1.63存档列表修复只打包未安装，不能归因于未运行版本。日志TapTap 08:43:52 view.applied/loading=True后无ready，08:44:49地图初始化超时 map=1000000011077；源码及两端日志已保存artifacts/ground-entry-freeze-20261021。
++- 分工：entry_native调查修复Game原生地图加载/运行/操作槽卸载交接；entry_session调查Session加载屏障与授权握手，先只读、跨区接口协调后实施最小修复。主控只协调、整合、版本/文档、窄提交与三端BuildOnly。不启动游戏/测试/安装/推送，保留全部历史dirty及V1.63存档功能。
++- Game仅NativeGroundOperation、Core/Session仅新查看意图字段/Attach接线/查询已冻结；V1.64、协议13。主控接统一三端BuildOnly和短index窗口，输入保持冻结；不安装/测试/游戏。
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,12 @@
+ 发布号的唯一来源是主仓库根目录的 `VERSION`。每完成一个独立小 BUG，递增第二段整数；例如 `1.9` 后为 `1.10`。重新构建或同步同一项修复不自动递增版本。
+ 
+ 发布号与需求文档的 V1、游戏匹配目录 `v_common`、网络协议号及存档结构版本分别维护，不互相替代。
++
++## V1.64 · 2026-10-21
++
++- 修正进入无操作玩家的地块时，加载屏障/待就绪导致暂时不能模拟，被地块生命周期泵误当成可卸载而销毁正在初始化的 MapManager、最终卡住加载的问题。
++- 卸载改为检查房主确认的本机查看意图、正式模拟租约和同一实例真实加载完成状态；保护首个客端MapView早于Policy的加载窗口。仍保留原Ready/ACK及超时保护、太空180秒释放，不用延长等待或假就绪代替修复。
++- 保留V1.63存档列表异步读取与可恢复删除；协议13、存档格式不变，三端默认只构建包不安装，实际地块加载由用户验收。
+ 
+ ## V1.63 · 2026-10-21
+ 
+--- a/src/Core/Contracts.cs
++++ b/src/Core/Contracts.cs
+@@ -364,6 +364,7 @@
+         public Func<bool> GetJoinHostGalaxyOnFirstSpawn;
+         public Func<string, long, BaseCreationStatus> GetBaseCreationStatus;
+         public Func<long, bool> CanSimulateMap;
++        public Func<long, bool> IsLocalGroundViewActive;
+         public Func<string, long, bool> CanOperateMap;
+         public Func<long, string> OperatorOfMap;
+         public Func<long, int> GroundObserverCount;
+--- a/src/Game/NativeGroundOperation.cs
++++ b/src/Game/NativeGroundOperation.cs
+@@ -32,10 +32,10 @@
+             long mapId = CurrentMapId;
+             string current = Context.OperatorOfMap(mapId);
+             if (observedOperationMap == mapId && observedOperationOwner == Context.LocalPlayerId
+-                && current != Context.LocalPlayerId && MapManager.instance != null)
++                && current != Context.LocalPlayerId && IsNativeMapReady(mapId))
+                 LocalCoreHandle.Plan_CacheClear_LN();
+             observedOperationMap = mapId; observedOperationOwner = current;
+-            if (current == null && !Context.CanSimulateMap(mapId)) UnloadReleasedGround();
++            if (current == null) UnloadReleasedGround();
+         }
+ 
+         private void UnloadReleasedGround()
+@@ -44,6 +44,15 @@
+             if (World == null || Seeding || Applying || IsCreatingWorld || GameRoot.isObservingGround()
+                 || !Maps.TryGetValue(CurrentMapId, out map) || map.starSpread == null || map.starSpread.isAirMap()
+                 || GameRoot.instance == null || MapManager.instance == null) return;
++            // Input ownership and simulation readiness are not scene lifetime. In particular,
++            // a scout has no operator and CanSimulateMap stays false until native initEnd is
++            // acknowledged. gameType can still be space while MainGame loads asynchronously.
++            // Keep the formal local view and its loader alive across that whole transition.
++            if (Context.IsLocalGroundViewActive == null || Context.IsLocalGroundViewActive(map.starMapId)
++                || !IsNativeMapReady(map.starMapId)) return;
++            MapAccess access = Context.GetMapAccess(map.starMapId);
++            if (access == null || access.Access == MapAccessMode.Simulator
++                || !string.IsNullOrEmpty(Context.OperatorOfMap(map.starMapId))) return;
+             // Session has already saved/revoked this map before releasing the slot.
+             // Use the native destruction lifecycle; keep the canonical saved beans.
+             MethodInfo destroy = AccessTools.DeclaredMethod(typeof(GameRoot), "destroyMapManager");
+--- a/src/Session/GroundOperationSlots.cs
++++ b/src/Session/GroundOperationSlots.cs
+@@ -8,6 +8,19 @@
+     {
+         private readonly HashSet<long> pendingGroundSettlements = new HashSet<long>();
+         private readonly Dictionary<long, string> groundSlotDeniedOperators = new Dictionary<long, string>();
++
++        private bool IsLocalGroundViewActive(long mapId)
++        {
++            if (World == null || LocalPlayerId == null) return false;
++            // A client's authoritative view arrives before its policy. That policy waits
++            // behind native initialization, so its old CurrentMapId cannot cancel the load.
++            if (nativeMapLoad != null && nativeMapLoad.MapId == mapId) return true;
++            if (awaitingLocalReady.ContainsKey(mapId)) return true;
++            PlayerRecord local;
++            MapRecord map;
++            return World.Players.TryGetValue(LocalPlayerId, out local) && local.CurrentMapId == mapId
++                && World.Maps.TryGetValue(mapId, out map) && map.Visitors.Contains(LocalPlayerId);
++        }
+ 
+         private void TraceGroundSlot(MapRecord map, string actor, string reason)
+         {
+--- a/src/Session/MultiplayerSession.cs
++++ b/src/Session/MultiplayerSession.cs
+@@ -148,6 +148,7 @@
+                 GetFleetBattleLock = GetFleetBattleLock, IsPlayerFleetBattleLocked = IsPlayerFleetBattleLocked, SubmitBattleInput = SubmitBattleInput,
+                 SubmitBattleConfiguration = SubmitBattleConfiguration, CancelBattlePreparation = CancelBattlePreparation,
+                 AllocateUid = AllocateUid, CanSimulateMap = CanSimulateMap, GetMapAccess = GetMapAccess,
++                IsLocalGroundViewActive = IsLocalGroundViewActive,
+                 CanOperateMap = CanOperateMap, OperatorOfMap = OperatorOfMap, GroundObserverCount = GroundObserverCount,
+                 IsPaused = () => IsStarting || Paused || closing || nativeFault != null || galaxyResyncPending, SimulationSpeed = () => Speed,
+                 RequestClock = SetClock, RequestSave = Save,
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.63
++1.64

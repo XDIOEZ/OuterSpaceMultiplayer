@@ -489,3 +489,10 @@
 - Core/Entry源码均已冻结；V1.63/协议13，主控接统一三端BuildOnly及短Git index窗口。UI后台目录/选中校验、删除令牌/回收移动及Runtime启动门禁已真实接线。不安装、不跑测试/游戏、不删除任何真实存档。
 
 - 完成并释放：V1.63/协议13三端BuildOnly成功，同源6589FCA0C094D63EDBD0795D62764AAA49573844F6C360C8A34690078624896A，每端3条旧CS0649，无编译错误。固定ZIP/BUILD-INFO位于artifacts/save-browser-20261021/packages；聚合回执docs/reports/save-browser-build-20261021.json（Completed=true/BuildOnly=true/Installations=[]/RuntimeTested=false）。未安装/测试/游戏/删除真实世界/push。Core原Load/备份校验保留，BUG-18卡继续待用户性能及原生UI验收。旧dirty/untracked保留，本轮混合Entry增量档案docs/patches/save-browser-20261021.patch，不声称干净HEAD闭包。源码/版本/构建释放，本条窄提交完成即释放index。
+
+### ground-entry-freeze-20261021 / 主控 /root
+- 用户更正故障：是进入地块时卡死，非进入世界。当前运行日志及TapTap安装包均V1.62，V1.63存档列表修复只打包未安装，不能归因于未运行版本。日志TapTap 08:43:52 view.applied/loading=True后无ready，08:44:49地图初始化超时 map=1000000011077；源码及两端日志已保存artifacts/ground-entry-freeze-20261021。
+- 分工：entry_native调查修复Game原生地图加载/运行/操作槽卸载交接；entry_session调查Session加载屏障与授权握手，先只读、跨区接口协调后实施最小修复。主控只协调、整合、版本/文档、窄提交与三端BuildOnly。不启动游戏/测试/安装/推送，保留全部历史dirty及V1.63存档功能。
+- Game仅NativeGroundOperation、Core/Session仅新查看意图字段/Attach接线/查询已冻结；V1.64、协议13。主控接统一三端BuildOnly和短index窗口，输入保持冻结；不安装/测试/游戏。
+
+- 完成并释放：V1.64/协议13三端BuildOnly成功，同源C96E722238742696AD27E34AA914F520C47155EE81786907571FDAAC5DB1687C，每端3条旧CS0649/无编译错误。固定包artifacts/ground-entry-freeze-20261021/packages；回执docs/reports/ground-entry-freeze-build-20261021.json（Completed=true/BuildOnly=true/Installations=[]/RuntimeTested=false）。源码路径解释V1.62空操作槽入图被提前卸载的机制，日志无卸载栈，不称实机复现；真实地图及180秒卸载验收留用户。本轮4份源码仅新查看意图字段/接线/查询及原生卸载门禁，旧dirty和V1.63功能保留，混合增量另存docs/patches/ground-entry-freeze-20261021.patch。未安装/测试/游戏/修改存档/push。源码/版本/构建释放，本条窄提交后释放index。

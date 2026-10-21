@@ -80,6 +80,7 @@ namespace FreeWorldMultiplayer
                 GetPlayerRevision = id => World != null && World.Players.ContainsKey(id) ? World.Players[id].PersonalRevision : 0,
                 OwnerOfEntity = OwnerOfEntity, OwnerOfMap = OwnerOfMap, GetRelation = GetRelation,
                 HasPermission = HasPermission, RegisterEntityOwner = RegisterEntityOwner,
+                IsLocalGroundViewActive = IsLocalGroundViewActive,
                 ReportDamage = ReportDamage, IsProtectedDefender = IsProtectedDefender,
                 IsAttackAllowed = IsAttackAllowed,
                 GetAttack = mapId => World != null && World.Maps.ContainsKey(mapId) && World.Maps[mapId].ActiveAttackId != null && World.Attacks.ContainsKey(World.Maps[mapId].ActiveAttackId) ? World.Attacks[World.Maps[mapId].ActiveAttackId] : null,

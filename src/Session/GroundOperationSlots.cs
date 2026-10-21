@@ -9,6 +9,19 @@ namespace FreeWorldMultiplayer
         private readonly HashSet<long> pendingGroundSettlements = new HashSet<long>();
         private readonly Dictionary<long, string> groundSlotDeniedOperators = new Dictionary<long, string>();
 
+        private bool IsLocalGroundViewActive(long mapId)
+        {
+            if (World == null || LocalPlayerId == null) return false;
+            // A client's authoritative view arrives before its policy. That policy waits
+            // behind native initialization, so its old CurrentMapId cannot cancel the load.
+            if (nativeMapLoad != null && nativeMapLoad.MapId == mapId) return true;
+            if (awaitingLocalReady.ContainsKey(mapId)) return true;
+            PlayerRecord local;
+            MapRecord map;
+            return World.Players.TryGetValue(LocalPlayerId, out local) && local.CurrentMapId == mapId
+                && World.Maps.TryGetValue(mapId, out map) && map.Visitors.Contains(LocalPlayerId);
+        }
+
         private void TraceGroundSlot(MapRecord map, string actor, string reason)
         {
             try

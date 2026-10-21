@@ -308,6 +308,7 @@ namespace FreeWorldMultiplayer
         public Func<bool> RequestSave;
         public Action RequestCancelWorldCreation;
         public Func<long, MapAccess> GetMapAccess;
+        public Func<long, bool> IsLocalGroundViewActive;
         public Func<string, long> GetPlayerRevision;
         public Func<long, string> OwnerOfEntity;
         public Func<long, string> OwnerOfMap;

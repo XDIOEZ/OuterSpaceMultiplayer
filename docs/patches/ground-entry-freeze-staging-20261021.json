@@ -1,0 +1,37 @@
+{
+  "staged": [
+    {
+      "path": "AGENT-COORDINATION.md",
+      "hunks": 1
+    },
+    {
+      "path": "CHANGELOG.md",
+      "hunks": 1
+    },
+    {
+      "path": "src/Game/NativeGroundOperation.cs",
+      "hunks": 2
+    },
+    {
+      "path": "src/Session/GroundOperationSlots.cs",
+      "hunks": 1
+    },
+    {
+      "path": "VERSION",
+      "hunks": 1
+    }
+  ],
+  "added": [],
+  "deferred": [
+    {
+      "path": "src/Core/Contracts.cs",
+      "hunk": 1,
+      "reason": "pre-existing dirty context; task patch preserves full change"
+    },
+    {
+      "path": "src/Session/MultiplayerSession.cs",
+      "hunk": 1,
+      "reason": "pre-existing dirty context; task patch preserves full change"
+    }
+  ]
+}

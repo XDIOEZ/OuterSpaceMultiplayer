@@ -556,3 +556,12 @@
 - 消息：原继续列表逐世界完整SHA/反序列化，当前34份主代约631.1MiB；已改为后台轻量目录+单并发所选完整校验，保留Load与备份恢复。新增带二次确认和目录状态令牌的可恢复删除，目录移入deleted-worlds，Runtime lease覆盖全部启动入口。不删除真实用户世界。
 - 处理记录：V1.63/协议13三端BuildOnly同源6589FCA0C094D63EDBD0795D62764AAA49573844F6C360C8A34690078624896A成功，3条旧CS0649/无编译错误。固定包artifacts/save-browser-20261021/packages，回执docs/reports/save-browser-build-20261021.json。未安装/测试/游戏/push，旧dirty与旧untracked保留，本轮混合Entry增量另存docs/patches。BUG-18运行待办保留；源码/版本/构建释放，本条提交后释放index。
 - 需要回复：无。
+
+
+### MSG-20261021-ground-entry-freeze-01 — V1.64进入地块加载卡住修复交付
+- 发件人：ground-entry-freeze-20261021 /root
+- 收件人：MAIN
+- 状态：源码与三端包完成，游戏复测待用户执行
+- 消息：用户明确是进入地块卡住；实际日志V1.62，host空野地1000000011077在MainGame加载后立即出现销毁迹象，最终超时。旧Pump用CanSimulate=false误判离图，加载/awaitingReady期间该值本来就false；现在只在本机无正式查看/加载意图、无模拟租约、空操作槽、同一原生实例已完成时卸载。Core/Session新增纯查看意图查询，覆盖guest view先于policy；不改真实Ready/ACK或超时。V1.63存档功能保留。
+- 处理记录：V1.64/协议13三端BuildOnly同源C96E722238742696AD27E34AA914F520C47155EE81786907571FDAAC5DB1687C成功，每端3条旧CS0649，无编译错误；固定包artifacts/ground-entry-freeze-20261021/packages，回执docs/reports/ground-entry-freeze-build-20261021.json。日志无卸载栈，不宣称实机复现。未安装/测试/游戏/修改玩家存档/push；旧dirty保留，Core/Session等效接线窄提交及完整本轮patch存档。源码/版本/构建释放，文档提交后释放index。
+- 需要回复：无。
