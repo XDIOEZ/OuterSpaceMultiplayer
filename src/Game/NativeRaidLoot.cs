@@ -22,6 +22,9 @@ namespace FreeWorldMultiplayer
         {
             string actor = Context.OwnerOfEntity(roleBean.getUID());
             string owner = ProtectedGroundItemOwner(CurrentMapId, item);
+            if (!Applying && !Executing && NativeCommands.IsPlayerIntent
+                && (!CanOperateGround(Context.LocalPlayerId, CurrentMapId) || actor != Context.LocalPlayerId))
+            { callback?.Invoke(Callback.FAILED); return false; }
             if (string.IsNullOrEmpty(actor)) return true; // Native NPC inventory remains native.
             if (!IsSimulator) { callback?.Invoke(Callback.FAILED); return false; }
             if (string.IsNullOrEmpty(owner) || actor == owner) return true;

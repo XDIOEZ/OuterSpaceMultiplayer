@@ -409,6 +409,7 @@ namespace FreeWorldMultiplayer
                     AirSupportManager.getInstance()?.CancelExpeditionLandings();
                     foreach (BaseHero hero in MapManager.instance.heroManager.getAllRoles()) hero.doInterruptAction();
                 }
+                UnloadReleasedGround(access);
             });
         }
         public BridgeResult AdvanceWorld(double realSeconds, double speed, IList<string> onlinePlayerIds)
@@ -502,6 +503,10 @@ namespace FreeWorldMultiplayer
             {
                 if (command.MapId != CurrentMapId || !Context.CanSimulateMap(command.MapId))
                     throw new InvalidOperationException("Command simulator has not loaded the authority map.");
+                if (!CanOperateGround(command.PlayerId, command.MapId))
+                    throw new NativeRejectionException("当前地块只允许占用操作权的玩家下令。");
+                if (command.EntityId > 0 && Context.OwnerOfEntity(command.EntityId) != command.PlayerId)
+                    throw new NativeRejectionException("只能指挥属于自己的地面单位。");
                 Executing = true;
                 try { using (EnterPlayer(command.PlayerId)) ExecuteNative(command); }
                 finally { Executing = false; }
@@ -510,6 +515,8 @@ namespace FreeWorldMultiplayer
         internal bool Route(CommandKind kind, long actorUid, long targetUid, object payload)
         {
             if (Applying || Executing) return true;
+            if (!CanOperateGround(Context.LocalPlayerId, CurrentMapId))
+            { Debug.LogWarning("[FreeWorldMultiplayer] 当前地块为只读观战，不能下达地面命令。"); return false; }
             MapAccess access = Context.GetMapAccess(CurrentMapId);
             var command = new GameCommand { Kind = kind, PlayerId = Context.LocalPlayerId, MapId = CurrentMapId,
                 EntityId = actorUid, TargetEntityId = targetUid, PayloadJson = NativeWire.Json(payload),

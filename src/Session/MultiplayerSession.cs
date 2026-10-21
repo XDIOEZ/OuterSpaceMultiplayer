@@ -130,6 +130,7 @@ namespace FreeWorldMultiplayer
             {
                 map.SimulatorPlayerId = null; map.Visitors.Clear(); map.AuthorityEpoch++;
                 map.AwaitingAuthorityReady = false;
+                RecoverGroundOperationSlot(map);
                 if (map.Mode != MapMode.Battle) map.Mode = IsFormalBase(map) ? MapMode.Offline : MapMode.Frozen;
             }
             host.Online = true; host.Uids = ReserveUidRange(false);
@@ -158,6 +159,7 @@ namespace FreeWorldMultiplayer
         {
             if (disposed) throw new ObjectDisposedException(nameof(MultiplayerSession));
             if (IsStarting || closing || transport.IsRunning || IsConnected || World != null) throw new InvalidOperationException("请先退出当前联机会话或等待创建完成。");
+            pendingGroundSettlements.Clear(); groundSlotDeniedOperators.Clear();
         }
         public void Tick(double unscaledSeconds)
         {
@@ -263,6 +265,7 @@ namespace FreeWorldMultiplayer
                         World.RoomRealSeconds += seconds;
                         if (!HasMapLoadingBarrier)
                         {
+                            TickGroundOperationSlots();
                             tickStage = "transfers.advance";
                             AdvanceTransfers();
                         }

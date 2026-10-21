@@ -196,6 +196,7 @@ namespace FreeWorldMultiplayer
         {
             MapRecord map;
             if (!World.Maps.TryGetValue(command.MapId, out map) || map.SimulatorPlayerId != LocalPlayerId || map.AuthorityEpoch != command.AuthorityEpoch || map.AwaitingAuthorityReady || Paused) throw new InvalidOperationException("当前客户端不是有效地图模拟者。");
+            RequireGroundOperator(command.PlayerId, map.MapId);
             string key = TransactionKey(command);
             CommandResult result;
             if (!executedCommands.TryGetValue(key, out result))

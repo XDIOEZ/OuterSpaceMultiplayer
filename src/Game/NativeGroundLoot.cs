@@ -19,6 +19,9 @@ namespace FreeWorldMultiplayer
         internal bool GroundHeroActive(FWHeroBean hero)
         { return hero != null && !hero.isDead() && !hero.prisoner && !hero.isFallDown() && !GameHooks.IsKnockedOut(hero.getUID()); }
 
+        private bool GroundHumanDefenderActive(FWHeroBean hero)
+        { return GroundHeroActive(hero) && !hero.isAndroid(); }
+
         internal string GroundZoneOwner(FWAreaZoneBean zone, long mapId)
         {
             if (zone == null) return null;

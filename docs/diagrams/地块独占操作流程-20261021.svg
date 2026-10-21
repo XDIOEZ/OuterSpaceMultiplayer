@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10" fill="#92a8c2"/></marker></defs>
+<rect width="1200" height="760" fill="#101822"/>
+<g font-family="Microsoft YaHei, sans-serif" fill="#eaf2fb">
+<text x="48" y="55" font-size="29" font-weight="bold">地块联机：一个操作 UID，多个只读观察者</text>
+<text x="48" y="88" font-size="17" fill="#a8bfd8">操作权 ≠ 资产所有权 ≠ 模拟执行者；房主统一批准和保存状态</text>
+<rect x="48" y="125" width="330" height="165" rx="15" fill="#19374b" stroke="#51b8df"/>
+<text x="70" y="162" font-size="22">空闲操作槽</text><text x="70" y="197" font-size="17">B 加载自有基地，已有己方小人</text><text x="70" y="227" font-size="17">或 A 实际空投小人</text><text x="70" y="262" font-size="17" fill="#86dcfa">同时到达也只批准一个 UID</text>
+<path d="M378 205H454" stroke="#92a8c2" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="470" y="125" width="330" height="165" rx="15" fill="#193e36" stroke="#54d5a4"/>
+<text x="493" y="162" font-size="22">操作槽：玩家 A 的 UID</text><text x="493" y="197" font-size="17">只指挥 A 自己的单位</text><text x="493" y="227" font-size="17">B 的守军 AI、生产、治疗继续</text><text x="493" y="262" font-size="17" fill="#89e8bf">其他 UID 不能下令或空投小人</text>
+<rect x="855" y="125" width="297" height="165" rx="15" fill="#302e49" stroke="#a299e6"/>
+<text x="877" y="162" font-size="22">只读观察：B、C、D…</text><text x="877" y="197" font-size="17">可以看当前地块</text><text x="877" y="227" font-size="17">可以切走操作母舰或其他地块</text><text x="877" y="262" font-size="17">侧边显示占用者和观察人数</text>
+<path d="M800 205H840" stroke="#92a8c2" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M635 290V337" stroke="#92a8c2" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="48" y="355" width="445" height="190" rx="15" fill="#243144" stroke="#718daf"/>
+<text x="70" y="393" font-size="22">普通占用的释放</text><text x="70" y="431" font-size="18">切到其他地块 → 立即释放</text><text x="70" y="466" font-size="18">太空 / 退出 → 保留 3 分钟后释放</text><text x="70" y="501" font-size="18">宽限期内返回原图 → 继续占用</text>
+<rect x="535" y="355" width="617" height="190" rx="15" fill="#493023" stroke="#e4aa6b"/>
+<text x="558" y="393" font-size="22">敌对空投后的地面行动</text><text x="558" y="431" font-size="18">实际空投起 10 分钟；切图 / 掉线不释放、不重计时</text><text x="558" y="466" font-size="18">击倒防守小人及盟友 → 可搜刮；机器人不计</text><text x="558" y="501" font-size="18">小人恢复须重判；一个远征信标使用一次，仍受运力限制</text>
+<path d="M635 337H272V350M635 337H843V350" stroke="#92a8c2" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+<path d="M843 545V588" stroke="#92a8c2" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="535" y="600" width="617" height="105" rx="15" fill="#253a34" stroke="#54d5a4"/>
+<text x="558" y="640" font-size="22">可靠撤离 / 10 分钟超时 → 原有结算 → 释放操作槽</text><text x="558" y="676" font-size="17">先保存资产和人员结果，再允许下一个 UID；结算失败保留锁定</text>
+<text x="48" y="727" font-size="16" fill="#a8bfd8">2026-10-21 用户确认规则 · 运行行为与跨机效果待用户验收</text>
+</g></svg>

@@ -1,0 +1,815 @@
+--- a/AGENT-COORDINATION.md
++++ b/AGENT-COORDINATION.md
+@@ -583,3 +583,9 @@
+ - 直接代码证据：原版舰船入队从仓库移除，旧登记只遍历仓库。旧日志未写具体request.ShipId，未取得存档逐字段结果，不将复合谓词的确切命中字段声称为实测；用户双端验收卡保持待办。
+ - V1.61 / 1.61.0.0 三端BuildOnly成功，同源FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1，各端三条既有CS0649、无编译错误。固定包artifacts/battle-host-manual-20261021/packages，回执docs/reports/battle-host-manual-build-20261021.json。
+ - Installations=[] / RuntimeTested=false。未安装、测试或运行游戏、未推送；旧dirty完整保留，Contracts只提交等效新签名，本轮精确增量docs/patches/battle-host-manual-20261021.patch。不宣称历史源码依赖闭包已干净；源码/版本/构建释放，本文档窄提交后释放index。
++
++### ground-operation-slot-20261021 / 主控 /root
++- 用户已授权实现：每地块一个操作UID，多人只读观察；普通基地加载有己方小人即占空槽，切其他地块立即释放/太空退出3分钟释放；外来空投起占槽并开始10分钟地面行动，结算前不因切图/掉线释放。操作权不改变所有权；AI/生产/治疗继续；一次远征信标，击倒全部防守人类及盟友后搜刮，机器人不计，恢复需重新击倒。侧边UI显示占用与观察人数。
++- 主控负责契约协调、文档SVG、版本、增量提交与统一三端BuildOnly；ground_slot负责Core/Session；ground_native负责Game；ground_ui负责Entry侧边UI。各Agent不得构建/测试/运行游戏/安装/操作Git index或改其它分区；跨区契约先沟通。P3及运行副本只读。
++- 保留全部历史dirty；修改前完整src基线已保存artifacts/ground-operation-slot-20261021/baseline。核心实现期间占用上述相关地面文件，既有舰战/运输修复保持；不安装、不推送、不运行测试。
++- Core/Session、Game、UI三方已完成源码冻结，接口OperatorPlayerId/CanOperateMap/HasGroundPlayerHeroes/生命周期泵一致；V1.62、协议13，当前主控接统一三端BuildOnly窗口。全部构建输入冻结，禁止安装/测试/运行游戏/推送；历史dirty仍保留。
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,13 @@
+ 发布号的唯一来源是主仓库根目录的 `VERSION`。每完成一个独立小 BUG，递增第二段整数；例如 `1.9` 后为 `1.10`。重新构建或同步同一项修复不自动递增版本。
+ 
+ 发布号与需求文档的 V1、游戏匹配目录 `v_common`、网络协议号及存档结构版本分别维护，不互相替代。
++
++## V1.62 · 2026-10-21
++
++- 地面重构为每地块一个操作 UID、多个只读观察者，操作权与资产归属及模拟者分别管理。原版地块侧边卡片显示占用者和观战人数；命令、图纸、人员设置、基地操作及人员运输统一遵守操作槽，自动 AI、防御、生产和治疗保留。
++- 有己方驻留人员时加载地块可取得空槽；普通占用切换其他地表立即释放，太空/退出保留 180 秒。敌对空投在实际落地取得空槽并开始固定 600 秒行动，不再依赖基地所有者离线；切图、掉线不提前释放或重置，先可靠结算再开放下一位操作玩家。
++- 搜刮重新检查全部守方人类及其盟友，机器人不计、恢复后重新阻止搜刮；实际出征容量继续有效。仅允许一次原版远征撤人，空手撤人也消耗机会，不能经普通运输绕过。
++- 协议升至 13，双方需使用同版 MOD；旧存档字段保留，既有进行中行动按原登记期限恢复。默认三端只构建打包，不安装；运行与跨机验收由用户执行。
+ 
+ ## V1.61 · 2026-10-21
+ 
+--- a/docs/plans/联机方案 V1.md
++++ b/docs/plans/联机方案 V1.md
+@@ -4,6 +4,7 @@
+ 
+ ## 零、开工与交付边界
+ 
++- **2026-10-21 地面独占操作重构**：按用户确认的 [地块独占操作规则](地块独占操作规则-20261021.md) 实现，每地块最多一个操作 UID、多名只读观察者。此追加覆盖旧同图多人发令、防守方上线接管和多人共同搜刮规则；普通占用切图立即释放、太空或退出 3 分钟释放，敌对空投开始的 10 分钟行动必须先结算再释放。操作权与资产归属、模拟执行者分开，基地 AI 继续。
+ - **本文是 V1 唯一现行依据**。同目录早期构想、实现方案、源码评估和旧流程图仅保留作历史参考；冲突时以本文及下方用户后续追加要求为准，不因旧文档自行增加功能或本体适配开发。
+ - **2026-10-19 地块权限追加要求**：按用户确认的 [地块权限与合作搜刮规则](地块权限与合作搜刮规则-20261019.md) 实现。该文对旧的友好共同劳动、背包默认赠送、基地废弃及搜刮参与者规则作后续调整；同一事项以追加要求为准。包括中立储存配额、工作台专属、所有其他玩家阻止认领、两两双向友好共同搜刮且共用唯一运输额度、可配置的战斗加搜刮总时限与冷却。地表额外赠送入口、第三方 MOD 兼容框架不在本次范围。
+ - **已授权开始实现**。用户于 2026-10-15 明确授权按新保留范围继续 MOD 开发与构建，并要求主代理仅主控、协调和整合，实际功能由子智能体实现。Project3 始终只读。旧 Steam DLL 依赖缺口与开发实现分开记录，不能把仓库、检查工具或部分代码视为完整 V1。
+--- a/src/Core/Contracts.cs
++++ b/src/Core/Contracts.cs
+@@ -156,6 +156,7 @@
+         public long AuthorityEpoch;
+         public long Revision;
+         public string SimulatorPlayerId;
++        public string OperatorPlayerId;
+         public MapAccessMode Access;
+     }
+     public sealed class MapRecord
+@@ -163,6 +164,9 @@
+         public long MapId;
+         public string OwnerPlayerId;
+         public string SimulatorPlayerId;
++        // Player input authority is exclusive; the simulator may run only AI for observers.
++        public string OperatorPlayerId;
++        public double OperatorReleaseAtRoomSeconds;
+         public long AuthorityEpoch;
+         public long Revision;
+         public long LastSimulatedWorldMM;
+@@ -250,6 +254,7 @@
+         public long GiftDestinationFleetId = -1;
+         public long ArrivalWorldMM = -1;
+         public long NativeExpeditionId = -1;
++        public double GroundLandedAtRoomSeconds = -1;
+         public bool Returning;
+         public string AttackId;
+         public string Error;
+@@ -306,6 +311,7 @@
+         public long LandingExpeditionId = -1;
+         public double Capacity;
+         public double ElapsedSeconds;
++        public double GroundLandedAtRoomSeconds = -1;
+         public AttackStage Stage;
+         public bool EvacuationUsed;
+         public string EvacuationTransferId;
+@@ -358,6 +364,9 @@
+         public Func<bool> GetJoinHostGalaxyOnFirstSpawn;
+         public Func<string, long, BaseCreationStatus> GetBaseCreationStatus;
+         public Func<long, bool> CanSimulateMap;
++        public Func<string, long, bool> CanOperateMap;
++        public Func<long, string> OperatorOfMap;
++        public Func<long, int> GroundObserverCount;
+         public Func<bool> IsPaused;
+         public Func<double> SimulationSpeed;
+         public Action<bool, double> RequestClock;
+@@ -434,6 +443,7 @@
+         List<long> GetMapPropertyEntityIds(long mapId);
+         // Null means unavailable/incomplete canonical map state, never an empty garrison.
+         List<string> ActiveGroundPlayerIds(long mapId);
++        bool HasGroundPlayerHeroes(long mapId, string playerId);
+         BridgeResult ApplyBaseOwnership(string playerId, long initialFormalBaseMapId, IList<long> ownedSurfaceMapIds, IList<long> managedSurfaceMapIds);
+         BridgeResult ResolveMapEntry(MapEntryRequest request, out long canonicalMapId);
+         BridgeResult AdvanceWorld(double realSeconds, double speed, IList<string> onlinePlayerIds);
+--- a/src/Core/Protocol.cs
++++ b/src/Core/Protocol.cs
+@@ -17,7 +17,7 @@
+     }
+     internal static class Protocol
+     {
+-        internal const int CurrentVersion = 12;
++        internal const int CurrentVersion = 13;
+         internal static string CurrentVersionText { get { return CurrentVersion.ToString(CultureInfo.InvariantCulture); } }
+         internal static string IncompatibleVersion(string remoteVersion)
+         {
+--- a/src/Entry/ModPluginLauncher.cs
++++ b/src/Entry/ModPluginLauncher.cs
+@@ -78,7 +78,11 @@
+             ReportDiagnosticsFailure();
+             if (Session != null && !tickFailed)
+             {
+-                try { Session.Tick(Time.unscaledDeltaTime); }
++                try
++                {
++                    Session.Tick(Time.unscaledDeltaTime);
++                    if (Session.IsConnected && Bridge != null) Bridge.PumpGroundOperationLifecycle();
++                }
+                 catch (Exception error)
+                 {
+                     tickFailed = true;
+--- a/src/Entry/MultiplayerLobbyPages.cs
++++ b/src/Entry/MultiplayerLobbyPages.cs
+@@ -160,7 +160,7 @@
+             SetCaption(steamButton, "Steam 好友房间：" + (useSteam ? "开" : "关"));
+             SetCaption(resumeSteamButton, "Steam 好友房间：" + (resumeSteam ? "开" : "关"));
+             SetCaption(spawnNearHostButton, "新玩家与房主同星系出生：" + (joinHostGalaxyOnFirstSpawn ? "开" : "关"));
+-            if (starterHint != null) starterHint.text = "首次加入 " + startingEmployees.text + " 名雇员；基地上限不含母舰。\n战斗与搜刮共用时限，击倒守军不重置。";
++            if (starterHint != null) starterHint.text = "首次加入 " + startingEmployees.text + " 名雇员；基地上限不含母舰。\n空投小人起共用固定10分钟，击倒守军不重置。";
+             RefreshPresetState();
+             WorldSummary selected = worlds.FirstOrDefault(w => w.WorldId == selectedWorldId);
+             if (loadButton != null) loadButton.interactable = !Busy && !Connected && selected != null && String.IsNullOrEmpty(selected.Error);
+@@ -186,9 +186,10 @@
+             Label(parent, "BasesDefaultLabel", "每人营地 / 基地上限", 18, 0, 254, 280, 34);
+             settingsMaxBases = Input(parent, "SettingsMaxBases", "", 300, 246, 160, 44, 2, false);
+             Label(parent, "BasesDefaultHint", "1～64 处，不含母舰。只影响后续新世界，已有存档保持原规则。", 16, 0, 306, 460, 62).enableWordWrapping = true;
+-            Label(parent, "RaidDurationDefaultLabel", "战斗＋搜刮时限（分钟）", 18, 0, 382, 280, 30);
++            Label(parent, "RaidDurationDefaultLabel", "战斗＋搜刮固定时限（分钟）", 18, 0, 382, 280, 30);
+             settingsRaidDuration = Input(parent, "SettingsRaidDuration", "", 300, 376, 160, 40, 3, false);
+-            Label(parent, "RaidDurationDefaultHint", "1～120 分钟，含战斗与搜刮；击倒守军不重置。", 15, 0, 428, 460, 28);
++            settingsRaidDuration.readOnly = true;
++            Label(parent, "RaidDurationDefaultHint", "固定10分钟，空投小人开始计时；击倒守军不重置。", 15, 0, 428, 460, 28);
+             Label(parent, "PlayersDefaultLabel", "默认人数上限", 18, 516, 136, 230, 34);
+             settingsPlayers = Input(parent, "SettingsMaxPlayers", "", 792, 128, 192, 44, 2, false);
+             Label(parent, "PortDefaultLabel", "默认端口", 18, 516, 202, 230, 34);
+@@ -211,7 +212,7 @@
+         {
+             settingsEmployees.text = settings.StartingEmployeeCount.ToString(); settingsPlayers.text = settings.DefaultMaxPlayers.ToString();
+             settingsMaxBases.text = settings.MaxBasesPerPlayer.ToString();
+-            settingsRaidDuration.text = settings.RaidDurationMinutes.ToString(); settingsRaidCooldown.text = settings.RaidCooldownMinutes.ToString();
++            settingsRaidDuration.text = "10"; settingsRaidCooldown.text = settings.RaidCooldownMinutes.ToString();
+             settingsPort.text = settings.DefaultPort.ToString(); settingsSteam = settings.DefaultUseSteam;
+             settingsJoinHostGalaxyOnFirstSpawn = settings.JoinHostGalaxyOnFirstSpawn;
+             SetCaption(settingsSteamButton, "默认 Steam 好友房间：" + (settingsSteam ? "开" : "关"));
+@@ -222,12 +223,12 @@
+         {
+             var defaults = new ModSettings { StartingEmployeeCount = Int(settingsEmployees, 1, 32), DefaultMaxPlayers = Int(settingsPlayers, 2, 64),
+                 MaxBasesPerPlayer = Int(settingsMaxBases, 1, 64), DefaultPort = Int(settingsPort, 1, 65535), DefaultUseSteam = settingsSteam,
+-                RaidDurationMinutes = Int(settingsRaidDuration, 1, 120), RaidCooldownMinutes = Int(settingsRaidCooldown, 0, 1440),
++                RaidDurationMinutes = 10, RaidCooldownMinutes = Int(settingsRaidCooldown, 0, 1440),
+                 JoinHostGalaxyOnFirstSpawn = settingsJoinHostGalaxyOnFirstSpawn };
+             Runtime.SaveSettings(defaults);
+             startingEmployees.text = defaults.StartingEmployeeCount.ToString(); maxPlayers.text = defaults.DefaultMaxPlayers.ToString();
+             maxBases.text = defaults.MaxBasesPerPlayer.ToString();
+-            raidDuration.text = defaults.RaidDurationMinutes.ToString(); raidCooldown.text = defaults.RaidCooldownMinutes.ToString();
++            raidDuration.text = "10"; raidCooldown.text = defaults.RaidCooldownMinutes.ToString();
+             port.text = resumePort.text = joinPort.text = defaults.DefaultPort.ToString();
+             useSteam = resumeSteam = defaults.DefaultUseSteam && !Runtime.DirectLaunch;
+             joinHostGalaxyOnFirstSpawn = defaults.JoinHostGalaxyOnFirstSpawn;
+--- a/src/Entry/MultiplayerPresetSelection.cs
++++ b/src/Entry/MultiplayerPresetSelection.cs
+@@ -58,8 +58,9 @@
+             maxBases = Input(parent, "MaxBases", defaults.MaxBasesPerPlayer.ToString(), 700, 174, 80, 36, 2);
+             Label(parent, "StarterLabel", "雇员总数", 17, 802, 180, 88, 30);
+             startingEmployees = Input(parent, "StartingEmployees", defaults.StartingEmployeeCount.ToString(), 890, 174, 94, 36, 2);
+-            Label(parent, "RaidDurationLabel", "总时限/分", 17, 596, 220, 100, 30);
+-            raidDuration = Input(parent, "RaidDuration", defaults.RaidDurationMinutes.ToString(), 700, 214, 80, 36, 3);
++            Label(parent, "RaidDurationLabel", "固定时限/分", 17, 596, 220, 100, 30);
++            raidDuration = Input(parent, "RaidDuration", "10", 700, 214, 80, 36, 3);
++            raidDuration.readOnly = true;
+             Label(parent, "RaidCooldownLabel", "冷却分钟", 17, 802, 220, 88, 30);
+             raidCooldown = Input(parent, "RaidCooldown", defaults.RaidCooldownMinutes.ToString(), 890, 214, 94, 36, 4);
+             steamButton = Button(parent, "EnableSteam", "", 596, 258, 388, 36, () => { EnsureSteamAvailable(); useSteam = !useSteam; RefreshCreateState(); });
+@@ -83,7 +84,7 @@
+             if (String.IsNullOrWhiteSpace(worldName.text)) throw new ArgumentException("请填写世界名称。");
+             var options = new WorldOptions { Name = worldName.text.Trim(), MaxPlayers = Int(maxPlayers, 2, 64),
+                 MaxBasesPerPlayer = Int(maxBases, 1, 64), StartingEmployeeCount = Int(startingEmployees, 1, 32),
+-                RaidDurationMinutes = Int(raidDuration, 1, 120), RaidCooldownMinutes = Int(raidCooldown, 0, 1440),
++                RaidDurationMinutes = 10, RaidCooldownMinutes = Int(raidCooldown, 0, 1440),
+                 JoinHostGalaxyOnFirstSpawn = joinHostGalaxyOnFirstSpawn };
+             TransportOptions transport = HostOptions(port, useSteam);
+             options.StartPresetJson = NativeWorldPresets.BuildStartPresetJson(selected.Id);
+--- a/src/Game/GameBridge.cs
++++ b/src/Game/GameBridge.cs
+@@ -417,6 +417,7 @@
+                     AirSupportManager.getInstance()?.CancelExpeditionLandings();
+                     foreach (BaseHero hero in MapManager.instance.heroManager.getAllRoles()) hero.doInterruptAction();
+                 }
++                UnloadReleasedGround(access);
+             });
+         }
+         public BridgeResult AdvanceWorld(double realSeconds, double speed, IList<string> onlinePlayerIds)
+@@ -479,6 +480,10 @@
+             {
+                 if (command.MapId != CurrentMapId || !Context.CanSimulateMap(command.MapId))
+                     throw new InvalidOperationException("Command simulator has not loaded the authority map.");
++                if (!CanOperateGround(command.PlayerId, command.MapId))
++                    throw new NativeRejectionException("当前地块只允许占用操作权的玩家下令。");
++                if (command.EntityId > 0 && Context.OwnerOfEntity(command.EntityId) != command.PlayerId)
++                    throw new NativeRejectionException("只能指挥属于自己的地面单位。");
+                 Executing = true;
+                 try { using (EnterPlayer(command.PlayerId)) ExecuteNative(command); }
+                 finally { Executing = false; }
+@@ -487,6 +492,8 @@
+         internal bool Route(CommandKind kind, long actorUid, long targetUid, object payload)
+         {
+             if (Applying || Executing) return true;
++            if (!CanOperateGround(Context.LocalPlayerId, CurrentMapId))
++            { Debug.LogWarning("[FreeWorldMultiplayer] 当前地块为只读观战，不能下达地面命令。"); return false; }
+             MapAccess access = Context.GetMapAccess(CurrentMapId);
+             var command = new GameCommand { Kind = kind, PlayerId = Context.LocalPlayerId, MapId = CurrentMapId,
+                 EntityId = actorUid, TargetEntityId = targetUid, PayloadJson = NativeWire.Json(payload),
+--- a/src/Game/GameHooks.cs
++++ b/src/Game/GameHooks.cs
+@@ -24,6 +24,8 @@
+             KnockedOut.Clear();
+             NativeEntityOwnershipHooks.Install(harmony);
+             NativeGroundPersonnelHooks.Install(harmony);
++            NativeGroundOperationUi.Install(harmony);
++            NativeGroundOperationHooks.Install(harmony);
+             NativeGroundInteraction.Install(harmony);
+             NativeMapProjectionGuard.Install(harmony);
+             Patch(harmony, typeof(FWGameData), "createUID", "UidPrefix");
+@@ -213,6 +215,7 @@
+             if (Bridge == null || Bridge.Applying) return true;
+             if (!Bridge.Executing && !NativeCommands.IsPlayerIntent && Bridge.IsSimulator) return true;
+             string actor = Bridge.Executing ? (Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId) : Bridge.Context.LocalPlayerId;
++            if (!Bridge.CanOperateGround(actor, Bridge.CurrentMapId)) { __result = false; return false; }
+             if (!Bridge.Context.HasPermission(actor, Bridge.CurrentMapId, __instance.getUID(), Permission.ControlOwnHero))
+             { __result = false; return false; }
+             return true;
+@@ -234,12 +237,21 @@
+             return false;
+         }
+         private static bool MovePrefix(BaseRole hero, short cellx, short celly)
+-        { return Bridge == null || Bridge.Route(CommandKind.Move, hero.getUID(), -1, new { X = cellx, Y = celly }); }
++        {
++            if (Bridge == null || Bridge.Applying || Bridge.Executing || Bridge.Seeding) return true;
++            if (!NativeCommands.IsPlayerIntent) return Bridge.IsSimulator;
++            return Bridge.Route(CommandKind.Move, hero.getUID(), -1, new { X = cellx, Y = celly });
++        }
+         private static bool ConscriptPrefix(BaseRole hero, bool isMual)
+-        { return Bridge == null || Bridge.Route(CommandKind.Conscript, hero.getUID(), -1, new { Manual = isMual }); }
++        {
++            if (Bridge == null || Bridge.Applying || Bridge.Executing || Bridge.Seeding) return true;
++            if (!NativeCommands.IsPlayerIntent) return Bridge.IsSimulator;
++            return Bridge.Route(CommandKind.Conscript, hero.getUID(), -1, new { Manual = isMual });
++        }
+         private static bool AttackPrefix(BaseRole hero, SpriteObject _target)
+         {
+-            if (Bridge == null) return true;
++            if (Bridge == null || Bridge.Applying || Bridge.Executing || Bridge.Seeding) return true;
++            if (!NativeCommands.IsPlayerIntent) return Bridge.IsSimulator;
+             string actor = Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId;
+             if (!Bridge.Context.HasPermission(actor, Bridge.CurrentMapId, _target.getUID(), Permission.Attack)) return false;
+             return Bridge.Route(CommandKind.Attack, hero.getUID(), _target.getUID(), new { });
+@@ -301,13 +313,25 @@
+         { if (Bridge != null && !Bridge.Applying) Bridge.ReleaseAllLoot(__instance.getUID()); }
+         private static bool ThrowItemPrefix(BaseRole hero, FWThingBean thingBean, int sum, callbackInt callInt)
+         {
++            if (Bridge != null && !Bridge.Applying && !Bridge.Executing && NativeCommands.IsPlayerIntent
++                && (!Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)
++                    || Bridge.Context.OwnerOfEntity(hero.getUID()) != Bridge.Context.LocalPlayerId))
++            { callInt?.Invoke(Callback.FAILED); return false; }
+             if (Bridge == null || Bridge.Applying || !Bridge.ReleaseLoot(hero.getUID(), thingBean.getUID(), sum)) return true;
+             callInt?.Invoke(Callback.SUCCESS); return false;
+         }
+         private static bool UseItemPrefix(FWThingBean useThing)
+-        { return Bridge == null || !Bridge.IsReservedLoot(useThing.getUID()); }
++        {
++            if (Bridge == null) return true;
++            if (!Bridge.Applying && !Bridge.Executing && NativeCommands.IsPlayerIntent
++                && !Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)) return false;
++            return !Bridge.IsReservedLoot(useThing.getUID());
++        }
+         private static void EquipItemPrefix(FWThingBean takeEquipThing)
+         {
++            if (Bridge != null && !Bridge.Applying && !Bridge.Executing && NativeCommands.IsPlayerIntent
++                && !Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId))
++                throw new InvalidOperationException("当前地块仅可观战，不能更换地面装备。");
+             if (Bridge != null && Bridge.IsReservedLoot(takeEquipThing.getUID()))
+                 throw new InvalidOperationException("本场预占战利品只能在唯一一次撤离提交后使用或装备。");
+         }
+--- a/src/Game/NativeCommands.cs
++++ b/src/Game/NativeCommands.cs
+@@ -57,6 +57,9 @@
+                 if (!bridge.IsSimulator) return false;
+                 return !NativeGroundInteraction.IsWorkPlan(plan) || bridge.CanPerformGroundWork(__instance, plan);
+             }
++            if (!bridge.CanOperateGround(bridge.Context.LocalPlayerId, bridge.CurrentMapId)
++                || bridge.Context.OwnerOfEntity(__instance.getUID()) != bridge.Context.LocalPlayerId)
++            { SchedulingResult.Append("当前地块只能观战，或所选单位不属于你。"); return false; }
+             if (plan.planBean != null && plan.planBean.taskType == FWPlanBean.TASK_CARRY
+                 && bridge.FindPersistentBean(plan.planBean.objectUID) is FWThingBean)
+                 return bridge.Route(CommandKind.TakeItem, __instance.getUID(), plan.planBean.objectUID,
+@@ -88,6 +91,9 @@
+         {
+             GameBridge bridge = GameBridge.Active;
+             if (bridge == null || bridge.Applying || bridge.Executing) return true;
++            // The same native helpers also serve automatic treatment (for example
++            // surgery orders its patient into bed). Only UI intentions are commands.
++            if (!IsPlayerIntent) return bridge.IsSimulator;
+             string operation = Methods.Single(p => p.Value == __originalMethod).Key;
+             Invocation packet = new Invocation { Operation = operation };
+             long actor = -1, target = -1;
+--- a/src/Game/NativeGroundCommandOwnership.cs
++++ b/src/Game/NativeGroundCommandOwnership.cs
+@@ -19,7 +19,7 @@
+         internal static string Owner(GameBridge bridge, long uid)
+         { return bridge.Context.OwnerOfEntity(uid) ?? bridge.Context.OwnerOfMap(bridge.CurrentMapId); }
+         internal static bool CanEdit(GameBridge bridge, string actor, long uid)
+-        { return !string.IsNullOrEmpty(actor) && actor == Owner(bridge, uid); }
++        { return bridge.CanOperateGround(actor, bridge.CurrentMapId) && !string.IsNullOrEmpty(actor) && actor == Owner(bridge, uid); }
+         internal static bool CanWorkZone(GameBridge bridge, BaseRole worker, FWAreaZoneBean zone)
+         {
+             if (worker == null || zone == null) return true;
+@@ -99,6 +99,7 @@
+         private static bool CachePlanPrefix(object[] __args)
+         {
+             if (Bridge == null || Bridge.Applying || !NativeCommands.IsPlayerIntent) return true;
++            if (!Bridge.CanOperateGround(Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)) return false;
+             RolePlan plan = __args.OfType<RolePlan>().FirstOrDefault();
+             if (plan == null || plan.planBean == null || plan.planBean.IsNewPlan) return true;
+             return CanEdit(Bridge, Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, plan.planBean.getUID());
+@@ -116,11 +117,14 @@
+         private static bool GraphEditPrefix(BasePlanGraph __instance)
+         {
+             if (Bridge == null || Bridge.Applying || Bridge.Executing || !NativeCommands.IsPlayerIntent || __instance.rolePlan == null || __instance.rolePlan.planBean == null) return true;
++            if (!Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)) return false;
+             return __instance.rolePlan.planBean.IsNewPlan || CanEdit(Bridge, Bridge.Context.LocalPlayerId, __instance.rolePlan.planBean.getUID());
+         }
+         private static void TopPlanPrefix(ref List<BasePlanGraph> graphs)
+         {
+             if (Bridge == null || Bridge.Applying || !NativeCommands.IsPlayerIntent || graphs == null) return;
++            if (!Bridge.CanOperateGround(Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, Bridge.CurrentMapId))
++            { graphs = new List<BasePlanGraph>(); return; }
+             graphs = graphs.Where(g => g != null && g.rolePlan != null && g.rolePlan.planBean != null
+                 && (g.rolePlan.planBean.IsNewPlan || CanEdit(Bridge, Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, g.rolePlan.planBean.getUID()))).ToList();
+         }
+--- a/src/Game/NativeGroundLoot.cs
++++ b/src/Game/NativeGroundLoot.cs
+@@ -18,6 +18,9 @@
+         }
+         internal bool GroundHeroActive(FWHeroBean hero)
+         { return hero != null && !hero.isDead() && !hero.prisoner && !hero.isFallDown() && !GameHooks.IsKnockedOut(hero.getUID()); }
++
++        private bool GroundHumanDefenderActive(FWHeroBean hero)
++        { return GroundHeroActive(hero) && !hero.isAndroid(); }
+ 
+         internal string GroundZoneOwner(FWAreaZoneBean zone, long mapId)
+         {
+--- a/src/Game/NativeRaid.cs
++++ b/src/Game/NativeRaid.cs
+@@ -146,7 +146,7 @@
+             var animals = new List<long>(); team.getCollectAnimalBean(ref animals);
+             bool protectedCargo = items.Any(item => { string owner = ProtectedGroundItemOwner(source.starMapId, item); return owner != null && owner != Context.LocalPlayerId; });
+             bool carryingLoot = LootReservations.Any(r => r.AttackId == attack.AttackId && (heroes.Contains(r.HeroUid) || items.Any(i => i.getUID() == r.CarryUid)));
+-            if (!protectedCargo && !carryingLoot && (items.Count != 0 || heroes.Count != 0 || animals.Count != 0)) return false;
++            if (!protectedCargo && !carryingLoot && heroes.Count == 0) return false;
+             // Reuse the native bottom confirmation. This also admits the V1 empty evacuation,
+             // which the single-player onEvent_Create rejects before creating any expedition.
+             dialog.thingPicker.hide(); dialog.rolePicker.hide();
+@@ -167,7 +167,7 @@
+             if (selectedHeroes.Count != heroes.Count)
+             { FairyUIDispatcher.showToast("选中的雇员状态已变化，请重新选择。"); return true; }
+             string attackId = attack.AttackId;
+-            FairyUIDispatcher.showTip("确认本次运输并结束进攻？空仓或未装满也会使用本场唯一一次撤离。",
++            FairyUIDispatcher.showTip("确认本次远征并结束地面行动？撤回己方小人也会使用本场唯一一次撤离。",
+                 LanguageDef.getTextByID(Lan.btn_Confirm), LanguageDef.getTextByID(Lan.btn_Cancel), choice =>
+                 {
+                     if (choice != Tip.TIP_CONFIRM || !ReferenceEquals(Active, this) || dialog == null) return;
+@@ -315,13 +315,14 @@
+         }
+         public bool AreDefendersDefeated(AttackRecord attack)
+         {
+-            List<string> activeOwners = ActiveGroundPlayerIds(attack.MapId);
+-            if (activeOwners == null) return false;
+-            if (attack.DefenderPlayerId != null) return !activeOwners.Contains(attack.DefenderPlayerId);
+-            for (int i = 0; i < activeOwners.Count; i++)
+-                for (int j = i + 1; j < activeOwners.Count; j++)
+-                    if (!Context.IsFriendlyToward(activeOwners[i], activeOwners[j]) || !Context.IsFriendlyToward(activeOwners[j], activeOwners[i])) return false;
+-            return true;
++            FWStarMapInfo map;
++            if (attack == null || !Maps.TryGetValue(attack.MapId, out map) || map.starSpread == null
++                || CurrentMapId == attack.MapId && !IsNativeMapReady(attack.MapId)) return false;
++            string defender = attack.DefenderPlayerId ?? Context.OwnerOfMap(attack.MapId);
++            return !Players.Keys.Where(owner => owner != attack.AttackerPlayerId
++                && (defender == null || owner == defender
++                    || Context.IsFriendlyToward(owner, defender) && Context.IsFriendlyToward(defender, owner)))
++                .SelectMany(PlayerHeroes).Any(hero => hero.isInMap(attack.MapId) && GroundHumanDefenderActive(hero));
+         }
+         public bool IsMapReady(long mapId) { return IsNativeMapReady(mapId); }
+         public bool IsRaidReady(AttackRecord attack)
+--- a/src/Game/NativeRaidLoot.cs
++++ b/src/Game/NativeRaidLoot.cs
+@@ -22,6 +22,9 @@
+         {
+             string actor = Context.OwnerOfEntity(roleBean.getUID());
+             string owner = ProtectedGroundItemOwner(CurrentMapId, item);
++            if (!Applying && !Executing && NativeCommands.IsPlayerIntent
++                && (!CanOperateGround(Context.LocalPlayerId, CurrentMapId) || actor != Context.LocalPlayerId))
++            { callback?.Invoke(Callback.FAILED); return false; }
+             if (string.IsNullOrEmpty(actor)) return true; // Native NPC inventory remains native.
+             if (!IsSimulator) { callback?.Invoke(Callback.FAILED); return false; }
+             if (string.IsNullOrEmpty(owner) || actor == owner) return true;
+--- a/src/Game/NativeTransfers.cs
++++ b/src/Game/NativeTransfers.cs
+@@ -329,7 +329,7 @@
+             bool carryingLoot = attack != null && LootReservations.Any(r => r.AttackId == attack.AttackId
+                 && (manifest.Heroes.Contains(r.HeroUid) || manifest.Items.Any(i => i.Uid == r.CarryUid)));
+             bool evacuating = attack != null && IsGroundRaidParticipant(attack, Context.LocalPlayerId) && attack.Stage != AttackStage.Finished
+-                && (foreignStock || carryingLoot || manifest.Items.Count == 0 && manifest.Heroes.Count == 0 && manifest.Animals.Count == 0);
++                && (foreignStock || carryingLoot || manifest.Heroes.Count != 0);
+             if (!evacuating) ApplyVisitAuthorization(request, manifest);
+             if (evacuating && (request.DestinationMapId >= 0 || request.DestinationFleetId != GroundRaidFleet(attack, Context.LocalPlayerId)))
+             { FairyUIDispatcher.showToast("本场撤离须返回出征时登记的舰队。"); return null; }
+--- a/src/Session/Authority.cs
++++ b/src/Session/Authority.cs
+@@ -94,6 +94,7 @@
+             if (World == null || playerId == null || !World.Players.ContainsKey(playerId)) return false;
+             string entityOwner = OwnerOfEntity(entityId), mapOwner = OwnerOfMap(mapId);
+             if (permission == Permission.View) return true;
++            if (!CanOperateMap(playerId, mapId)) return false;
+             if (permission == Permission.ControlOwnHero) return entityOwner == playerId;
+             if (permission == Permission.Attack)
+             {
+@@ -136,7 +137,7 @@
+         }
+         private MapAccess AccessFor(MapRecord map, string playerId)
+         {
+-            return new MapAccess { MapId = map.MapId, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, SimulatorPlayerId = map.SimulatorPlayerId, Access = map.SimulatorPlayerId == playerId ? MapAccessMode.Simulator : MapAccessMode.Replica };
++            return new MapAccess { MapId = map.MapId, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, SimulatorPlayerId = map.SimulatorPlayerId, OperatorPlayerId = map.OperatorPlayerId, Access = map.SimulatorPlayerId == playerId ? MapAccessMode.Simulator : MapAccessMode.Replica };
+         }
+         private MapRecord EnsureMap(long mapId)
+         {
+@@ -208,22 +209,26 @@
+         {
+             TraceSurfaceMap("enter.request", mapId);
+             MapRecord target = EnsureMap(mapId);
+-            if (player.CurrentMapId >= 0 && player.CurrentMapId != mapId) LeaveMap(player);
++            if (player.CurrentMapId >= 0 && player.CurrentMapId != mapId) LeaveMap(player, !IsMotherShipMap(mapId));
++            ReleaseOtherGroundSlots(player, mapId);
+             if (target.Mode == MapMode.Offline) SettleOffline(target);
+             player.CurrentMapId = mapId;
+             if (!target.Visitors.Contains(player.PlayerId)) target.Visitors.Add(player.PlayerId);
+-            if (target.SimulatorPlayerId == null) ReassignMap(target);
++            TryAcquireHomeSlot(player, target);
++            if (target.SimulatorPlayerId == null || target.OperatorPlayerId == player.PlayerId && target.SimulatorPlayerId != player.PlayerId) ReassignMap(target, player.PlayerId);
+             else SendMapView(target, player.PlayerId);
+             BroadcastPolicy();
+         }
+-        private void LeaveMap(PlayerRecord player)
++        private void LeaveMap(PlayerRecord player, bool switchingMap = false)
+         {
+             if (player.PlayerId == LocalPlayerId) ClearLocalMapLoading(player.CurrentMapId);
+             MapRecord map;
+             if (World.Maps.TryGetValue(player.CurrentMapId, out map))
+             {
+                 map.Visitors.Remove(player.PlayerId);
+-                if (map.SimulatorPlayerId == player.PlayerId) ReassignMap(map);
++                string previousOperator = map.OperatorPlayerId;
++                LeaveGroundOperation(player, map, switchingMap);
++                if (map.SimulatorPlayerId == player.PlayerId || previousOperator != map.OperatorPlayerId) ReassignMap(map);
+             }
+             player.CurrentMapId = -1; BroadcastPolicy();
+         }
+@@ -242,13 +247,15 @@
+             if (map.Mode == MapMode.Offline) SettleOffline(map);
+             map.AuthorityEpoch++; map.AwaitingAuthorityReady = false; map.SimulatorPlayerId = null;
+             var candidates = map.Visitors.Where(x => World.Players.ContainsKey(x) && World.Players[x].Online).ToList();
+-            string next = preferred != null && candidates.Contains(preferred) ? preferred : (candidates.Contains(map.OwnerPlayerId) ? map.OwnerPlayerId : candidates.FirstOrDefault());
++            string next = candidates.Contains(map.OperatorPlayerId) ? map.OperatorPlayerId
++                : preferred != null && candidates.Contains(preferred) ? preferred
++                : candidates.Contains(map.OwnerPlayerId) ? map.OwnerPlayerId : candidates.FirstOrDefault();
+             map.LastSimulatedWorldMM = World.WorldTimeMM;
+             if (next == null)
+             {
+                 if (map.ActiveAttackId != null) map.Mode = MapMode.Battle;
+                 else map.Mode = IsFormalBase(map) ? MapMode.Offline : MapMode.Frozen;
+-                Require(bridge.SetMapAuthority(new MapAccess { MapId = map.MapId, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, Access = MapAccessMode.Frozen }), "撤销地图模拟权");
++                Require(bridge.SetMapAuthority(new MapAccess { MapId = map.MapId, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, OperatorPlayerId = map.OperatorPlayerId, Access = MapAccessMode.Frozen }), "撤销地图模拟权");
+                 TraceSurfaceMap("authority.frozen", map.MapId);
+                 BroadcastPolicy(); return;
+             }
+@@ -339,6 +346,7 @@
+             pausedGiftRequests.Remove(map.MapId);
+             giftPausedMaps.Remove(map.MapId); giftFlushes.Remove(map.MapId);
+             map.SimulatorPlayerId = view.Access.SimulatorPlayerId; map.Checkpoint = view.Snapshot;
++            map.OperatorPlayerId = view.Access.OperatorPlayerId;
+             map.AwaitingAuthorityReady = true;
+             MapSnapshot resolved;
+             try
+--- a/src/Session/BaseRules.cs
++++ b/src/Session/BaseRules.cs
+@@ -30,6 +30,7 @@
+             if (!IsConnected || closing || IsStarting || nativeFault != null) status.Reason = "房间未连接或正在结束。";
+             else if (World.Players.Values.Any(p => p.MotherShipMapId == mapId)) status.Reason = "母舰不属于可创建营地的地表，也不占营地名额。";
+             else if (!World.Maps.TryGetValue(mapId, out target)) status.Reason = "地块尚未由房主确认。";
++            else if (!CanOperateMap(playerId, mapId)) status.Reason = "当前地块仅可观战，不能创建基地。";
+             else if (target.OwnerPlayerId != null) status.Reason = target.OwnerPlayerId == playerId ? "该地块已经是你的营地。" : "该地块已由其他玩家占领。";
+             else if (target.ActiveAttackId != null) status.Reason = "战场不能创建营地。";
+             else if (status.OwnedCount >= status.Limit) status.Reason = "营地/基地已达到房间上限 " + status.Limit + " 处（不含母舰）。";
+@@ -69,6 +70,7 @@
+         private CommandResult AbandonPlayerBase(GameCommand command, PlayerRecord actor)
+         {
+             MapRecord map = EnsureMap(command.MapId);
++            RequireGroundOperator(actor.PlayerId, map.MapId);
+             if (map.OwnerPlayerId != actor.PlayerId || map.MapId == actor.MotherShipMapId)
+                 throw new InvalidOperationException("只能将自己的地表基地转为中立地块，不能废弃母舰。");
+             if (map.ActiveAttackId != null) throw new InvalidOperationException("战斗中的营地不能废弃。");
+--- a/src/Session/Commands.cs
++++ b/src/Session/Commands.cs
+@@ -171,6 +171,7 @@
+         private CommandResult RouteGameplayCommand(GameCommand command)
+         {
+             MapRecord map = EnsureMap(command.MapId);
++            RequireGroundOperator(command.PlayerId, map.MapId);
+             if (World.Players[command.PlayerId].CurrentMapId != map.MapId || !map.Visitors.Contains(command.PlayerId)) throw new InvalidOperationException("玩家尚未进入该地图。");
+             if (Paused || map.AwaitingAuthorityReady || map.SimulatorPlayerId == null) throw new InvalidOperationException("地图暂停或正在交接模拟权。");
+             // Moving/conscripting the player's existing hero is a current control intent, not a
+@@ -214,6 +215,7 @@
+         {
+             MapRecord map;
+             if (!World.Maps.TryGetValue(command.MapId, out map) || map.SimulatorPlayerId != LocalPlayerId || map.AuthorityEpoch != command.AuthorityEpoch || map.AwaitingAuthorityReady || Paused) throw new InvalidOperationException("当前客户端不是有效地图模拟者。");
++            RequireGroundOperator(command.PlayerId, map.MapId);
+             string key = TransactionKey(command);
+             CommandResult result;
+             if (!executedCommands.TryGetValue(key, out result))
+@@ -281,6 +283,8 @@
+             TransferRequest request = JsonData.Read<TransferRequest>(command.PayloadJson);
+             if (PlayerHasFleetBattle(command.PlayerId)) throw new InvalidOperationException("舰战尚未结束，不能发起新的运输或远征。");
+             if (request == null || request.HeroIds == null) throw new InvalidDataException("Missing transfer manifest.");
++            if (request.DestinationMapId >= 0 && request.HeroIds.Count != 0)
++                RequireLandingSlot(command.PlayerId, request.DestinationMapId);
+             request.TransferId = string.IsNullOrWhiteSpace(request.TransferId) ? command.CommandId : request.TransferId;
+             TransferRecord existing;
+             if (World.Transfers.TryGetValue(request.TransferId, out existing))
+@@ -292,6 +296,10 @@
+             PlayerRecord player = World.Players[command.PlayerId];
+             MapRecord sourceMap;
+             World.Maps.TryGetValue(request.SourceMapId, out sourceMap);
++            if (sourceMap != null && !IsMotherShipMap(sourceMap.MapId)) RequireGroundOperator(command.PlayerId, sourceMap.MapId);
++            AttackRecord groundAction = ActiveGroundAttack(request.SourceMapId);
++            if (groundAction != null && groundAction.AttackerPlayerId == command.PlayerId && request.HeroIds.Count != 0)
++                throw new NativeRejectionException("本次地面行动只能使用一次原版远征撤人，请通过本场唯一撤离运输结算。");
+             foreach (long heroId in request.HeroIds) if (OwnerOfEntity(heroId) != command.PlayerId) throw new InvalidOperationException("不能带走别人的雇员。");
+             // Native departure validates every real item against its storage boundary. Owner=null
+             // is a public surface, not a foreign-base denial. Protected cargo can only depart
+@@ -375,6 +383,7 @@
+             string actorId = string.IsNullOrEmpty(request.PlayerId) ? command.PlayerId : request.PlayerId;
+             PlayerRecord actor;
+             if (!World.Players.TryGetValue(actorId, out actor)) throw new InvalidOperationException("实际参战玩家不存在。");
++            RequireGroundOperator(actorId, map.MapId);
+             if (actorId != command.PlayerId && (map.SimulatorPlayerId != command.PlayerId || map.AuthorityEpoch != command.AuthorityEpoch))
+                 throw new InvalidOperationException("只有当前地块模拟者可为真实在场雇员登记战斗。");
+             if (Paused || map.AwaitingAuthorityReady || map.SimulatorPlayerId == null) throw new InvalidOperationException("地块暂停或仍在同步，不能登记战斗。");
+@@ -391,6 +400,7 @@
+             AttackRecord attack = ActiveGroundAttack(map.MapId);
+             if (attack != null)
+             {
++                if (attack.AttackerPlayerId != actorId) throw new InvalidOperationException("地块只允许当前操作玩家参与地面行动。");
+                 if (attack.Blocked || attack.EvacuationUsed || attack.ElapsedSeconds >= RaidDuration(attack))
+                     throw new InvalidOperationException("本场战斗已结束或不能继续加入。");
+                 RegisterRaidParticipant(attack, actorId, request);
+@@ -408,7 +418,9 @@
+                 NativeTransportJson = request.NativeTransportJson, LandingExpeditionId = originalCarrier.NativeExpeditionId,
+                 LandingTransferId = originalCarrier.TransferId,
+                 Capacity = data.Capacity, Stage = AttackStage.Loading,
+-                DurationSeconds = World.Options.RaidDurationMinutes * 60.0, CooldownSeconds = World.Options.RaidCooldownMinutes * 60.0,
++                DurationSeconds = 600, CooldownSeconds = World.Options.RaidCooldownMinutes * 60.0,
++                GroundLandedAtRoomSeconds = originalCarrier.GroundLandedAtRoomSeconds >= 0 ? originalCarrier.GroundLandedAtRoomSeconds : World.RoomRealSeconds,
++                ElapsedSeconds = originalCarrier.GroundLandedAtRoomSeconds >= 0 ? Math.Min(600, Math.Max(0, World.RoomRealSeconds - originalCarrier.GroundLandedAtRoomSeconds)) : 0,
+                 AttackerHeroIds = request.AttackerHeroIds.Distinct().ToList(),
+                 ProtectedDefenderHeroIds = (data.ProtectedDefenderHeroIds ?? new List<long>())
+                     .Where(uid => OwnerOfEntity(uid) != null && !IsPlayerOnline(OwnerOfEntity(uid))).Distinct().ToList() };
+@@ -437,6 +449,7 @@
+             RaidEvacuation request = JsonData.Read<RaidEvacuation>(command.PayloadJson);
+             AttackRecord attack;
+             if (request == null || !World.Attacks.TryGetValue(request.AttackId, out attack) || !IsRaidParticipant(attack, command.PlayerId)) throw new InvalidOperationException("玩家没有加入本场地表搜刮。");
++            RequireGroundOperator(command.PlayerId, attack.MapId);
+             if (attack.Stage != AttackStage.Active || attack.Blocked || attack.EvacuationUsed || attack.ElapsedSeconds >= RaidDuration(attack) || Paused) throw new InvalidOperationException("袭击已结束、暂停或唯一撤离已经用过。");
+             request.PlayerId = command.PlayerId;
+             if (request.DestinationFleetId < 0)
+@@ -482,10 +495,11 @@
+                 { loading.Stage = AttackStage.Active; activated.Add(loading.AttackId); }
+             }
+             if (activated.Count != 0) { BroadcastPolicy(); PersistTransition("raid:landed:" + string.Join(":", activated)); }
+-            foreach (AttackRecord attack in World.Attacks.Values.Where(x => x.Stage == AttackStage.Active && !x.Blocked).ToList())
++            foreach (AttackRecord attack in World.Attacks.Values.Where(x => IsBattleStage(x) && !x.Blocked
++                && (x.Stage == AttackStage.Active || x.GroundLandedAtRoomSeconds >= 0)).ToList())
+             {
+                 if (!activated.Contains(attack.AttackId)) attack.ElapsedSeconds = Math.Min(RaidDuration(attack), attack.ElapsedSeconds + seconds);
+-                attack.DefendersDefeated = bridge.AreDefendersDefeated(attack);
++                if (attack.Stage == AttackStage.Active) attack.DefendersDefeated = bridge.AreDefendersDefeated(attack);
+                 if (attack.ElapsedSeconds >= RaidDuration(attack)) { FinishAttack(attack, RaidFinishReason.Timeout); PersistTransition("finish:" + attack.AttackId); }
+             }
+         }
+@@ -531,6 +545,9 @@
+             if (!inTransit)
+             {
+                 map.ActiveAttackId = null; map.RaidCooldownSeconds = Math.Max(0, attack.CooldownSeconds);
++                pendingGroundSettlements.Add(map.MapId);
++                map.OperatorPlayerId = null; map.OperatorReleaseAtRoomSeconds = 0;
++                TraceGroundSlot(map, attack.AttackerPlayerId, "action-settled-await-save");
+                 RefreshCheckpoint(map); ReassignMap(map);
+             }
+             BroadcastPolicy();
+--- a/src/Session/GroundRules.cs
++++ b/src/Session/GroundRules.cs
+@@ -35,24 +35,12 @@
+         // its raid at execution, rather than starting a timer while merely finding work.
+         private bool HasGroundLootQualification(string actor, string owner, long mapId)
+         {
+-            if (World == null || actor == null || owner == null || !World.Players.ContainsKey(actor)) return false;
++            if (World == null || actor == null || owner == null || !CanOperateMap(actor, mapId)) return false;
+             if (actor == owner) return true;
+-            MapRecord map;
+-            if (!World.Maps.TryGetValue(mapId, out map)) return false;
+-            if (World.Players.Values.Any(p => p.MotherShipMapId == mapId)) return false;
+-            List<string> present = bridge.ActiveGroundPlayerIds(mapId);
+-            if (present == null) return false;
+-            // Unknown employee ownership is not evidence that an area is undefended.
+-            if (present.Any(p => p == null || !World.Players.ContainsKey(p))) return false;
+-            if (map.OwnerPlayerId != null) return !present.Contains(map.OwnerPlayerId);
+-            if (present.Contains(owner)) return false;
+-            string[] active = present.Distinct().ToArray();
+-            if (active.Length == 0) return true;
+-            if (!active.Contains(actor)) return false;
+-            for (int i = 0; i < active.Length; i++)
+-                for (int j = i + 1; j < active.Length; j++)
+-                    if (!AreMutuallyFriendly(active[i], active[j])) return false;
+-            return true;
++            AttackRecord attack = ActiveGroundAttack(mapId);
++            // Recheck live humans and their defending allies, including recovered defenders.
++            // A historical defeated flag never grants permanent access to foreign inventory.
++            return attack != null && attack.AttackerPlayerId == actor && bridge.AreDefendersDefeated(attack);
+         }
+ 
+         public bool CanLootGroundOwner(string actor, string owner, long mapId)
+@@ -61,7 +49,7 @@
+             if (owner == null || !HasGroundLootQualification(actor, owner, mapId)) return false;
+             AttackRecord attack = ActiveGroundAttack(mapId);
+             if (Paused || closing) return false;
+-            if (attack == null) return !IsRaidCoolingDown(mapId);
++            if (attack == null || attack.AttackerPlayerId != actor) return false;
+             return attack.Stage == AttackStage.Active && !attack.Blocked
+                 && (!attack.EvacuationUsed || attack.EvacuatingPlayerId == actor)
+                 && attack.ElapsedSeconds < RaidDuration(attack);
+--- a/src/Session/MapViewLoading.cs
++++ b/src/Session/MapViewLoading.cs
+@@ -405,7 +405,7 @@
+             // Keep real raid deadlines while native work is held. Readiness checks, native
+             // defender reads, FinishRaid, checkpoint capture and persistence stay behind the FIFO.
+             foreach (AttackRecord attack in World.Attacks.Values)
+-                if (attack.Stage == AttackStage.Active && !attack.Blocked)
++                if (IsBattleStage(attack) && !attack.Blocked && (attack.Stage == AttackStage.Active || attack.GroundLandedAtRoomSeconds >= 0))
+                     attack.ElapsedSeconds = Math.Min(RaidDuration(attack), attack.ElapsedSeconds + seconds);
+         }
+         private bool DeferDisconnectUntilMapReady()
+--- a/src/Session/MultiplayerSession.cs
++++ b/src/Session/MultiplayerSession.cs
+@@ -148,6 +148,7 @@
+                 GetFleetBattleLock = GetFleetBattleLock, IsPlayerFleetBattleLocked = IsPlayerFleetBattleLocked, SubmitBattleInput = SubmitBattleInput,
+                 SubmitBattleConfiguration = SubmitBattleConfiguration, CancelBattlePreparation = CancelBattlePreparation,
+                 AllocateUid = AllocateUid, CanSimulateMap = CanSimulateMap, GetMapAccess = GetMapAccess,
++                CanOperateMap = CanOperateMap, OperatorOfMap = OperatorOfMap, GroundObserverCount = GroundObserverCount,
+                 IsPaused = () => IsStarting || Paused || closing || nativeFault != null || galaxyResyncPending, SimulationSpeed = () => Speed,
+                 RequestClock = SetClock, RequestSave = Save,
+                 RequestCancelWorldCreation = () => { if (IsStarting) CancelHostCreation(); },
+@@ -220,6 +221,7 @@
+             {
+                 map.SimulatorPlayerId = null; map.Visitors.Clear(); map.AuthorityEpoch++;
+                 map.AwaitingAuthorityReady = false;
++                RecoverGroundOperationSlot(map);
+                 if (map.Mode != MapMode.Battle) map.Mode = IsFormalBase(map) ? MapMode.Offline : MapMode.Frozen;
+             }
+             host.Online = true; host.Uids = ReserveUidRange(false);
+@@ -250,6 +252,7 @@
+         {
+             if (disposed) throw new ObjectDisposedException(nameof(MultiplayerSession));
+             if (IsStarting || closing || transport.IsRunning || IsConnected || World != null) throw new InvalidOperationException("请先退出当前联机会话或等待创建完成。");
++            pendingGroundSettlements.Clear(); groundSlotDeniedOperators.Clear();
+         }
+         public void Tick(double unscaledSeconds)
+         {
+@@ -402,6 +405,7 @@
+                         World.RoomRealSeconds += seconds;
+                         if (!HasMapLoadingBarrier)
+                         {
++                            TickGroundOperationSlots();
+                             tickStage = "transfers.advance";
+                             AdvanceTransfers();
+                         }
+@@ -519,6 +523,7 @@
+                     if (map.Checkpoint.Revision != map.Revision) throw new InvalidOperationException("地图存档检查点版本未提交完整：" + map.MapId);
+                 }
+                 saves.Save(World);
++                ConfirmGroundSettlementsSaved();
+                 try { Broadcast("saved", World.SaveGeneration); }
+                 catch (Exception ex) { Error("存档代已成功提交，但通知部分玩家失败：" + ex.Message); }
+             }
+--- a/src/Session/Networking.cs
++++ b/src/Session/Networking.cs
+@@ -444,7 +444,7 @@
+             var players = World.Players.Values.Select(x => new PlayerRecord { PlayerId = x.PlayerId, Nickname = x.Nickname, InitialAssetsGranted = x.InitialAssetsGranted, Online = x.Online, PersonalRevision = x.PersonalRevision, MotherShipMapId = x.MotherShipMapId, FleetId = x.FleetId, FormalBaseMapId = x.FormalBaseMapId, CurrentMapId = x.CurrentMapId, GalaxyId = x.GalaxyId }).ToList();
+             var maps = new Dictionary<long, MapRecord>();
+             foreach (MapRecord map in World.Maps.Values)
+-                maps[map.MapId] = new MapRecord { MapId = map.MapId, OwnerPlayerId = map.OwnerPlayerId, SimulatorPlayerId = map.SimulatorPlayerId, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, LastSimulatedWorldMM = map.LastSimulatedWorldMM, Mode = map.Mode, Visitors = new List<string>(map.Visitors), RaidCooldownSeconds = map.RaidCooldownSeconds, ActiveAttackId = map.ActiveAttackId, AwaitingAuthorityReady = map.AwaitingAuthorityReady };
++                maps[map.MapId] = new MapRecord { MapId = map.MapId, OwnerPlayerId = map.OwnerPlayerId, SimulatorPlayerId = map.SimulatorPlayerId, OperatorPlayerId = map.OperatorPlayerId, OperatorReleaseAtRoomSeconds = map.OperatorReleaseAtRoomSeconds, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, LastSimulatedWorldMM = map.LastSimulatedWorldMM, Mode = map.Mode, Visitors = new List<string>(map.Visitors), RaidCooldownSeconds = map.RaidCooldownSeconds, ActiveAttackId = map.ActiveAttackId, AwaitingAuthorityReady = map.AwaitingAuthorityReady };
+             var fleetBattles = World.FleetBattles.ToDictionary(x => x.Key, x => new PlayerFleetBattleRecord { BattleId = x.Value.BattleId,
+                 AttackerPlayerId = x.Value.AttackerPlayerId, DefenderPlayerId = x.Value.DefenderPlayerId, SimulatorPlayerId = x.Value.SimulatorPlayerId,
+                 AttackerFleetId = x.Value.AttackerFleetId, DefenderFleetId = x.Value.DefenderFleetId, NativeBattleUid = x.Value.NativeBattleUid,
+--- a/src/Session/PeerDisconnectCleanup.cs
++++ b/src/Session/PeerDisconnectCleanup.cs
+@@ -67,6 +67,7 @@
+             foreach (MapRecord map in World.Maps.Values.ToList())
+             {
+                 if (map.Visitors != null) map.Visitors.Remove(playerId);
++                if (player != null) LeaveGroundOperation(player, map, false);
+                 if (map.SimulatorPlayerId != playerId) continue;
+                 try { ReassignMap(map); }
+                 catch (Exception handoffFailure)
+@@ -80,6 +81,7 @@
+                                 MapId = revoked.MapId,
+                                 AuthorityEpoch = revoked.AuthorityEpoch,
+                                 Revision = revoked.Revision,
++                                OperatorPlayerId = revoked.OperatorPlayerId,
+                                 Access = MapAccessMode.Frozen
+                             }), "断线清理失败后强制冻结地图模拟权")),
+                         criticalFailure);
+--- a/src/Session/RaidRules.cs
++++ b/src/Session/RaidRules.cs
+@@ -14,9 +14,8 @@
+             if (transfer.Returning || transfer.Request.DestinationMapId < 0 || transfer.Request.HeroIds.Count == 0) return false;
+             map = EnsureMap(transfer.Request.DestinationMapId);
+             if (map.OwnerPlayerId == null || map.OwnerPlayerId == transfer.PlayerId || !World.Players.TryGetValue(map.OwnerPlayerId, out defender)) return false;
+-            // All relations may visit/land. Only hostile surface landings against an offline
+-            // owner enter the protected offline battle; a mothership is never this battlefield.
+-            return map.MapId != defender.MotherShipMapId && !defender.Online && GetRelation(transfer.PlayerId, defender.PlayerId) == Relation.Hostile;
++            // Online ownership is independent of operation. An absent owner can watch a raid.
++            return map.MapId != defender.MotherShipMapId && GetRelation(transfer.PlayerId, defender.PlayerId) == Relation.Hostile;
+         }
+         private AttackRecord CreateOfflineRaidCandidate(TransferRecord transfer, bool existingCarrier)
+         {
+@@ -39,7 +38,7 @@
+                 SourceMapId = request.SourceMapId, SourceFleetId = request.SourceFleetId,
+                 RegisteredMapRevision = map.Revision, DropPodId = checked(++World.UidHighWater),
+                 NativeTransportJson = request.NativeTransportJson, Capacity = data.Capacity, Stage = AttackStage.InTransit,
+-                DurationSeconds = World.Options.RaidDurationMinutes * 60.0, CooldownSeconds = World.Options.RaidCooldownMinutes * 60.0,
++                DurationSeconds = 600, CooldownSeconds = World.Options.RaidCooldownMinutes * 60.0,
+                 AttackerHeroIds = request.AttackerHeroIds, ProtectedDefenderHeroIds = new List<long>() };
+             RegisterRaidParticipant(attack, actor.PlayerId, request);
+             return attack;
+@@ -66,6 +65,12 @@
+         // Returns a visible, cancelable waiting reason. It never constructs a second carrier.
+         private string PrepareTransferArrival(TransferRecord transfer)
+         {
++            long landingMapId = transfer.Returning ? transfer.Request.SourceMapId : transfer.Request.DestinationMapId;
++            if (landingMapId >= 0 && transfer.Request.HeroIds.Count != 0)
++            {
++                try { RequireLandingSlot(transfer.PlayerId, landingMapId); }
++                catch (NativeRejectionException blocked) { return WaitForTransfer(transfer, blocked.Message); }
++            }
+             AttackRecord attack = TransferAttack(transfer);
+             if (attack != null && IsBattleStage(attack))
+             {
+@@ -80,6 +85,8 @@
+                 if (shared != null && shared.AttackId != (attack == null ? null : attack.AttackId)
+                     && destination.OwnerPlayerId != transfer.PlayerId)
+                 {
++                    if (shared.AttackerPlayerId != transfer.PlayerId)
++                        return WaitForTransfer(transfer, "当前地块已有另一玩家操作，不能加入其地面行动。");
+                     if (shared.Blocked || shared.EvacuationUsed || shared.ElapsedSeconds >= RaidDuration(shared))
+                         return WaitForTransfer(transfer, "当前地块战斗正在结清，原运输单等待后继续落仓。");
+                     var joining = new RaidRequest { PlayerId = transfer.PlayerId, MapId = destination.MapId,
+@@ -142,15 +149,24 @@
+         {
+             string giftWaiting = PrepareGiftArrival(transfer);
+             if (giftWaiting != null) throw new NativeRejectionException(giftWaiting);
++            long arrivingMapId = transfer.Returning ? transfer.Request.SourceMapId : transfer.Request.DestinationMapId;
++            if (arrivingMapId >= 0 && transfer.Request.HeroIds.Count != 0)
++                RequireLandingSlot(transfer.PlayerId, arrivingMapId);
+             ApplyCriticalNative(() => bridge.ArriveTransfer(transfer), "原航程到期后交付同一原生运输载体");
++            if (!transfer.Returning && transfer.Request.HeroIds.Count != 0 && transfer.GroundLandedAtRoomSeconds < 0)
++                transfer.GroundLandedAtRoomSeconds = World.RoomRealSeconds;
+             transfer.Stage = bridge.IsTransferComplete(transfer) ? (transfer.Returning ? TransferStage.Cancelled : TransferStage.Arrived) : TransferStage.Landing;
+             long destinationMapId = transfer.Returning ? transfer.Request.SourceMapId : transfer.Request.DestinationMapId;
+             AttackRecord attack = TransferAttack(transfer);
+-            if (attack != null && attack.Stage == AttackStage.Loading && !transfer.Returning)
++            if (attack != null && !transfer.Returning && attack.GroundLandedAtRoomSeconds < 0)
++                attack.GroundLandedAtRoomSeconds = transfer.GroundLandedAtRoomSeconds;
++            if (transfer.Request.HeroIds.Count != 0 && destinationMapId >= 0 && !IsMotherShipMap(destinationMapId))
+             {
+                 PlayerRecord actor = World.Players[transfer.PlayerId];
+-                MapRecord target = EnsureMap(attack.MapId);
+-                if (actor.CurrentMapId >= 0 && actor.CurrentMapId != target.MapId) LeaveMap(actor);
++                MapRecord target = EnsureMap(destinationMapId);
++                AcquireLandingSlot(actor.PlayerId, target);
++                if (actor.CurrentMapId >= 0 && actor.CurrentMapId != target.MapId) LeaveMap(actor, true);
++                ReleaseOtherGroundSlots(actor, target.MapId);
+                 actor.CurrentMapId = target.MapId;
+                 if (!target.Visitors.Contains(actor.PlayerId)) target.Visitors.Add(actor.PlayerId);
+                 // Checkpoint includes the canonical landing party before the single lease/view
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.61
++1.62

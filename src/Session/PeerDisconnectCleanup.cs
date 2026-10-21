@@ -67,6 +67,7 @@ namespace FreeWorldMultiplayer
             foreach (MapRecord map in World.Maps.Values.ToList())
             {
                 if (map.Visitors != null) map.Visitors.Remove(playerId);
+                if (player != null) LeaveGroundOperation(player, map, false);
                 if (map.SimulatorPlayerId != playerId) continue;
                 try { ReassignMap(map); }
                 catch (Exception handoffFailure)
@@ -80,6 +81,7 @@ namespace FreeWorldMultiplayer
                                 MapId = revoked.MapId,
                                 AuthorityEpoch = revoked.AuthorityEpoch,
                                 Revision = revoked.Revision,
+                                OperatorPlayerId = revoked.OperatorPlayerId,
                                 Access = MapAccessMode.Frozen
                             }), "断线清理失败后强制冻结地图模拟权")),
                         criticalFailure);

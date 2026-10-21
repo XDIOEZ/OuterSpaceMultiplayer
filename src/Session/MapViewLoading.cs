@@ -395,7 +395,7 @@ namespace FreeWorldMultiplayer
             // Keep real raid deadlines while native work is held. Readiness checks, native
             // defender reads, FinishRaid, checkpoint capture and persistence stay behind the FIFO.
             foreach (AttackRecord attack in World.Attacks.Values)
-                if (attack.Stage == AttackStage.Active && !attack.Blocked)
+                if (IsBattleStage(attack) && !attack.Blocked && (attack.Stage == AttackStage.Active || attack.GroundLandedAtRoomSeconds >= 0))
                     attack.ElapsedSeconds = Math.Min(RaidDuration(attack), attack.ElapsedSeconds + seconds);
         }
         private bool DeferDisconnectUntilMapReady()

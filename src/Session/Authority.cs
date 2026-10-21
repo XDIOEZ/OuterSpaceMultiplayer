@@ -94,6 +94,7 @@ namespace FreeWorldMultiplayer
             if (World == null || playerId == null || !World.Players.ContainsKey(playerId)) return false;
             string entityOwner = OwnerOfEntity(entityId), mapOwner = OwnerOfMap(mapId);
             if (permission == Permission.View) return true;
+            if (!CanOperateMap(playerId, mapId)) return false;
             if (permission == Permission.ControlOwnHero) return entityOwner == playerId;
             if (permission == Permission.Attack)
             {
@@ -124,7 +125,7 @@ namespace FreeWorldMultiplayer
         }
         private MapAccess AccessFor(MapRecord map, string playerId)
         {
-            return new MapAccess { MapId = map.MapId, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, SimulatorPlayerId = map.SimulatorPlayerId, Access = map.SimulatorPlayerId == playerId ? MapAccessMode.Simulator : MapAccessMode.Replica };
+            return new MapAccess { MapId = map.MapId, AuthorityEpoch = map.AuthorityEpoch, Revision = map.Revision, SimulatorPlayerId = map.SimulatorPlayerId, OperatorPlayerId = map.OperatorPlayerId, Access = map.SimulatorPlayerId == playerId ? MapAccessMode.Simulator : MapAccessMode.Replica };
         }
         private MapRecord EnsureMap(long mapId)
         {

@@ -22,6 +22,8 @@ namespace FreeWorldMultiplayer
         internal static void Install(Harmony harmony)
         {
             KnockedOut.Clear();
+            NativeGroundOperationUi.Install(harmony);
+            NativeGroundOperationHooks.Install(harmony);
             NativeGroundPersonnelHooks.Install(harmony);
             NativeGroundInteraction.Install(harmony);
             NativeMapProjectionGuard.Install(harmony);
@@ -199,6 +201,7 @@ namespace FreeWorldMultiplayer
             if (Bridge == null || Bridge.Applying) return true;
             if (!Bridge.Executing && !NativeCommands.IsPlayerIntent && Bridge.IsSimulator) return true;
             string actor = Bridge.Executing ? (Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId) : Bridge.Context.LocalPlayerId;
+            if (!Bridge.CanOperateGround(actor, Bridge.CurrentMapId)) { __result = false; return false; }
             if (!Bridge.Context.HasPermission(actor, Bridge.CurrentMapId, __instance.getUID(), Permission.ControlOwnHero))
             { __result = false; return false; }
             return true;
@@ -220,12 +223,21 @@ namespace FreeWorldMultiplayer
             return false;
         }
         private static bool MovePrefix(BaseRole hero, short cellx, short celly)
-        { return Bridge == null || Bridge.Route(CommandKind.Move, hero.getUID(), -1, new { X = cellx, Y = celly }); }
+        {
+            if (Bridge == null || Bridge.Applying || Bridge.Executing || Bridge.Seeding) return true;
+            if (!NativeCommands.IsPlayerIntent) return Bridge.IsSimulator;
+            return Bridge.Route(CommandKind.Move, hero.getUID(), -1, new { X = cellx, Y = celly });
+        }
         private static bool ConscriptPrefix(BaseRole hero, bool isMual)
-        { return Bridge == null || Bridge.Route(CommandKind.Conscript, hero.getUID(), -1, new { Manual = isMual }); }
+        {
+            if (Bridge == null || Bridge.Applying || Bridge.Executing || Bridge.Seeding) return true;
+            if (!NativeCommands.IsPlayerIntent) return Bridge.IsSimulator;
+            return Bridge.Route(CommandKind.Conscript, hero.getUID(), -1, new { Manual = isMual });
+        }
         private static bool AttackPrefix(BaseRole hero, SpriteObject _target)
         {
-            if (Bridge == null) return true;
+            if (Bridge == null || Bridge.Applying || Bridge.Executing || Bridge.Seeding) return true;
+            if (!NativeCommands.IsPlayerIntent) return Bridge.IsSimulator;
             string actor = Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId;
             if (!Bridge.Context.HasPermission(actor, Bridge.CurrentMapId, _target.getUID(), Permission.Attack)) return false;
             return Bridge.Route(CommandKind.Attack, hero.getUID(), _target.getUID(), new { });
@@ -287,13 +299,25 @@ namespace FreeWorldMultiplayer
         { if (Bridge != null && !Bridge.Applying) Bridge.ReleaseAllLoot(__instance.getUID()); }
         private static bool ThrowItemPrefix(BaseRole hero, FWThingBean thingBean, int sum, callbackInt callInt)
         {
+            if (Bridge != null && !Bridge.Applying && !Bridge.Executing && NativeCommands.IsPlayerIntent
+                && (!Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)
+                    || Bridge.Context.OwnerOfEntity(hero.getUID()) != Bridge.Context.LocalPlayerId))
+            { callInt?.Invoke(Callback.FAILED); return false; }
             if (Bridge == null || Bridge.Applying || !Bridge.ReleaseLoot(hero.getUID(), thingBean.getUID(), sum)) return true;
             callInt?.Invoke(Callback.SUCCESS); return false;
         }
         private static bool UseItemPrefix(FWThingBean useThing)
-        { return Bridge == null || !Bridge.IsReservedLoot(useThing.getUID()); }
+        {
+            if (Bridge == null) return true;
+            if (!Bridge.Applying && !Bridge.Executing && NativeCommands.IsPlayerIntent
+                && !Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)) return false;
+            return !Bridge.IsReservedLoot(useThing.getUID());
+        }
         private static void EquipItemPrefix(FWThingBean takeEquipThing)
         {
+            if (Bridge != null && !Bridge.Applying && !Bridge.Executing && NativeCommands.IsPlayerIntent
+                && !Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId))
+                throw new InvalidOperationException("当前地块仅可观战，不能更换地面装备。");
             if (Bridge != null && Bridge.IsReservedLoot(takeEquipThing.getUID()))
                 throw new InvalidOperationException("本场预占战利品只能在唯一一次撤离提交后使用或装备。");
         }

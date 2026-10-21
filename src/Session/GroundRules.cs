@@ -35,24 +35,12 @@ namespace FreeWorldMultiplayer
         // its raid at execution, rather than starting a timer while merely finding work.
         private bool HasGroundLootQualification(string actor, string owner, long mapId)
         {
-            if (World == null || actor == null || owner == null || !World.Players.ContainsKey(actor)) return false;
+            if (World == null || actor == null || owner == null || !CanOperateMap(actor, mapId)) return false;
             if (actor == owner) return true;
-            MapRecord map;
-            if (!World.Maps.TryGetValue(mapId, out map)) return false;
-            if (World.Players.Values.Any(p => p.MotherShipMapId == mapId)) return false;
-            List<string> present = bridge.ActiveGroundPlayerIds(mapId);
-            if (present == null) return false;
-            // Unknown employee ownership is not evidence that an area is undefended.
-            if (present.Any(p => p == null || !World.Players.ContainsKey(p))) return false;
-            if (map.OwnerPlayerId != null) return !present.Contains(map.OwnerPlayerId);
-            if (present.Contains(owner)) return false;
-            string[] active = present.Distinct().ToArray();
-            if (active.Length == 0) return true;
-            if (!active.Contains(actor)) return false;
-            for (int i = 0; i < active.Length; i++)
-                for (int j = i + 1; j < active.Length; j++)
-                    if (!AreMutuallyFriendly(active[i], active[j])) return false;
-            return true;
+            AttackRecord attack = ActiveGroundAttack(mapId);
+            // Recheck live humans and their defending allies, including recovered defenders.
+            // A historical defeated flag never grants permanent access to foreign inventory.
+            return attack != null && attack.AttackerPlayerId == actor && bridge.AreDefendersDefeated(attack);
         }
 
         public bool CanLootGroundOwner(string actor, string owner, long mapId)
@@ -61,7 +49,7 @@ namespace FreeWorldMultiplayer
             if (owner == null || !HasGroundLootQualification(actor, owner, mapId)) return false;
             AttackRecord attack = ActiveGroundAttack(mapId);
             if (Paused || closing) return false;
-            if (attack == null) return !IsRaidCoolingDown(mapId);
+            if (attack == null || attack.AttackerPlayerId != actor) return false;
             return attack.Stage == AttackStage.Active && !attack.Blocked
                 && (!attack.EvacuationUsed || attack.EvacuatingPlayerId == actor)
                 && attack.ElapsedSeconds < RaidDuration(attack);

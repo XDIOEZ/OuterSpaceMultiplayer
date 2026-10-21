@@ -1,0 +1,264 @@
+{
+  "incrementally_staged": [
+    {
+      "path": "AGENT-COORDINATION.md",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "CHANGELOG.md",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "src/Core/Contracts.cs",
+      "hunks": 3,
+      "total": 6
+    },
+    {
+      "path": "src/Game/GameBridge.cs",
+      "hunks": 3,
+      "total": 3
+    },
+    {
+      "path": "src/Game/GameHooks.cs",
+      "hunks": 3,
+      "total": 4
+    },
+    {
+      "path": "src/Game/NativeCommands.cs",
+      "hunks": 2,
+      "total": 2
+    },
+    {
+      "path": "src/Game/NativeGroundCommandOwnership.cs",
+      "hunks": 3,
+      "total": 3
+    },
+    {
+      "path": "src/Game/NativeGroundLoot.cs",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "src/Game/NativeRaidLoot.cs",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "src/Session/Authority.cs",
+      "hunks": 2,
+      "total": 5
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunks": 1,
+      "total": 10
+    },
+    {
+      "path": "src/Session/GroundRules.cs",
+      "hunks": 2,
+      "total": 2
+    },
+    {
+      "path": "src/Session/MapViewLoading.cs",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "src/Session/MultiplayerSession.cs",
+      "hunks": 3,
+      "total": 5
+    },
+    {
+      "path": "src/Session/PeerDisconnectCleanup.cs",
+      "hunks": 2,
+      "total": 2
+    },
+    {
+      "path": "VERSION",
+      "hunks": 1,
+      "total": 1
+    }
+  ],
+  "new_files_staged": [
+    "src/Game/NativeGroundOperation.cs",
+    "src/Game/NativeGroundOperationUi.cs",
+    "src/Session/GroundOperationSlots.cs"
+  ],
+  "deferred": [
+    {
+      "path": "docs/plans/联机方案 V1.md",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: docs/plans/联机方案 V1.md:4\nerror: docs/plans/联机方案 V1.md: patch does not apply"
+    },
+    {
+      "path": "src/Core/Contracts.cs",
+      "hunk": 3,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Core/Contracts.cs:250\nerror: src/Core/Contracts.cs: patch does not apply"
+    },
+    {
+      "path": "src/Core/Contracts.cs",
+      "hunk": 5,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Core/Contracts.cs:358\nerror: src/Core/Contracts.cs: patch does not apply"
+    },
+    {
+      "path": "src/Core/Contracts.cs",
+      "hunk": 6,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Core/Contracts.cs:434\nerror: src/Core/Contracts.cs: patch does not apply"
+    },
+    {
+      "path": "src/Core/Protocol.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Core/Protocol.cs:17\nerror: src/Core/Protocol.cs: patch does not apply"
+    },
+    {
+      "path": "src/Entry/ModPluginLauncher.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Entry/ModPluginLauncher.cs:78\nerror: src/Entry/ModPluginLauncher.cs: patch does not apply"
+    },
+    {
+      "path": "src/Entry/MultiplayerLobbyPages.cs",
+      "reason": "pre-existing untracked file; preserve prior contents unstaged"
+    },
+    {
+      "path": "src/Entry/MultiplayerPresetSelection.cs",
+      "reason": "pre-existing untracked file; preserve prior contents unstaged"
+    },
+    {
+      "path": "src/Game/GameHooks.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Game/GameHooks.cs:24\nerror: src/Game/GameHooks.cs: patch does not apply"
+    },
+    {
+      "path": "src/Game/NativeRaid.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Game/NativeRaid.cs:146\nerror: src/Game/NativeRaid.cs: patch does not apply"
+    },
+    {
+      "path": "src/Game/NativeRaid.cs",
+      "hunk": 2,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Game/NativeRaid.cs:167\nerror: src/Game/NativeRaid.cs: patch does not apply"
+    },
+    {
+      "path": "src/Game/NativeRaid.cs",
+      "hunk": 3,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Game/NativeRaid.cs:315\nerror: src/Game/NativeRaid.cs: patch does not apply"
+    },
+    {
+      "path": "src/Game/NativeTransfers.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Game/NativeTransfers.cs:329\nerror: src/Game/NativeTransfers.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Authority.cs",
+      "hunk": 3,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Authority.cs:208\nerror: src/Session/Authority.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Authority.cs",
+      "hunk": 4,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Authority.cs:242\nerror: src/Session/Authority.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Authority.cs",
+      "hunk": 5,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Authority.cs:339\nerror: src/Session/Authority.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/BaseRules.cs",
+      "reason": "pre-existing untracked file; preserve prior contents unstaged"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:171\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 3,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:281\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 4,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:292\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 5,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:375\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 6,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:391\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 7,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:408\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 8,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:437\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 9,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:482\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Commands.cs",
+      "hunk": 10,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Commands.cs:531\nerror: src/Session/Commands.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/MultiplayerSession.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/MultiplayerSession.cs:148\nerror: src/Session/MultiplayerSession.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/MultiplayerSession.cs",
+      "hunk": 5,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/MultiplayerSession.cs:519\nerror: src/Session/MultiplayerSession.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/Networking.cs",
+      "hunk": 1,
+      "reason": "task hunk depends on pre-existing working-tree changes",
+      "detail": "error: patch failed: src/Session/Networking.cs:444\nerror: src/Session/Networking.cs: patch does not apply"
+    },
+    {
+      "path": "src/Session/RaidRules.cs",
+      "reason": "pre-existing untracked file; preserve prior contents unstaged"
+    }
+  ],
+  "note": "Baseline-relative patch records all existing-file task changes; unrelated working tree stays intact."
+}

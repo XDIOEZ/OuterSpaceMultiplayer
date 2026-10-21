@@ -467,3 +467,9 @@
 - 直接代码证据：原版舰船入队从仓库移除，旧登记只遍历仓库。旧日志未写具体request.ShipId，未取得存档逐字段结果，不将复合谓词的确切命中字段声称为实测；用户双端验收卡保持待办。
 - V1.61 / 1.61.0.0 三端BuildOnly成功，同源FB12936681EA009C653F8A876402BBF158D1519ECF5569E0F59DC05A8FB837B1，各端三条既有CS0649、无编译错误。固定包artifacts/battle-host-manual-20261021/packages，回执docs/reports/battle-host-manual-build-20261021.json。
 - Installations=[] / RuntimeTested=false。未安装、测试或运行游戏、未推送；旧dirty完整保留，Contracts只提交等效新签名，本轮精确增量docs/patches/battle-host-manual-20261021.patch。不宣称历史源码依赖闭包已干净；源码/版本/构建释放，本文档窄提交后释放index。
+
+### ground-operation-slot-20261021 / 主控 /root
+- 用户已授权实现：每地块一个操作UID，多人只读观察；普通基地加载有己方小人即占空槽，切其他地块立即释放/太空退出3分钟释放；外来空投起占槽并开始10分钟地面行动，结算前不因切图/掉线释放。操作权不改变所有权；AI/生产/治疗继续；一次远征信标，击倒全部防守人类及盟友后搜刮，机器人不计，恢复需重新击倒。侧边UI显示占用与观察人数。
+- 主控负责契约协调、文档SVG、版本、增量提交与统一三端BuildOnly；ground_slot负责Core/Session；ground_native负责Game；ground_ui负责Entry侧边UI。各Agent不得构建/测试/运行游戏/安装/操作Git index或改其它分区；跨区契约先沟通。P3及运行副本只读。
+- 保留全部历史dirty；修改前完整src基线已保存artifacts/ground-operation-slot-20261021/baseline。核心实现期间占用上述相关地面文件，既有舰战/运输修复保持；不安装、不推送、不运行测试。
+- Core/Session、Game、UI三方已完成源码冻结，接口OperatorPlayerId/CanOperateMap/HasGroundPlayerHeroes/生命周期泵一致；V1.62、协议13，当前主控接统一三端BuildOnly窗口。全部构建输入冻结，禁止安装/测试/运行游戏/推送；历史dirty仍保留。

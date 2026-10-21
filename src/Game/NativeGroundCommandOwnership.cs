@@ -19,7 +19,7 @@ namespace FreeWorldMultiplayer
         internal static string Owner(GameBridge bridge, long uid)
         { return bridge.Context.OwnerOfEntity(uid) ?? bridge.Context.OwnerOfMap(bridge.CurrentMapId); }
         internal static bool CanEdit(GameBridge bridge, string actor, long uid)
-        { return !string.IsNullOrEmpty(actor) && actor == Owner(bridge, uid); }
+        { return bridge.CanOperateGround(actor, bridge.CurrentMapId) && !string.IsNullOrEmpty(actor) && actor == Owner(bridge, uid); }
         internal static bool CanWorkZone(GameBridge bridge, BaseRole worker, FWAreaZoneBean zone)
         {
             if (worker == null || zone == null) return true;
@@ -99,6 +99,7 @@ namespace FreeWorldMultiplayer
         private static bool CachePlanPrefix(object[] __args)
         {
             if (Bridge == null || Bridge.Applying || !NativeCommands.IsPlayerIntent) return true;
+            if (!Bridge.CanOperateGround(Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)) return false;
             RolePlan plan = __args.OfType<RolePlan>().FirstOrDefault();
             if (plan == null || plan.planBean == null || plan.planBean.IsNewPlan) return true;
             return CanEdit(Bridge, Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, plan.planBean.getUID());
@@ -116,11 +117,14 @@ namespace FreeWorldMultiplayer
         private static bool GraphEditPrefix(BasePlanGraph __instance)
         {
             if (Bridge == null || Bridge.Applying || Bridge.Executing || !NativeCommands.IsPlayerIntent || __instance.rolePlan == null || __instance.rolePlan.planBean == null) return true;
+            if (!Bridge.CanOperateGround(Bridge.Context.LocalPlayerId, Bridge.CurrentMapId)) return false;
             return __instance.rolePlan.planBean.IsNewPlan || CanEdit(Bridge, Bridge.Context.LocalPlayerId, __instance.rolePlan.planBean.getUID());
         }
         private static void TopPlanPrefix(ref List<BasePlanGraph> graphs)
         {
             if (Bridge == null || Bridge.Applying || !NativeCommands.IsPlayerIntent || graphs == null) return;
+            if (!Bridge.CanOperateGround(Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, Bridge.CurrentMapId))
+            { graphs = new List<BasePlanGraph>(); return; }
             graphs = graphs.Where(g => g != null && g.rolePlan != null && g.rolePlan.planBean != null
                 && (g.rolePlan.planBean.IsNewPlan || CanEdit(Bridge, Bridge.ActingPlayer ?? Bridge.Context.LocalPlayerId, g.rolePlan.planBean.getUID()))).ToList();
         }

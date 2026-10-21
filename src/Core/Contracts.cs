@@ -147,6 +147,7 @@ namespace FreeWorldMultiplayer
         public long AuthorityEpoch;
         public long Revision;
         public string SimulatorPlayerId;
+        public string OperatorPlayerId;
         public MapAccessMode Access;
     }
     public sealed class MapRecord
@@ -154,6 +155,9 @@ namespace FreeWorldMultiplayer
         public long MapId;
         public string OwnerPlayerId;
         public string SimulatorPlayerId;
+        // Player input authority is exclusive; the simulator may run only AI for observers.
+        public string OperatorPlayerId;
+        public double OperatorReleaseAtRoomSeconds;
         public long AuthorityEpoch;
         public long Revision;
         public long LastSimulatedWorldMM;
@@ -233,6 +237,7 @@ namespace FreeWorldMultiplayer
         public TransferRequest Request;
         public string NativeCargoJson;
         public long ArrivalWorldMM = -1;
+        public double GroundLandedAtRoomSeconds = -1;
         public long NativeExpeditionId = -1;
         public bool Returning;
         public string Error;
@@ -272,6 +277,7 @@ namespace FreeWorldMultiplayer
         public long LandingExpeditionId = -1;
         public double Capacity;
         public double ElapsedSeconds;
+        public double GroundLandedAtRoomSeconds = -1;
         public AttackStage Stage;
         public bool EvacuationUsed;
         public string EvacuationTransferId;
@@ -307,6 +313,9 @@ namespace FreeWorldMultiplayer
         public Func<long, string> OwnerOfMap;
         public Func<string, string, Relation> GetRelation;
         public Func<string, long, long, Permission, bool> HasPermission;
+        public Func<string, long, bool> CanOperateMap;
+        public Func<long, string> OperatorOfMap;
+        public Func<long, int> GroundObserverCount;
         public Action<long, string> RegisterEntityOwner;
         public Action<GameCommand> ReportDamage;
         public Func<long, bool> IsProtectedDefender;
@@ -346,6 +355,7 @@ namespace FreeWorldMultiplayer
         BridgeResult ValidateMapUpdate(MapUpdate update);
         BridgeResult SetMapAuthority(MapAccess access);
         bool IsMapReady(long mapId);
+        bool HasGroundPlayerHeroes(long mapId, string playerId);
         BridgeResult ExecuteCommand(GameCommand command);
         BridgeResult ExecuteFleetCommand(GameCommand command);
         BridgeResult ClaimMap(long mapId, string ownerPlayerId);

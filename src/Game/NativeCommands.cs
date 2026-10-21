@@ -57,6 +57,9 @@ namespace FreeWorldMultiplayer
                 if (!bridge.IsSimulator) return false;
                 return !NativeGroundInteraction.IsWorkPlan(plan) || bridge.CanPerformGroundWork(__instance, plan);
             }
+            if (!bridge.CanOperateGround(bridge.Context.LocalPlayerId, bridge.CurrentMapId)
+                || bridge.Context.OwnerOfEntity(__instance.getUID()) != bridge.Context.LocalPlayerId)
+            { SchedulingResult.Append("当前地块只能观战，或所选单位不属于你。"); return false; }
             if (plan.planBean != null && plan.planBean.taskType == FWPlanBean.TASK_CARRY
                 && bridge.FindPersistentBean(plan.planBean.objectUID) is FWThingBean)
                 return bridge.Route(CommandKind.TakeItem, __instance.getUID(), plan.planBean.objectUID,
@@ -88,6 +91,9 @@ namespace FreeWorldMultiplayer
         {
             GameBridge bridge = GameBridge.Active;
             if (bridge == null || bridge.Applying || bridge.Executing) return true;
+            // The same native helpers also serve automatic treatment (for example
+            // surgery orders its patient into bed). Only UI intentions are commands.
+            if (!IsPlayerIntent) return bridge.IsSimulator;
             string operation = Methods.Single(p => p.Value == __originalMethod).Key;
             Invocation packet = new Invocation { Operation = operation };
             long actor = -1, target = -1;

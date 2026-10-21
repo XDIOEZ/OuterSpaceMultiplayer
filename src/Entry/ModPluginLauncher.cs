@@ -68,7 +68,11 @@ namespace FreeWorldMultiplayer
         {
             if (Session != null && !tickFailed)
             {
-                try { Session.Tick(Time.unscaledDeltaTime); }
+                try
+                {
+                    Session.Tick(Time.unscaledDeltaTime);
+                    if (Session.IsConnected && Bridge != null) Bridge.PumpGroundOperationLifecycle();
+                }
                 catch (Exception error)
                 {
                     tickFailed = true;
