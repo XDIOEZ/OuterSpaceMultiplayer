@@ -455,3 +455,8 @@
 - V1.60 / 1.60.0.0 三端 BuildOnly 成功，同源36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA；各端三条既有CS0649，无编译错误。固定包artifacts/battle-entry-static-personal-20261020/packages，回执docs/reports/battle-entry-static-personal-build-20261020.json。
 - 保留全部历史dirty/untracked；旧NativePersonalSync仅将本轮精确增量存docs/patches，不整份暂存；GameBridge/Networking/Protocol仅提交等效窄接线，退出任务实现保留。不宣称Git历史依赖闭包已干净。
 - Installations=[] / RuntimeTested=false：未安装、测试或运行游戏、未推送。ET_LuaRecords当时的具体原生漂移来源未由旧日志证明；用户双端任务卡保持待办。源码/版本/构建释放，本文档窄提交后释放index。
+
+### install-v160-20261021 / 主控 /root
+- 用户明确要求“覆盖一下三端”，本次授权 Project3 / Steam / TapTap 安装 V1.60，仅写本 MOD 安装目录并保留备份；不改游戏本体、共享 Harmony、玩家数据或启用列表，不启动游戏或测试。
+- 完成并释放：统一Sync-ModCopies.ps1三端构建安装成功，V1.60 / 1.60.0.0、协议12，同源36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA；每端三条既有CS0649、无编译错误。聚合回执docs/reports/battle-entry-v160-install-20261021.json，Completed=true / BuildOnly=false / RuntimeTested=false。
+- 三端原文件备份与安装回执分别在artifacts/installations/20261021-071208-a12e6869、20261021-071212-e172e02d、20261021-071215-1db4558c。未改源码或版本，未运行游戏/测试/推送，历史dirty保留；本轮回执窄提交后释放index及全部占用。

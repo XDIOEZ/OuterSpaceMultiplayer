@@ -1,0 +1,38 @@
+{
+  "StartedAtUtc": "2026-10-21T07:11:07.1847242+00:00",
+  "SourceRoot": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer",
+  "Target": "All",
+  "BuildOnly": false,
+  "Completed": true,
+  "Installations": [
+    {
+      "TargetType": "Project3",
+      "Destination": "C:\\Users\\CatStudio\\Desktop\\Project3\\mods\\FreeWorldMultiplayer",
+      "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+      "ModVersion": "V1.60",
+      "AssemblyVersion": "1.60.0.0",
+      "ReceiptPath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\installations\\20261021-071208-a12e6869\\receipt.json"
+    },
+    {
+      "TargetType": "Steam",
+      "Destination": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Outer Space\\mods\\FreeWorldMultiplayer",
+      "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+      "ModVersion": "V1.60",
+      "AssemblyVersion": "1.60.0.0",
+      "ReceiptPath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\installations\\20261021-071212-e172e02d\\receipt.json"
+    },
+    {
+      "TargetType": "TapTap",
+      "Destination": "C:\\TapTap\\PC Games\\242783\\mods\\FreeWorldMultiplayer",
+      "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+      "ModVersion": "V1.60",
+      "AssemblyVersion": "1.60.0.0",
+      "ReceiptPath": "C:\\Users\\CatStudio\\Desktop\\FreeWorldMods\\FreeWorldMultiplayer\\artifacts\\installations\\20261021-071215-1db4558c\\receipt.json"
+    }
+  ],
+  "RuntimeTested": false,
+  "SourceRevision": "36C6063F85D9A116BD334AA17854A74960FBB6601F68C72C85117990C1A5EEAA",
+  "ModVersion": "V1.60",
+  "AssemblyVersion": "1.60.0.0",
+  "FinishedAtUtc": "2026-10-21T07:12:17.7671714+00:00"
+}
