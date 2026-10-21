@@ -481,3 +481,11 @@
 - 用户在V1.62交付后明确授权安装三端，并在退出游戏后要求继续；当前无Outer Space进程。通过统一Sync-ModCopies.ps1三端构建安装，仅本MOD目录，保留备份、不启动游戏/测试/推送。安装期间占构建窗口，历史dirty和源码保持。
 
 - 完成并释放：V1.62/协议13三端构建安装全部成功，同源8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00，Completed=true/BuildOnly=false/RuntimeTested=false。每端原文件备份及receipt位于artifacts/installations/20261021-083327-b710ca6a、20261021-083332-e37b0799、20261021-083338-f554fb50；聚合回执docs/reports/ground-v162-install-20261021.json。未启动游戏或测试、不推送，历史dirty不动。构建安装窗口释放；本条文档窄提交后释放index。
+
+### save-browser-20261021 / 主控 /root
+- 用户目标：修复点击继续世界的明显卡顿，支持删除联机世界。源码已确认ContinueWorldMode同步RefreshWorlds→SaveStore.ListWorlds→逐世界Load完整SHA/反序列化，截图33个世界；不冒称已有实机性能测量。
+- 分工：save_catalog负责Core轻量目录/所选世界完整校验/安全可恢复删除；save_browser_ui负责Entry异步列表、所选校验、删除确认及过期请求隔离。主控协调契约、整合、版本/报告、窄提交及统一三端BuildOnly。不安装/测试/启动游戏/推送，运行验收由用户执行。
+- 保留历史dirty，完整src及本轮文档开工基线artifacts/save-browser-20261021/baseline；子Agent禁止Git index/构建/版本/协调表，不碰其它分区。删除功能只实现，不删除用户现有世界；目标仅本MOD联机世界目录，不触碰单机、身份和设置。
+- Core/Entry源码均已冻结；V1.63/协议13，主控接统一三端BuildOnly及短Git index窗口。UI后台目录/选中校验、删除令牌/回收移动及Runtime启动门禁已真实接线。不安装、不跑测试/游戏、不删除任何真实存档。
+
+- 完成并释放：V1.63/协议13三端BuildOnly成功，同源6589FCA0C094D63EDBD0795D62764AAA49573844F6C360C8A34690078624896A，每端3条旧CS0649，无编译错误。固定ZIP/BUILD-INFO位于artifacts/save-browser-20261021/packages；聚合回执docs/reports/save-browser-build-20261021.json（Completed=true/BuildOnly=true/Installations=[]/RuntimeTested=false）。未安装/测试/游戏/删除真实世界/push。Core原Load/备份校验保留，BUG-18卡继续待用户性能及原生UI验收。旧dirty/untracked保留，本轮混合Entry增量档案docs/patches/save-browser-20261021.patch，不声称干净HEAD闭包。源码/版本/构建释放，本条窄提交完成即释放index。

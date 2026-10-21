@@ -214,11 +214,13 @@ namespace FreeWorldMultiplayer
         {
             Perform(() =>
             {
+                EnsureNoWorldStorageMutation();
                 if (awaitingMenuReturn || nativeReturnQueued) throw new InvalidOperationException("正在退出联机房间并返回主界面，请稍后重新加入。");
                 if (IsStarting) { Feedback = "联机会话正在创建，请等待当前创建完成。"; MultiplayerRoomDialog.RefreshOpenState(); return; }
                 if (awaitingClose) throw new InvalidOperationException("正在保存退出旧房间，请等待完成。");
                 Action create = () =>
                 {
+                    EnsureNoWorldStorageMutation();
                     starting = true; startupFailureContext = failure;
                     Feedback = "正在准备联机会话，请等待……";
                     MultiplayerRoomDialog.RefreshOpenState();

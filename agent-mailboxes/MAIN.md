@@ -547,3 +547,12 @@
 - 消息：用户在V1.62交付后明确说安装，并正常退出游戏后要求继续；统一Sync-ModCopies.ps1三端构建安装成功。Project3/Steam/TapTap均V1.62/协议13，来源8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00。聚合回执docs/reports/ground-v162-install-20261021.json，Completed=true/BuildOnly=false/RuntimeTested=false。原MOD文件逐端备份；玩家数据、本体、共享依赖、其它MOD和启用设置保留。
 - 处理记录：未启动游戏/运行测试/推送，全部历史dirty保留；构建安装窗口释放，本条文档窄提交后释放index。本次安装授权不延续到下一轮改动。
 - 需要回复：无。
+
+
+### MSG-20261021-save-browser-01 — V1.63继续世界卡顿与删除功能交付
+- 发件人：save-browser-20261021 /root
+- 收件人：MAIN
+- 状态：源码及三端包完成，运行验收由用户执行
+- 消息：原继续列表逐世界完整SHA/反序列化，当前34份主代约631.1MiB；已改为后台轻量目录+单并发所选完整校验，保留Load与备份恢复。新增带二次确认和目录状态令牌的可恢复删除，目录移入deleted-worlds，Runtime lease覆盖全部启动入口。不删除真实用户世界。
+- 处理记录：V1.63/协议13三端BuildOnly同源6589FCA0C094D63EDBD0795D62764AAA49573844F6C360C8A34690078624896A成功，3条旧CS0649/无编译错误。固定包artifacts/save-browser-20261021/packages，回执docs/reports/save-browser-build-20261021.json。未安装/测试/游戏/push，旧dirty与旧untracked保留，本轮混合Entry增量另存docs/patches。BUG-18运行待办保留；源码/版本/构建释放，本条提交后释放index。
+- 需要回复：无。

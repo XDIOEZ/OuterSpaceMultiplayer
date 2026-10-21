@@ -283,7 +283,7 @@ namespace FreeWorldMultiplayer
         {
             if (name == "Pause" || name == "Speed1" || name == "Speed3" || name == "Speed5")
                 clockControls[name] = button;
-            if (name == "Hostile" || name == "Leave" || name == "RebindCredential")
+            if (name == "Hostile" || name == "Leave" || name == "RebindCredential" || name == "DeleteWorld")
             {
                 TMP_Text caption = OfficialModUi.Caption(button);
                 caption.color = WarningColor;
@@ -486,7 +486,7 @@ namespace FreeWorldMultiplayer
             // Session/permission state is set by the page refresh first. These
             // gates only enforce local input validity; actual session methods
             // remain the authority and still validate again at submission time.
-            bool idle = !Busy && !Connected;
+            bool idle = !Busy && !Connected && !saveDeleteInProgress;
             if (createWorldButton != null)
                 createWorldButton.interactable = createWorldButton.interactable && idle
                     && worldName != null && !String.IsNullOrWhiteSpace(worldName.text)
@@ -515,8 +515,11 @@ namespace FreeWorldMultiplayer
                 if (continueWorldForm != null && continueWorldForm.activeInHierarchy)
                 {
                     WorldSummary selected = worlds.FirstOrDefault(w => w.WorldId == selectedWorldId);
+                    if (saveDeleteInProgress) return "正在删除所选世界…";
+                    if (catalogLoading) return "正在读取存档列表…";
                     if (selected == null) { needsAttention = true; return saveRows.Count == 0 ? "暂无联机存档" : "请选择存档"; }
                     if (!String.IsNullOrEmpty(selected.Error)) { needsAttention = true; return "所选存档无法继续"; }
+                    if (selected.ValidationRequired) return "正在校验所选存档…";
                     if (InvalidNumberField(resumePort)) { needsAttention = true; return "请检查房主端口"; }
                     return "所选存档可继续";
                 }

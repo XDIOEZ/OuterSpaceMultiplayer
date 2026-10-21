@@ -1,0 +1,75 @@
+{
+  "staged_hunks": [
+    {
+      "path": "AGENT-COORDINATION.md",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "agent-tasks/待办/BUG-18-存档列表全量扫描.md",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "CHANGELOG.md",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "src/Core/Storage.cs",
+      "hunks": 4,
+      "total": 4
+    },
+    {
+      "path": "src/Entry/ModPluginLauncher.cs",
+      "hunks": 1,
+      "total": 1
+    },
+    {
+      "path": "src/Entry/MultiplayerVisualTheme.cs",
+      "hunks": 3,
+      "total": 3
+    },
+    {
+      "path": "VERSION",
+      "hunks": 1,
+      "total": 1
+    }
+  ],
+  "new_files": [
+    "src/Core/WorldCatalogue.cs",
+    "src/Entry/MultiplayerSaveBrowser.cs",
+    "src/Entry/MultiplayerWorldStorageMutation.cs"
+  ],
+  "deferred": [
+    {
+      "path": "src/Entry/MultiplayerLobbyPages.cs",
+      "reason": "preserve pre-existing untracked content unstaged"
+    },
+    {
+      "path": "src/Entry/MultiplayerRoomDialog.cs",
+      "hunk": 1,
+      "reason": "depends on earlier dirty context; preserved in task patch"
+    },
+    {
+      "path": "src/Entry/MultiplayerRoomDialog.cs",
+      "hunk": 2,
+      "reason": "depends on earlier dirty context; preserved in task patch"
+    },
+    {
+      "path": "src/Entry/MultiplayerRoomDialog.cs",
+      "hunk": 3,
+      "reason": "depends on earlier dirty context; preserved in task patch"
+    },
+    {
+      "path": "src/Entry/MultiplayerRoomDialog.cs",
+      "hunk": 4,
+      "reason": "depends on earlier dirty context; preserved in task patch"
+    },
+    {
+      "path": "src/Entry/MultiplayerRoomDialog.cs",
+      "hunk": 5,
+      "reason": "depends on earlier dirty context; preserved in task patch"
+    }
+  ]
+}

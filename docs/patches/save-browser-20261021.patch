@@ -1,0 +1,341 @@
+--- a/AGENT-COORDINATION.md
++++ b/AGENT-COORDINATION.md
+@@ -596,3 +596,9 @@
+ - 用户在V1.62交付后明确授权安装三端，并在退出游戏后要求继续；当前无Outer Space进程。通过统一Sync-ModCopies.ps1三端构建安装，仅本MOD目录，保留备份、不启动游戏/测试/推送。安装期间占构建窗口，历史dirty和源码保持。
+ 
+ - 完成并释放：V1.62/协议13三端构建安装全部成功，同源8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00，Completed=true/BuildOnly=false/RuntimeTested=false。每端原文件备份及receipt位于artifacts/installations/20261021-083327-b710ca6a、20261021-083332-e37b0799、20261021-083338-f554fb50；聚合回执docs/reports/ground-v162-install-20261021.json。未启动游戏或测试、不推送，历史dirty不动。构建安装窗口释放；本条文档窄提交后释放index。
++
++### save-browser-20261021 / 主控 /root
++- 用户目标：修复点击继续世界的明显卡顿，支持删除联机世界。源码已确认ContinueWorldMode同步RefreshWorlds→SaveStore.ListWorlds→逐世界Load完整SHA/反序列化，截图33个世界；不冒称已有实机性能测量。
++- 分工：save_catalog负责Core轻量目录/所选世界完整校验/安全可恢复删除；save_browser_ui负责Entry异步列表、所选校验、删除确认及过期请求隔离。主控协调契约、整合、版本/报告、窄提交及统一三端BuildOnly。不安装/测试/启动游戏/推送，运行验收由用户执行。
++- 保留历史dirty，完整src及本轮文档开工基线artifacts/save-browser-20261021/baseline；子Agent禁止Git index/构建/版本/协调表，不碰其它分区。删除功能只实现，不删除用户现有世界；目标仅本MOD联机世界目录，不触碰单机、身份和设置。
++- Core/Entry源码均已冻结；V1.63/协议13，主控接统一三端BuildOnly及短Git index窗口。UI后台目录/选中校验、删除令牌/回收移动及Runtime启动门禁已真实接线。不安装、不跑测试/游戏、不删除任何真实存档。
+--- a/agent-tasks/待办/BUG-18-存档列表全量扫描.md
++++ b/agent-tasks/待办/BUG-18-存档列表全量扫描.md
+@@ -1,6 +1,17 @@
+ # BUG-18 / P2 · 继续世界列表全量读档带来 UI 卡顿
+ 
+ - **来源：** [第四轮静态 BUG 审计 BUG-18](../../docs/audits/联机MOD第四轮静态BUG审计与Agent修复交接-20261017.md)。
+-- **状态：待真实性能基线与 Core/Entry 联合评审。**
++- **状态：2026-10-21 已授权修复，Core 轻量目录与 Entry 后台所选校验正在实现；运行/真实性能验收仍待用户执行。**
+ - **证据：** `SaveStore.ListWorlds` 当前调用真实 `Load`，每个世界都计算完整 SHA256 并反序列化整个世界，Unity 列表同步刷新可能随存档大小线性阻塞。
+ - **必须完成：** 在保护 BUG-03/15 的有效备份恢复和原代 SHA 检查前提下，设计可验证的懒加载/分页/异步列表健康摘要；实际选择时仍需完整验证、不能把解析成功的损坏指针当成可继续。合成多存档(1/10/50份)测 UI 帧耗时、IO、内存及损坏档判定，取得真实数据后按小补丁实施并验收。
++
++## 本轮用户验收（V1.63）
++
++本轮用户要求开发完成后由其验证，未代跑游戏或性能用例。实现记录见 [继续世界卡顿与删除实现](../../docs/reports/继续世界卡顿与删除实现-20261021.md)。本卡仍保留待办，不因构建成功而移为已完成。
++
++- [ ] 点击“继续世界”先展示页面，列表加载期间界面可响应；不扫描解析所有世界正文。
++- [ ] 选择存档后仅校验当前世界；快速连续切换、刷新、关闭重开，不被旧任务结果改回旧选择或提前开放续开。
++- [ ] 损坏当前代/仅备份可恢复/双代损坏显示正确；实际续开保持 SHA 和备份保护。
++- [ ] 删除确认能区分同名世界；取消不改动，确认后仅选中世界从列表移除，完整文件保留在本地回收目录。
++- [ ] 运行、创建、续开、退出过程中不可删除；删除过程中不能从按钮或好友邀请开始新会话。
++- [ ] 删除失败、目录被外部修改、关闭窗口再重开时，无错误成功提示、重复移除或误删其他存档。
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,12 @@
+ 发布号的唯一来源是主仓库根目录的 `VERSION`。每完成一个独立小 BUG，递增第二段整数；例如 `1.9` 后为 `1.10`。重新构建或同步同一项修复不自动递增版本。
+ 
+ 发布号与需求文档的 V1、游戏匹配目录 `v_common`、网络协议号及存档结构版本分别维护，不互相替代。
++
++## V1.63 · 2026-10-21
++
++- 继续世界页改为先显示界面、后台读取轻量存档目录，仅对当前选择的世界完整校验；不再打开列表就逐个反序列化所有世界。加载、切换选择和刷新使用独立请求身份，过期结果不回写已关闭或改变的列表。
++- 新增删除所选联机世界及二次确认；通过稳定世界ID和目录状态复核，将该世界完整目录移动到本地回收目录，移除列表项并保留误删恢复可能。房间运行/启动时不可删除，删除期间阻止新建、续开和加入；不修改单机、身份数据或其它世界。
++- 真实续开仍完整校验 SHA、世界/代次、关系与备份恢复，不把目录可读当作存档有效。协议13及存档格式保持；默认只构建三端包，不安装，实际界面与卡顿改善由用户验收。
+ 
+ ## V1.62 · 2026-10-21
+ 
+--- a/src/Core/Storage.cs
++++ b/src/Core/Storage.cs
+@@ -88,6 +88,8 @@
+         public long SaveGeneration;
+         public string SavedAtUtc;
+         public string Error;
++        public bool ValidationRequired;
++        public string CatalogToken;
+     }
+     internal sealed class SavePointer
+     {
+@@ -98,13 +100,17 @@
+         public string Sha256;
+         public string SavedAtUtc;
+     }
+-    public sealed class SaveStore
++    public sealed partial class SaveStore
+     {
+         private readonly string root;
+         private SavePointer lastLoadedPointer;
+         public string LastLoadWarning { get; private set; }
+         public string LastCleanupWarning { get; private set; }
+-        public SaveStore(string storageRoot) { root = Path.GetFullPath(Path.Combine(storageRoot, "worlds")); }
++        public SaveStore(string storageRoot)
++        {
++            storageRootPath = Path.GetFullPath(storageRoot);
++            root = Path.GetFullPath(Path.Combine(storageRootPath, "worlds"));
++        }
+         private string WorldDirectory(string id)
+         {
+             Guid parsed;
+@@ -139,6 +145,11 @@
+             return worlds.OrderByDescending(x => x.SavedAtUtc, StringComparer.Ordinal).ToList();
+         }
+         public void Save(WorldState world)
++        {
++            if (world == null) throw new InvalidDataException("Cannot save a null world.");
++            using (AcquireWorldOperation(world.WorldId)) SaveCore(world);
++        }
++        private void SaveCore(WorldState world)
+         {
+             if (world == null || world.Snapshot == null) throw new InvalidDataException("Cannot save a world without the native world snapshot.");
+             RelationValidation.ValidateSavedRelations(world.Relationships);
+@@ -220,6 +231,10 @@
+         }
+         public WorldState Load(string worldId)
+         {
++            using (AcquireWorldOperation(worldId)) return LoadCore(worldId);
++        }
++        private WorldState LoadCore(string worldId)
++        {
+             LastLoadWarning = null;
+             lastLoadedPointer = null;
+             string dir = WorldDirectory(worldId);
+--- a/src/Entry/ModPluginLauncher.cs
++++ b/src/Entry/ModPluginLauncher.cs
+@@ -264,11 +264,13 @@
+         {
+             Perform(() =>
+             {
++                EnsureNoWorldStorageMutation();
+                 if (awaitingMenuReturn || nativeReturnQueued) throw new InvalidOperationException("正在退出联机房间并返回主界面，请稍后重新加入。");
+                 if (IsStarting) { Feedback = "联机会话正在创建，请等待当前创建完成。"; MultiplayerRoomDialog.RefreshOpenState(); return; }
+                 if (awaitingClose) throw new InvalidOperationException("正在保存退出旧房间，请等待完成。");
+                 Action create = () =>
+                 {
++                    EnsureNoWorldStorageMutation();
+                     starting = true; startupFailureContext = failure;
+                     Feedback = "正在准备联机会话，请等待……";
+                     MultiplayerRoomDialog.RefreshOpenState();
+--- a/src/Entry/MultiplayerLobbyPages.cs
++++ b/src/Entry/MultiplayerLobbyPages.cs
+@@ -14,7 +14,7 @@
+         private TMP_InputField raidDuration, raidCooldown, settingsRaidDuration, settingsRaidCooldown;
+         private TMP_Text starterHint, saveDetails, emptySaves, saveCount, settingsHint;
+         private UnityEngine.UI.Button steamButton, resumeSteamButton, loadButton, newModeButton, continueModeButton, settingsSteamButton;
+-        private UnityEngine.UI.Button spawnNearHostButton, settingsSpawnNearHostButton;
++        private UnityEngine.UI.Button spawnNearHostButton, settingsSpawnNearHostButton, deleteWorldButton, refreshWorldsButton;
+         private GameObject newWorldForm, continueWorldForm;
+         private UnityEngine.UI.ScrollRect saveScroll;
+         private IList<WorldSummary> worlds = new List<WorldSummary>();
+@@ -27,12 +27,13 @@
+             internal WorldSummary World;
+             internal UnityEngine.UI.Button Button;
+             internal TMP_Text Name;
++            internal TMP_Text Details;
+             internal GameObject Selection;
+         }
+         private void BuildCreate(Transform parent, ModSettings defaults)
+         {
+             newModeButton = Button(parent, "NewWorldMode", "新世界", 0, 0, 220, 42, () => SetCreateMode(false));
+-            continueModeButton = Button(parent, "ContinueWorldMode", "继续世界", 232, 0, 220, 42, () => { RefreshWorlds(); SetCreateMode(true); });
++            continueModeButton = Button(parent, "ContinueWorldMode", "继续世界", 232, 0, 220, 42, () => SetCreateMode(true));
+             newWorldForm = MultiplayerUi.Node("FWM.NewWorld", parent);
+             continueWorldForm = MultiplayerUi.Node("FWM.ContinueWorld", parent);
+             MultiplayerUi.Top((RectTransform)newWorldForm.transform, 0, 64, 984, 436);
+@@ -45,13 +46,15 @@
+         private void SetCreateMode(bool resume)
+         {
+             ClearFocus(); newWorldForm.SetActive(!resume); continueWorldForm.SetActive(resume);
+-            MarkTab(newModeButton, !resume); MarkTab(continueModeButton, resume); RefreshCreateState();
++            MarkTab(newModeButton, !resume); MarkTab(continueModeButton, resume);
++            if (built) { if (resume) RefreshWorlds(); else SuspendSaveBrowser(); }
++            RefreshCreateState();
+         }
+         private void BuildContinue(Transform parent, ModSettings defaults)
+         {
+             Section(parent, "SavedWorldList", -12, -8, 600, 424);
+             saveCount = Label(parent, "SaveCount", "联机存档", 21, 0, 0, 420, 36);
+-            Button(parent, "RefreshWorlds", "刷新", 444, 0, 132, 36, RefreshWorlds);
++            refreshWorldsButton = Button(parent, "RefreshWorlds", "刷新", 444, 0, 132, 36, RefreshWorlds);
+             saveScroll = OfficialModUi.CreateVerticalScroll(parent, "SavedWorlds");
+             MultiplayerUi.Top((RectTransform)saveScroll.transform, 0, 50, 576, 348);
+             emptySaves = Label(parent, "EmptySaves", "尚无联机存档。请切换到“新世界”创建。", 18, 20, 160, 520, 100);
+@@ -65,11 +68,12 @@
+             loadButton = Button(parent, "LoadWorld", "继续所选世界并开房", 612, 312, 372, 50, () =>
+             {
+                 WorldSummary chosen = SelectedWorld();
+-                if (!String.IsNullOrEmpty(chosen.Error)) throw new InvalidOperationException("该存档无法继续：" + chosen.Error);
++                if (!CanContinueWorld(chosen)) throw new InvalidOperationException("请等待所选存档校验完成；无法读取的存档不能继续。");
+                 Runtime.HostLoad(nickname.text, chosen.WorldId, HostOptions(resumePort, resumeSteam));
+             });
+             connectionButtons.Add(loadButton);
+-            Label(parent, "ResumeRules", "人数上限和开局规则沿用所选存档。", 16, 612, 378, 372, 40);
++            deleteWorldButton = Button(parent, "DeleteWorld", "删除所选世界", 612, 370, 372, 38, ConfirmDeleteWorld);
++            Label(parent, "ResumeRules", "人数上限和开局规则沿用所选存档。", 15, 612, 414, 372, 30);
+         }
+         private TransportOptions HostOptions(TMP_InputField portField, bool steam)
+         {
+@@ -109,37 +113,27 @@
+             }); connectionButtons.Add(steam);
+             Label(parent, "SteamHint", Runtime.DirectLaunch ? "当前为独立 IP 启动，Steam 加入不可用。" : "也可接受好友邀请，房间号会自动填入。", 17, 516, 202, 468, 64).enableWordWrapping = true;
+         }
+-        private void RefreshWorlds()
+-        {
+-            Safe(() =>
+-            {
+-                string previous = selectedWorldId;
+-                worlds = SaveStore.ListWorlds(Runtime.StorageRoot);
+-                selectedWorldId = worlds.Any(w => w.WorldId == previous) ? previous
+-                    : worlds.FirstOrDefault(w => String.IsNullOrEmpty(w.Error))?.WorldId ?? worlds.FirstOrDefault()?.WorldId;
+-                RebuildSaveRows();
+-            });
+-            RefreshCreateState();
+-        }
+         private void RebuildSaveRows()
+         {
+             ClearFocus();
+-            foreach (SaveRow row in saveRows) captions.Remove(row.Button);
++            foreach (SaveRow row in saveRows)
++            { captions.Remove(row.Button); disabledCaptions.Remove(row.Button); rowHighlights.Remove(row.Button); selectionLines.Remove(row.Button); }
++            lastVisibleSaveSelection = null;
+             saveRows.Clear();
+             foreach (Transform child in saveScroll.content) { child.gameObject.SetActive(false); UnityEngine.Object.Destroy(child.gameObject); }
+             foreach (WorldSummary world in worlds)
+             {
+                 string id = world.WorldId;
+-                var button = Button(saveScroll.content, "SavedWorld", "", 0, 0, 530, 80, () => { selectedWorldId = id; RefreshCreateState(); });
++                var button = Button(saveScroll.content, "SavedWorld", "", 0, 0, 530, 80, () => SelectSavedWorld(id));
+                 var layout = button.GetComponent<UnityEngine.UI.LayoutElement>() ?? button.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+                 layout.ignoreLayout = false; layout.minHeight = 80; layout.preferredHeight = 80; layout.flexibleHeight = 0;
+                 TMP_Text name = Label(button.transform, "WorldName", world.Name, 19, 16, 10, 492, 30);
+-                TMP_Text details = Label(button.transform, "WorldMetadata", FormatSaveTime(world.SavedAtUtc) + (String.IsNullOrEmpty(world.Error) ? "  ·  可继续" : "  ·  无法读取"), 15, 16, 44, 492, 24);
++                TMP_Text details = Label(button.transform, "WorldMetadata", FormatSaveTime(world.SavedAtUtc) + "  ·  " + SaveValidationCaption(world), 15, 16, 44, 492, 24);
+                 if (!String.IsNullOrEmpty(world.Error)) details.color = new Color32(225, 162, 147, 255);
+                 var selection = MultiplayerUi.Node("FWM.SelectedSave", button.transform);
+                 var marker = selection.AddComponent<UnityEngine.UI.Image>(); marker.color = new Color32(238, 215, 158, 255); marker.raycastTarget = false;
+                 MultiplayerUi.Top((RectTransform)selection.transform, 0, 0, 4, 80);
+-                saveRows.Add(new SaveRow { World = world, Button = button, Name = name, Selection = selection });
++                saveRows.Add(new SaveRow { World = world, Button = button, Name = name, Details = details, Selection = selection });
+             }
+             UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(saveScroll.content);
+             saveScroll.StopMovement(); saveScroll.verticalNormalizedPosition = 1;
+@@ -163,17 +157,26 @@
+             if (starterHint != null) starterHint.text = "首次加入 " + startingEmployees.text + " 名雇员；基地上限不含母舰。\n空投小人起共用固定10分钟，击倒守军不重置。";
+             RefreshPresetState();
+             WorldSummary selected = worlds.FirstOrDefault(w => w.WorldId == selectedWorldId);
+-            if (loadButton != null) loadButton.interactable = !Busy && !Connected && selected != null && String.IsNullOrEmpty(selected.Error);
+-            if (saveCount != null) saveCount.text = "联机存档（" + worlds.Count + "）";
+-            if (emptySaves != null) emptySaves.gameObject.SetActive(worlds.Count == 0);
++            if (loadButton != null) loadButton.interactable = CanContinueWorld(selected);
++            if (saveCount != null) saveCount.text = catalogLoading ? "联机存档 · 正在读取…" : "联机存档（" + worlds.Count + "）";
++            if (deleteWorldButton != null) deleteWorldButton.interactable = CanDeleteWorld(selected);
++            if (refreshWorldsButton != null) refreshWorldsButton.interactable = SaveBrowserOffline && !saveDeleteInProgress;
++            if (emptySaves != null)
++            {
++                emptySaves.gameObject.SetActive(worlds.Count == 0);
++                emptySaves.text = catalogLoading ? "正在读取联机存档列表…" : !String.IsNullOrEmpty(saveCatalogError) ? "存档列表读取失败，请点击刷新重试。" : "尚无联机存档。请切换到“新世界”创建。";
++            }
+             foreach (SaveRow row in saveRows)
+             {
+                 bool chosen = row.World.WorldId == selectedWorldId;
+                 row.Selection.SetActive(chosen); row.Name.color = chosen ? new Color32(238, 215, 158, 255) : new Color32(225, 234, 236, 255);
+-                row.Button.interactable = !Busy && !Connected;
++                row.Button.interactable = SaveBrowserOffline && !catalogLoading && !saveDeleteInProgress;
++                row.Details.text = FormatSaveTime(row.World.SavedAtUtc) + "  ·  " + SaveValidationCaption(row.World);
++                row.Details.color = String.IsNullOrEmpty(row.World.Error) ? MutedColor : WarningColor;
+             }
+-            if (saveDetails != null) saveDetails.text = selected == null ? "点击左侧存档查看详情。" : selected.Name + "\n" + FormatSaveTime(selected.SavedAtUtc) + "\n保存代次 " + selected.SaveGeneration
+-                + (String.IsNullOrEmpty(selected.Error) ? "\n已选中，可继续这个世界。" : "\n无法继续：" + MultiplayerUi.BriefError(selected.Error));
++            if (saveDetails != null) saveDetails.text = catalogLoading ? "正在读取联机存档列表…" : !String.IsNullOrEmpty(saveCatalogError) ? "存档列表读取失败，请刷新重试。" : selected == null ? "点击左侧存档查看详情。" : selected.Name + "\n" + FormatSaveTime(selected.SavedAtUtc) + "\n保存代次 " + selected.SaveGeneration
++                + (saveDeleteInProgress ? "\n正在删除，请稍候…" : !String.IsNullOrEmpty(selected.Error) ? "\n无法继续：" + MultiplayerUi.BriefError(selected.Error)
++                    : selected.ValidationRequired ? "\n正在校验所选存档，请稍候…" : "\n已选中，可继续这个世界。");
+         }
+         private void BuildSettings(Transform parent, ModSettings defaults)
+         {
+--- a/src/Entry/MultiplayerRoomDialog.cs
++++ b/src/Entry/MultiplayerRoomDialog.cs
+@@ -135,8 +135,11 @@
+             if (!built) return;
+             if (!HasRoomContext && IsRoomPage(value)) value = Page.Create;
+             if (HasRoomContext && (value == Page.Create || value == Page.Join)) value = Page.Room;
++            if (page == Page.Create && value != Page.Create) SuspendSaveBrowser();
++            bool resumeBrowser = page != Page.Create && value == Page.Create;
+             ClearFocus(); page = value;
+             for (int i = 0; i < pages.Length; i++) pages[i].SetActive(i == (int)page);
++            if (resumeBrowser && continueWorldForm.activeSelf) RefreshWorlds();
+             UpdateNavigation(); RefreshState();
+         }
+         private void UpdateNavigation()
+@@ -176,6 +179,7 @@
+         }
+         public override void uiUpdate()
+         {
++            PumpSaveBrowser();
+             if (Time.unscaledTimeAsDouble < nextStateRefresh) return;
+             nextStateRefresh = Time.unscaledTimeAsDouble + 0.2; RefreshState();
+         }
+@@ -186,6 +190,7 @@
+             try
+             {
+                 bool connected = Connected, busy = Busy;
++                if ((connected || busy || Runtime.Session != null) && saveBrowserActive) SuspendSaveBrowser();
+                 bool previouslyConnected = wasConnected, previouslyBusy = wasBusy;
+                 string sessionId = Runtime.Session == null ? null : Runtime.Session.SessionId;
+                 bool sessionChanged = observedSessionId != sessionId;
+@@ -226,8 +231,8 @@
+                 if (!HasRoomContext && IsRoomPage(page)) SetPage(Page.Create);
+                 wasBusy = busy;
+                 UpdateNavigation();
+-                foreach (var button in connectionButtons) if (button != null) button.interactable = !Busy && !connected;
+-                foreach (var input in connectionInputs) if (input != null) input.interactable = !Busy && !connected;
++                foreach (var button in connectionButtons) if (button != null) button.interactable = !Busy && !connected && !saveDeleteInProgress;
++                foreach (var input in connectionInputs) if (input != null) input.interactable = !Busy && !connected && !saveDeleteInProgress;
+                 foreach (var button in sessionButtons) if (button != null) button.interactable = connected && !Busy;
+                 foreach (var button in hostButtons) if (button != null) button.interactable = connected && !Busy && Runtime.Session.IsHost;
+                 RefreshCreateState(); RefreshRoomState();
+@@ -288,7 +293,7 @@
+         public override void OnDestroy()
+         {
+             if (open == this) open = null; if (constructing == this) constructing = null;
+-            ClearFocus(); base.OnDestroy();
++            SuspendSaveBrowser(); saveBrowserCancellation.Dispose(); ClearFocus(); base.OnDestroy();
+         }
+         internal static void CloseOpen() { if (open != null) open.closeDialog(); }
+     }
+--- a/src/Entry/MultiplayerVisualTheme.cs
++++ b/src/Entry/MultiplayerVisualTheme.cs
+@@ -283,7 +283,7 @@
+         {
+             if (name == "Pause" || name == "Speed1" || name == "Speed3" || name == "Speed5")
+                 clockControls[name] = button;
+-            if (name == "Hostile" || name == "Leave" || name == "RebindCredential")
++            if (name == "Hostile" || name == "Leave" || name == "RebindCredential" || name == "DeleteWorld")
+             {
+                 TMP_Text caption = OfficialModUi.Caption(button);
+                 caption.color = WarningColor;
+@@ -486,7 +486,7 @@
+             // Session/permission state is set by the page refresh first. These
+             // gates only enforce local input validity; actual session methods
+             // remain the authority and still validate again at submission time.
+-            bool idle = !Busy && !Connected;
++            bool idle = !Busy && !Connected && !saveDeleteInProgress;
+             if (createWorldButton != null)
+                 createWorldButton.interactable = createWorldButton.interactable && idle
+                     && worldName != null && !String.IsNullOrWhiteSpace(worldName.text)
+@@ -515,8 +515,11 @@
+                 if (continueWorldForm != null && continueWorldForm.activeInHierarchy)
+                 {
+                     WorldSummary selected = worlds.FirstOrDefault(w => w.WorldId == selectedWorldId);
++                    if (saveDeleteInProgress) return "正在删除所选世界…";
++                    if (catalogLoading) return "正在读取存档列表…";
+                     if (selected == null) { needsAttention = true; return saveRows.Count == 0 ? "暂无联机存档" : "请选择存档"; }
+                     if (!String.IsNullOrEmpty(selected.Error)) { needsAttention = true; return "所选存档无法继续"; }
++                    if (selected.ValidationRequired) return "正在校验所选存档…";
+                     if (InvalidNumberField(resumePort)) { needsAttention = true; return "请检查房主端口"; }
+                     return "所选存档可继续";
+                 }
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.62
++1.63

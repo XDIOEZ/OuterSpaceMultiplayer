@@ -107,6 +107,8 @@ namespace FreeWorldMultiplayer
         public long SaveGeneration;
         public string SavedAtUtc;
         public string Error;
+        public bool ValidationRequired;
+        public string CatalogToken;
     }
     internal sealed class SavePointer
     {
@@ -117,13 +119,17 @@ namespace FreeWorldMultiplayer
         public string Sha256;
         public string SavedAtUtc;
     }
-    public sealed class SaveStore
+    public sealed partial class SaveStore
     {
         private readonly string root;
         private SavePointer lastLoadedPointer;
         public string LastLoadWarning { get; private set; }
         public string LastCleanupWarning { get; private set; }
-        public SaveStore(string storageRoot) { root = Path.GetFullPath(Path.Combine(storageRoot, "worlds")); }
+        public SaveStore(string storageRoot)
+        {
+            storageRootPath = Path.GetFullPath(storageRoot);
+            root = Path.GetFullPath(Path.Combine(storageRootPath, "worlds"));
+        }
         private string WorldDirectory(string id)
         {
             Guid parsed;
@@ -158,6 +164,11 @@ namespace FreeWorldMultiplayer
             return worlds.OrderByDescending(x => x.SavedAtUtc, StringComparer.Ordinal).ToList();
         }
         public void Save(WorldState world)
+        {
+            if (world == null) throw new InvalidDataException("Cannot save a null world.");
+            using (AcquireWorldOperation(world.WorldId)) SaveCore(world);
+        }
+        private void SaveCore(WorldState world)
         {
             if (world == null || world.Snapshot == null) throw new InvalidDataException("Cannot save a world without the native world snapshot.");
             RelationValidation.ValidateSavedRelations(world.Relationships);
@@ -238,6 +249,10 @@ namespace FreeWorldMultiplayer
             catch (Exception) { return null; }
         }
         public WorldState Load(string worldId)
+        {
+            using (AcquireWorldOperation(worldId)) return LoadCore(worldId);
+        }
+        private WorldState LoadCore(string worldId)
         {
             LastLoadWarning = null;
             lastLoadedPointer = null;
