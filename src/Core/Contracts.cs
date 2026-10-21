@@ -323,6 +323,7 @@ namespace FreeWorldMultiplayer
         BridgeResult BeginPlayerFleetBattlePreparation(PlayerFleetBattleRecord battle);
         BridgeResult ValidatePlayerFleetBattleConfiguration(PlayerFleetBattleRecord battle, PlayerFleetBattleConfiguration configuration);
         BridgeResult CancelPlayerFleetBattlePreparation(PlayerFleetBattleRecord battle);
+        BridgeResult ValidatePlayerFleetBattleInputShip(PlayerFleetBattleRecord battle, PlayerFleetBattleInput input);
         void Attach(BridgeContext context);
         bool IsCreatingWorld { get; }
         BridgeResult BeginCreateWorld(WorldOptions options, string hostPlayerId, UidRange uids);

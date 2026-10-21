@@ -161,6 +161,25 @@ namespace FreeWorldMultiplayer
             Type commands = typeof(BaseShip).Assembly.GetType("SmartAI.UI.Tactical.Commands.TacticalCommandUtils", true);
             return (Vector3)NativeWire.Call(commands, "ComputeRetreatPoint", ship, 420f);
         }
+        public BridgeResult ValidatePlayerFleetBattleInputShip(PlayerFleetBattleRecord battle, PlayerFleetBattleInput input)
+        {
+            return Run(() =>
+            {
+                if (battle == null || input == null || string.IsNullOrEmpty(input.PlayerId)
+                    || input.BattleId != battle.BattleId || input.AuthorityEpoch != battle.AuthorityEpoch)
+                    throw new NativeRejectionException("舰战控制身份或任期无效。");
+                bool attacker = input.PlayerId == battle.AttackerPlayerId;
+                if (!attacker && input.PlayerId != battle.DefenderPlayerId || input.FleetId !=
+                    (attacker ? battle.AttackerFleetId : battle.DefenderFleetId) || input.ShipId < 0 || !Players.ContainsKey(input.PlayerId))
+                    throw new NativeRejectionException("只能控制本场本人参战舰队的舰船。");
+                // Stored ships and deployed fleet ships live in separate native lists.
+                // Old ownership registries may contain only the stored list; prove this
+                // request against the host's real fleet, without requiring a local scene.
+                FWFleet fleet = OwnedFleets(input.PlayerId).SingleOrDefault(f => f.getUID() == input.FleetId);
+                if (fleet == null || fleet.ships == null || fleet.ships.Count(s => s != null && s.getUID() == input.ShipId) != 1)
+                    throw new NativeRejectionException("控制舰船不在本人真实参战舰队中。");
+            });
+        }
         public BridgeResult ExecutePlayerFleetBattleInput(PlayerFleetBattleRecord battle, PlayerFleetBattleInput input)
         {
             return Run(() =>

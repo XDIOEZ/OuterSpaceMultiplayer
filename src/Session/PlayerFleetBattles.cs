@@ -183,14 +183,17 @@ namespace FreeWorldMultiplayer
             if (GetRelation(record.AttackerPlayerId, record.DefenderPlayerId) != Relation.Hostile)
             { EndNonHostileBattle(record); throw new MessageRejectionException("双方已不再敌对，停止继续攻击。"); }
             long fleet = actor == record.AttackerPlayerId ? record.AttackerFleetId : record.DefenderFleetId;
-            if (input.FleetId != fleet || OwnerOfEntity(fleet) != actor || input.ShipId < 0 || OwnerOfEntity(input.ShipId) != actor
+            string shipOwner = OwnerOfEntity(input.ShipId);
+            if (input.FleetId != fleet || OwnerOfEntity(fleet) != actor || input.ShipId < 0 || shipOwner != null && shipOwner != actor
                 || input.NativeJson == null || input.NativeJson.Length > 16384
                 || !BattleInputAllowedOperations.Contains(input.Operation))
                 throw new MessageRejectionException("只能控制本战中本人真实舰队的舰船。");
             var key = new BattleInputSequenceKey(record.BattleId, actor, false); long sequence;
             if (input.Sequence <= 0 || battleInputSequences.TryGetValue(key, out sequence) && input.Sequence <= sequence) return;
             if (!ConsumeCommunicationRate(actor, "battle")) throw new MessageRejectionException("舰战输入过于频繁。");
-            battleInputSequences[key] = input.Sequence; input.PlayerId = actor;
+            input.PlayerId = actor;
+            Require(bridge.ValidatePlayerFleetBattleInputShip(record, input), "校验本人真实参战舰船");
+            battleInputSequences[key] = input.Sequence;
             if (record.SimulatorPlayerId == LocalPlayerId) ExecuteAuthorizedBattleInput(record, input);
             else if (!TrySendCommunication(record.SimulatorPlayerId, "battle.execute", input)) InterruptBattle(record, "唯一模拟者连接已断开。");
         }
