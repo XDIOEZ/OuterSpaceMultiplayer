@@ -475,3 +475,9 @@
 - Core/Session、Game、UI三方已完成源码冻结，接口OperatorPlayerId/CanOperateMap/HasGroundPlayerHeroes/生命周期泵一致；V1.62、协议13，当前主控接统一三端BuildOnly窗口。全部构建输入冻结，禁止安装/测试/运行游戏/推送；历史dirty仍保留。
 
 - 完成并释放：本轮功能及增量档案提交426a867，V1.62/协议13三端BuildOnly最终成功，同源8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00；每端3条既有CS0649、无编译错误。固定三端ZIP与BUILD-INFO在artifacts/ground-operation-slot-20261021/packages，回执docs/reports/ground-operation-slot-build-20261021.json，Installations=[]/RuntimeTested=false。首次输入变动保护中止后已冻结重建，无安装/测试/游戏/push。历史dirty及原未跟踪文件保留；混合源码本轮完整增量在docs/patches/ground-operation-slot-20261021.patch，不宣称干净HEAD依赖闭包。功能源码、版本、构建释放；本条文档提交后释放index，用户验收卡仍待办。
+
+
+### install-ground-v162-20261021 / 主控 /root
+- 用户在V1.62交付后明确授权安装三端，并在退出游戏后要求继续；当前无Outer Space进程。通过统一Sync-ModCopies.ps1三端构建安装，仅本MOD目录，保留备份、不启动游戏/测试/推送。安装期间占构建窗口，历史dirty和源码保持。
+
+- 完成并释放：V1.62/协议13三端构建安装全部成功，同源8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00，Completed=true/BuildOnly=false/RuntimeTested=false。每端原文件备份及receipt位于artifacts/installations/20261021-083327-b710ca6a、20261021-083332-e37b0799、20261021-083338-f554fb50；聚合回执docs/reports/ground-v162-install-20261021.json。未启动游戏或测试、不推送，历史dirty不动。构建安装窗口释放；本条文档窄提交后释放index。

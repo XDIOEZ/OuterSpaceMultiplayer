@@ -538,3 +538,12 @@
 - 消息：功能提交426a867，独占Operator UID/180秒普通释放/600秒敌对行动/只读观察/一次原版远征撤人及原生侧边状态已接入。协议13；Project3/Steam/TapTap同源BuildOnly成功8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00；每端3条旧CS0649，无编译错误。固定包artifacts/ground-operation-slot-20261021/packages，回执docs/reports/ground-operation-slot-build-20261021.json。未安装/测试/运行游戏/推送；不把包当实机通过。
 - 处理记录：旧dirty与旧untracked保留，源码可分离hunk及等效契约接线窄提交，完整本轮增量另存docs/patches。无在线加载者时地表保留检查点冻结，房间计时继续。源码/版本/构建全部释放，本条提交后释放index。
 - 需要回复：无。
+
+
+### MSG-20261021-install-ground-v162-01 — V1.62三端安装完成
+- 发件人：install-ground-v162-20261021 /root
+- 收件人：MAIN
+- 状态：已完成安装，运行仍待用户验收
+- 消息：用户在V1.62交付后明确说安装，并正常退出游戏后要求继续；统一Sync-ModCopies.ps1三端构建安装成功。Project3/Steam/TapTap均V1.62/协议13，来源8DD73F043826014DDA17EC8004E4D05558FB31259C3E011BABF73164CA162C00。聚合回执docs/reports/ground-v162-install-20261021.json，Completed=true/BuildOnly=false/RuntimeTested=false。原MOD文件逐端备份；玩家数据、本体、共享依赖、其它MOD和启用设置保留。
+- 处理记录：未启动游戏/运行测试/推送，全部历史dirty保留；构建安装窗口释放，本条文档窄提交后释放index。本次安装授权不延续到下一轮改动。
+- 需要回复：无。
