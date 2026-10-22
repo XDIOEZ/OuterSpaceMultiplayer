@@ -1,4 +1,4 @@
-# Steam 创意工坊简介草稿 — OuterSpace 联机 MOD
+# Steam 创意工坊简介草稿 — OuterSpaceMultiplayer 联机 MOD
 
 > **发布前核对：** Steam App ID 为 3080070，发布对象是 FreeWorldMultiplayer MOD，不是重新上架游戏本体。工坊物品 ID 与发布账号尚待确认。内容为拟发布说明，不代表已上传或经过实机验收。
 
@@ -21,7 +21,7 @@
 如果你有优化思路、发现了问题，或愿意帮忙改进代码，非常欢迎到 GitHub 提交 Issue 或 Pull Request（PR）。性能优化、BUG 修复、兼容性改进和文档贡献都很有帮助。
 
 [b]开源仓库 / GitHub（欢迎 PR）：[/b]
-[url=https://github.com/XDIOEZ/OuterSpace]https://github.com/XDIOEZ/OuterSpace[/url]
+[url=https://github.com/XDIOEZ/OuterSpaceMultiplayer]https://github.com/XDIOEZ/OuterSpaceMultiplayer[/url]
 
 [h2]安装与注意事项[/h2]
 
@@ -37,4 +37,4 @@ On a planet's ground map, players share the same authoritative map state. Only o
 
 This is a solo-developed experimental mod with very limited multiplayer testing. Bugs, desynchronization and compatibility issues are possible. Please back up important saves.
 
-**Contributions welcome:** Report issues or submit PRs at [url=https://github.com/XDIOEZ/OuterSpace]https://github.com/XDIOEZ/OuterSpace[/url]. The MOD requires the game's Harmony dependency; current features are subject to version compatibility and real-world testing.
+**Contributions welcome:** Report issues or submit PRs at [url=https://github.com/XDIOEZ/OuterSpaceMultiplayer]https://github.com/XDIOEZ/OuterSpaceMultiplayer[/url]. The MOD requires the game's Harmony dependency; current features are subject to version compatibility and real-world testing.

@@ -1,6 +1,6 @@
 # FreeWorldMultiplayer · 联机 V1
 
-**开源代码 / BUG 反馈 / Pull Request：** https://github.com/XDIOEZ/OuterSpace
+**开源代码 / BUG 反馈 / Pull Request：** https://github.com/XDIOEZ/OuterSpaceMultiplayer
 
 项目由一人维护，受限于时间和设备，跨机联机的测试覆盖非常有限。欢迎有开发想法的玩家提交 [Issue 和 PR](CONTRIBUTING.md)，帮助修复 BUG、优化性能与兼容性。本 MOD 仍属实验性项目，编译成功并不代表多人联机已经充分验证；使用前请备份重要存档。Steam 创意工坊拟发布简介见 [发布草稿](docs/publishing/STEAM_WORKSHOP_DESCRIPTION.md)。
 

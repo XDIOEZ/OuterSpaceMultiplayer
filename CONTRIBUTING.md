@@ -1,8 +1,8 @@
-# 参与贡献 OuterSpace / FreeWorldMultiplayer
+# 参与贡献 OuterSpaceMultiplayer / FreeWorldMultiplayer
 
 感谢愿意一起完善《秩序：新曙光》（Outer Space）联机 MOD 的玩家！项目主要由一人开发，测试时间和设备有限，尤其欢迎反馈真实多人环境的问题、改进性能以及提交 Pull Request（PR）。
 
-**源码仓库：** https://github.com/XDIOEZ/OuterSpace
+**源码仓库：** https://github.com/XDIOEZ/OuterSpaceMultiplayer
 
 ## 反馈问题（Issue）
 
