@@ -1,5 +1,11 @@
 # FreeWorldMultiplayer · 联机 V1
 
+**开源代码 / BUG 反馈 / Pull Request：** https://github.com/XDIOEZ/OuterSpace
+
+项目由一人维护，受限于时间和设备，跨机联机的测试覆盖非常有限。欢迎有开发想法的玩家提交 [Issue 和 PR](CONTRIBUTING.md)，帮助修复 BUG、优化性能与兼容性。本 MOD 仍属实验性项目，编译成功并不代表多人联机已经充分验证；使用前请备份重要存档。Steam 创意工坊拟发布简介见 [发布草稿](docs/publishing/STEAM_WORKSHOP_DESCRIPTION.md)。
+
+原创代码许可见 [MIT License](LICENSE)。第三方库及原游戏资产保留各自权利。
+
 文档按用途分类，入口见 [文档索引](docs/README.md)。
 
 这是《Outer Space》的独立外部 MOD，分别面向本机 Steam 与 TapTap 游戏程序集构建。现行需求只以 [联机方案 V1.md](docs/plans/联机方案%20V1.md) 为准：独立联机世界、个人资产、唯一地表模拟、互访协作、关系与地表袭击、舰队互见、可靠保存属于同一次 V1 范围。
